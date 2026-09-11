@@ -20,6 +20,7 @@ type frontmatterYAML struct {
 	Parent     string   `yaml:"parent"`
 	DependsOn  []string `yaml:"depends_on"`
 	Supersedes []string `yaml:"supersedes"`
+	For        string   `yaml:"for"`
 }
 
 // idBearingTypes are the declared frontmatter `type` values that require
@@ -83,6 +84,14 @@ func ParseMetadata(path string) (Metadata, error) {
 		meta.Parent = id
 	}
 
+	if raw.For != "" {
+		id, err := parseFieldID(raw.For)
+		if err != nil {
+			return Metadata{}, fmt.Errorf("%w: %s: field \"for\": %v", ErrFrontmatterMalformed, path, err)
+		}
+		meta.For = id
+	}
+
 	if meta.DependsOn, err = parseFieldIDList(raw.DependsOn, "depends_on", path); err != nil {
 		return Metadata{}, err
 	}
@@ -129,22 +138,16 @@ func extractFrontmatter(data []byte) ([]byte, error) {
 }
 
 // parseFieldID parses a frontmatter field's raw ID string (e.g.
-// "SPEC-014") into an *ids.EntityID, deriving its zero-padding width from
-// the string itself — an already-written artifact's ID is authoritative
-// as written, independent of the project's currently configured width.
+// "SPEC-014") into an *ids.EntityID via ids.ParseAny, which derives its
+// zero-padding width from the string itself — an already-written
+// artifact's ID is authoritative as written, independent of the
+// project's currently configured width. Delegating to ids.ParseAny
+// (rather than duplicating its type/width-inference logic here) is a
+// deliberate DRY fix made in 002-read-operations, once that package
+// needed the identical parsing for a bare ID string with no known type in
+// advance.
 func parseFieldID(raw string) (*ids.EntityID, error) {
-	idx := strings.LastIndex(raw, "-")
-	if idx <= 0 || idx == len(raw)-1 {
-		return nil, fmt.Errorf("%q is not a well-formed entity ID", raw)
-	}
-	prefix, suffix := raw[:idx], raw[idx+1:]
-
-	t, ok := ids.TypeForPrefix(prefix)
-	if !ok {
-		return nil, fmt.Errorf("%q has an unrecognized entity prefix %q", raw, prefix)
-	}
-
-	id, err := ids.Parse(t, raw, len(suffix))
+	id, err := ids.ParseAny(raw)
 	if err != nil {
 		return nil, err
 	}

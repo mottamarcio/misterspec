@@ -84,7 +84,7 @@ func (t ArtifactType) HasEntityID() bool {
 // (ErrPathOutsideProject) a path outside root before classifying it
 // (FR-008), the same guarantee ResolvePath makes in the other direction.
 func ClassifyPath(root string, cfg project.Configuration, path string) (ArtifactType, error) {
-	rel, err := relativeWithinRoot(root, path)
+	rel, err := RelativeWithinRoot(root, path)
 	if err != nil {
 		return 0, err
 	}

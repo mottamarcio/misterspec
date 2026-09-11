@@ -25,6 +25,12 @@ type DuplicateID struct {
 type ScanResult struct {
 	IDs        []EntityID
 	Duplicates []DuplicateID
+	// Paths maps every found number to every path (relative to root)
+	// claiming it — length 1 for an unambiguous ID, length >1 for a
+	// duplicated one (the same data Duplicates surfaces). Added for
+	// 002-read-operations' Resolve/Children, which need a single match's
+	// path, not only a duplicate's.
+	Paths map[int][]string
 }
 
 // taskHeadingPattern matches a Tasks artifact's per-task Markdown heading,
@@ -75,12 +81,13 @@ func buildScanResult(t EntityType, width int, claims map[int][]string) ScanResul
 	}
 	sort.Ints(numbers)
 
-	var result ScanResult
+	result := ScanResult{Paths: map[int][]string{}}
 	for _, n := range numbers {
 		paths := claims[n]
 		sort.Strings(paths)
 		id := EntityID{Type: t, Prefix: t.Prefix(), Number: n, Width: width}
 		result.IDs = append(result.IDs, id)
+		result.Paths[n] = paths
 		if len(paths) > 1 {
 			result.Duplicates = append(result.Duplicates, DuplicateID{ID: id, Paths: paths})
 		}
