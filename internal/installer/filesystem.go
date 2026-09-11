@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-// writeAtomicFile writes content to targetAbs following the same
+// WriteAtomicFile writes content to targetAbs following the same
 // atomic-write recipe as every prior feature's writes
 // (docs/architecture-specification.md §57): create a temp file in the
 // same directory, write the complete content, fsync, then os.Rename into
@@ -17,7 +17,7 @@ import (
 // internal/operations — see specs/005-embedded-kit/research.md for why
 // duplicating this ~20-line recipe is preferred here over an
 // architecturally backwards dependency on a higher-level package.
-func writeAtomicFile(targetAbs string, content []byte) error {
+func WriteAtomicFile(targetAbs string, content []byte) error {
 	dir := filepath.Dir(targetAbs)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
