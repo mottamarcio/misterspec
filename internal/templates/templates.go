@@ -1,15 +1,13 @@
 package templates
 
 import (
-	"embed"
 	"fmt"
 	"reflect"
 	"strings"
 	"text/template"
-)
 
-//go:embed files/*.tmpl
-var templateFS embed.FS
+	"github.com/mottamarcio/misterspec/kit"
+)
 
 // Kind identifies which entity/artifact template to render.
 type Kind int
@@ -97,7 +95,7 @@ func Render(kind Kind, data any) (string, error) {
 	}
 
 	filename := filenames[kind]
-	content, err := templateFS.ReadFile("files/" + filename)
+	content, err := kit.TemplatesFS.ReadFile("templates/" + filename)
 	if err != nil {
 		return "", fmt.Errorf("templates: reading %s: %w", filename, err)
 	}

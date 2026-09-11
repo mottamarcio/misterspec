@@ -2,9 +2,11 @@
 // body — for each artifact/entity type misterspec's atomic creation layer
 // writes, per docs/architecture-specification.md §22-31's schemas.
 //
-// This package embeds exactly the 8 template files this feature needs
-// (Program, Feature, Spec, Knowledge, Learning, Plan, Tasks, Validation)
-// — it is not the broader "Embedded Kit" system (canonical Skills, agent
-// integration templates) that a future misterspec init feature will
-// build; see specs/003-entity-creation/research.md.
+// Template content itself (the 8 .tmpl files for Program, Feature, Spec,
+// Knowledge, Learning, Plan, Tasks, Validation) is no longer embedded
+// here — it lives in package kit (kit.TemplatesFS), the shared embedded
+// resource root, so template content has exactly one source of truth
+// shared with internal/installer. This package only owns the rendering
+// logic (Kind, the per-kind *Data structs, and Render). See
+// specs/005-embedded-kit/research.md.
 package templates
