@@ -3,6 +3,7 @@ package installer
 import (
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,12 +16,17 @@ import (
 type Resource struct {
 	// Name is the embedded file's own name (e.g. "program.md.tmpl").
 	Name string
-	// Kind categorizes this resource — "template" for everything this
-	// feature embeds. A string, not a closed enum, so a later feature
-	// can add "skill"/"integration" kinds without a breaking change.
+	// Kind categorizes this resource — "template" for everything
+	// 005-embedded-kit embeds; a later feature's source (e.g. Skills)
+	// supplies its own Kind via ListFS/InstallFS. A string, not a closed
+	// enum, so new kinds never require a breaking change.
 	Kind string
 	// ArtifactType is, for a template resource, the entity/artifact type
-	// it belongs to (e.g. "program"), derived from its filename.
+	// it belongs to (e.g. "program"), derived from its filename by the
+	// "<type>.md.tmpl" convention. For a non-template resource this is
+	// simply its filename unchanged (the convention doesn't match, so
+	// nothing is trimmed) — harmless, since only template callers rely
+	// on it.
 	ArtifactType string
 }
 
@@ -31,13 +37,27 @@ const templatesDir = "templates"
 // list that could drift from what's actually embedded (FR-002, FR-009).
 // It performs no filesystem access outside the embedded FS itself, and
 // returns an identical result on every call.
+//
+// List is ListFS(kit.TemplatesFS, "templates", "template") — kept as its
+// own function so every existing caller's signature is unchanged
+// (006-agent-adapter's research.md).
 func List() []Resource {
-	entries, err := fs.ReadDir(kit.TemplatesFS, templatesDir)
+	return ListFS(kit.TemplatesFS, templatesDir, "template")
+}
+
+// ListFS is List's generalized form: source and sourceDir replace the
+// hardcoded kit.TemplatesFS/"templates", and kind sets every returned
+// Resource.Kind — so a caller installing a different resource type (e.g.
+// Skills) doesn't inherit "template" as a mislabel.
+func ListFS(source fs.FS, sourceDir, kind string) []Resource {
+	entries, err := fs.ReadDir(source, sourceDir)
 	if err != nil {
-		// kit.TemplatesFS is compiled into the binary; a read failure
+		// The embedded kit is compiled into the binary; a read failure
 		// here means the embed itself is broken, not a runtime
-		// condition callers can meaningfully recover from.
-		panic("installer: reading embedded kit templates: " + err.Error())
+		// condition callers can meaningfully recover from. A
+		// caller-supplied fixture fs.FS in a test is expected to be
+		// well-formed for the same reason.
+		panic("installer: reading " + sourceDir + ": " + err.Error())
 	}
 
 	resources := make([]Resource, 0, len(entries))
@@ -47,7 +67,7 @@ func List() []Resource {
 		}
 		resources = append(resources, Resource{
 			Name:         entry.Name(),
-			Kind:         "template",
+			Kind:         kind,
 			ArtifactType: artifactTypeFromFilename(entry.Name()),
 		})
 	}
@@ -98,22 +118,35 @@ type Outcome struct {
 // reserved for something that prevents the operation from running at
 // all; a single resource's own problem is always an Outcome, never this
 // error.
+//
+// Install is InstallFS(kit.TemplatesFS, "templates", "template",
+// targetDir, overwrite) — kept as its own function so every existing
+// caller's signature is unchanged (006-agent-adapter's research.md).
 func Install(targetDir string, overwrite bool) ([]Outcome, error) {
-	resources := List()
+	return InstallFS(kit.TemplatesFS, templatesDir, "template", targetDir, overwrite)
+}
+
+// InstallFS is Install's generalized form: source, sourceDir, and kind
+// replace the hardcoded kit.TemplatesFS/"templates"/"template", so a
+// second consumer (e.g. internal/agents/claude installing Skills) reuses
+// this exact atomic-write, no-silent-overwrite, containment-checked
+// mechanism instead of a second implementation.
+func InstallFS(source fs.FS, sourceDir, kind, targetDir string, overwrite bool) ([]Outcome, error) {
+	resources := ListFS(source, sourceDir, kind)
 	outcomes := make([]Outcome, 0, len(resources))
 	for _, r := range resources {
-		outcomes = append(outcomes, installOne(targetDir, r, overwrite))
+		outcomes = append(outcomes, installOneFS(source, sourceDir, targetDir, r, overwrite))
 	}
 	return outcomes, nil
 }
 
-// installOne installs a single resource, checking containment before any
-// write (FR-006). Exported as a package-internal function so its
+// installOneFS installs a single resource, checking containment before
+// any write (FR-006). Exported as a package-internal function so its
 // containment guarantee can be unit-tested directly (containment_test.go)
-// independent of whether List()'s current resource set can ever trigger
+// independent of whether a given source's resource set can ever trigger
 // it.
-func installOne(targetDir string, r Resource, overwrite bool) Outcome {
-	relDest := filepath.Join(templatesDir, r.Name)
+func installOneFS(source fs.FS, sourceDir, targetDir string, r Resource, overwrite bool) Outcome {
+	relDest := filepath.Join(sourceDir, r.Name)
 	destRel, err := artifacts.RelativeWithinRoot(targetDir, relDest)
 	if err != nil {
 		return Outcome{Resource: r, Status: Failed, Err: err}
@@ -128,12 +161,12 @@ func installOne(targetDir string, r Resource, overwrite bool) Outcome {
 		}
 	}
 
-	content, err := kit.TemplatesFS.ReadFile(templatesDir + "/" + r.Name)
+	content, err := fs.ReadFile(source, path.Join(sourceDir, r.Name))
 	if err != nil {
 		return Outcome{Resource: r, Status: Failed, Path: destRel, Err: err}
 	}
 
-	if err := writeAtomicFile(destAbs, content); err != nil {
+	if err := WriteAtomicFile(destAbs, content); err != nil {
 		return Outcome{Resource: r, Status: Failed, Path: destRel, Err: err}
 	}
 

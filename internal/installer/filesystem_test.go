@@ -12,8 +12,8 @@ func TestWriteAtomicFile_SuccessfulWrite(t *testing.T) {
 	target := filepath.Join(dir, "sub", "out.txt")
 	content := []byte("hello, atomic world\n")
 
-	if err := writeAtomicFile(target, content); err != nil {
-		t.Fatalf("writeAtomicFile() unexpected error: %v", err)
+	if err := WriteAtomicFile(target, content); err != nil {
+		t.Fatalf("WriteAtomicFile() unexpected error: %v", err)
 	}
 
 	got, err := os.ReadFile(target)
@@ -41,9 +41,9 @@ func TestWriteAtomicFile_FailurePartwayLeavesNoFile(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(roDir, 0o755) }) // allow t.TempDir() cleanup
 
 	target := filepath.Join(roDir, "out.txt")
-	err := writeAtomicFile(target, []byte("should never land"))
+	err := WriteAtomicFile(target, []byte("should never land"))
 	if err == nil {
-		t.Fatal("writeAtomicFile() into a read-only directory: expected an error, got nil")
+		t.Fatal("WriteAtomicFile() into a read-only directory: expected an error, got nil")
 	}
 
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
