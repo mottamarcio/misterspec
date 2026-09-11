@@ -49,6 +49,28 @@ func Parse(t EntityType, raw string, width int) (EntityID, error) {
 	return EntityID{Type: t, Prefix: prefix, Number: number, Width: width}, nil
 }
 
+// ParseAny parses raw (e.g. "SPEC-014"), deriving both its EntityType
+// (from the prefix, via TypeForPrefix) and its width (from the suffix
+// length) from the string itself — unlike Parse, the caller does not need
+// to already know raw's type or width. This is what any consumer that
+// only has a bare ID string in hand (an agent, a future CLI argument)
+// needs; Parse remains for a caller that already knows the exact type and
+// width it expects and wants that assumption enforced.
+func ParseAny(raw string) (EntityID, error) {
+	idx := strings.LastIndex(raw, "-")
+	if idx <= 0 || idx == len(raw)-1 {
+		return EntityID{}, fmt.Errorf("%w: %q is not a well-formed entity ID", ErrInvalidIDSyntax, raw)
+	}
+	prefix, suffix := raw[:idx], raw[idx+1:]
+
+	t, ok := TypeForPrefix(prefix)
+	if !ok {
+		return EntityID{}, fmt.Errorf("%w: %q has an unrecognized entity prefix %q", ErrInvalidIDSyntax, raw, prefix)
+	}
+
+	return Parse(t, raw, len(suffix))
+}
+
 // NextID computes the next available ID for entity type t as a pure
 // function of existing: the highest Number among existing entries of type
 // t, plus one — or 1 if none exist. It never reads or writes any

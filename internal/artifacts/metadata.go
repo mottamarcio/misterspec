@@ -16,6 +16,11 @@ type Metadata struct {
 	Parent     *ids.EntityID
 	DependsOn  []ids.EntityID
 	Supersedes []ids.EntityID
+	// For is populated from a `for:` frontmatter key — the Plan/Tasks/
+	// Validation schemas' way of naming the Spec they belong to
+	// (docs/architecture-specification.md §28-30), since those artifact
+	// types have no independent ID or `parent:` field of their own.
+	For *ids.EntityID
 }
 
 var (

@@ -77,7 +77,7 @@ func ResolvePath(root string, cfg project.Configuration, t ids.EntityType, id id
 }
 
 func resolvedFile(root, relDir, filename string) (CanonicalPath, error) {
-	dir, err := relativeWithinRoot(root, relDir)
+	dir, err := RelativeWithinRoot(root, relDir)
 	if err != nil {
 		return CanonicalPath{}, err
 	}
@@ -86,19 +86,23 @@ func resolvedFile(root, relDir, filename string) (CanonicalPath, error) {
 }
 
 func resolvedDirOnly(root, relDir string) (CanonicalPath, error) {
-	dir, err := relativeWithinRoot(root, relDir)
+	dir, err := RelativeWithinRoot(root, relDir)
 	if err != nil {
 		return CanonicalPath{}, err
 	}
 	return CanonicalPath{Directory: filepath.ToSlash(dir)}, nil
 }
 
-// relativeWithinRoot resolves path (absolute, or relative to root) to a
+// RelativeWithinRoot resolves path (absolute, or relative to root) to a
 // path relative to root, rejecting it with ErrPathOutsideProject if the
 // resolved absolute location does not lie inside root. The rejection
 // happens before the caller ever uses the resolved path for anything else
-// (FR-008).
-func relativeWithinRoot(root, path string) (string, error) {
+// (FR-008). Exported in 002-read-operations for reuse by
+// internal/operations's Inventory and Fingerprint, which need the exact
+// same containment guarantee ResolvePath and ClassifyPath already rely on
+// here (Constitution Principle VI, DRY; Principle VIII, one proven
+// implementation instead of a second that could diverge).
+func RelativeWithinRoot(root, path string) (string, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return "", err
