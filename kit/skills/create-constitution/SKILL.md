@@ -34,6 +34,24 @@ its required schema: `Product Invariants`, `Architecture Invariants`,
 `Security Invariants`, `Data Invariants`, `Integration Invariants`,
 `Quality Requirements`, `Compatibility Requirements`.
 
+`Quality Requirements` always includes this fixed baseline, verbatim,
+regardless of what Knowledge does or doesn't say — it is written, not
+distilled:
+
+```markdown
+## Quality Requirements
+
+- Code MUST follow SOLID, DRY, KISS, and YAGNI: no speculative
+  abstraction, no duplicated logic, no unnecessary complexity ahead of
+  a demonstrated need.
+- Every change to behavior MUST be covered by tests. Prefer writing
+  the test first (TDD) and specifying behavior through concrete
+  scenarios before implementation (BDD).
+```
+
+Any project-specific quality facts Knowledge does support are appended
+to this section after the baseline, not in place of it.
+
 ## Preconditions
 
 At least one Knowledge artifact must exist. A Constitution distilled
@@ -111,7 +129,10 @@ Required operations:
    the seven required Constitution sections.
 4. Write or amend `ai/memory/constitution.md` directly (the Constitution
    has no independent entity ID and no `internal create` operation of
-   its own — §22).
+   its own — §22). Ensure `Quality Requirements` contains the fixed
+   baseline from Outputs above, unconditionally — this step does not
+   depend on step 3 finding anything; append any Knowledge-derived
+   quality facts after it.
 5. Run `internal validate` once, at the end.
 6. Report completion per the Completion Contract below.
 
@@ -125,6 +146,9 @@ Required operations:
   pending resolution), never silently resolved by picking one side.
 - Keep the Constitution concise — a long Constitution that restates
   ordinary facts has failed its purpose as durable, load-bearing memory.
+- The `Quality Requirements` baseline (Outputs) is the one exception to
+  "distill only what Knowledge supports" — it is written every time,
+  independent of Knowledge content.
 
 ## Interaction Rules
 
@@ -136,7 +160,8 @@ the completion summary's Attention section instead.
 
 The Constitution must contain all seven required sections. It must not
 contain an entity ID or duplicate any specific fact verbatim from
-Knowledge — only the distilled invariant.
+Knowledge — only the distilled invariant. `Quality Requirements` must
+contain the fixed baseline from Outputs.
 
 ## Failure Conditions
 
@@ -152,8 +177,9 @@ invariant-worthy content.
 
 ## Success Criteria
 
-The Constitution exists, contains all seven required sections, and
-every invariant it states traces back to specific Knowledge content.
+The Constitution exists, contains all seven required sections, its
+`Quality Requirements` section carries the fixed baseline, and every
+other invariant it states traces back to specific Knowledge content.
 
 ## Postconditions
 
@@ -164,7 +190,9 @@ proceed with it as a known constraint.
 
 Re-running this Skill after Knowledge changes amends the existing
 Constitution rather than replacing it wholesale — an invariant already
-recorded and still supported by Knowledge is left as-is.
+recorded and still supported by Knowledge is left as-is. If the
+`Quality Requirements` baseline is already present, it is left
+untouched rather than duplicated or rewritten.
 
 ## Resume Behavior
 

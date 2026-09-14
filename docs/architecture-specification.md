@@ -1062,6 +1062,14 @@ Empty bureaucracy must be avoided.
 
 The Constitution should remain concise enough to load frequently.
 
+`Quality Requirements` is the one section every project's Constitution
+always carries, regardless of what the project's own Knowledge base
+does or doesn't document: a fixed baseline requiring SOLID, DRY, KISS,
+and YAGNI, and test-first practice (TDD/BDD). `/create-constitution`
+writes this baseline unconditionally, not distilled from Knowledge like
+every other section — see `kit/skills/create-constitution/SKILL.md`'s
+own Outputs for its exact text.
+
 ---
 
 # 25. Program Schema
