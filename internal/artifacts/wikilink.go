@@ -34,22 +34,12 @@ type WikiLink struct {
 func ExtractWikiLinks(body []byte) ([]WikiLink, error) {
 	var links []WikiLink
 
-	var inFence bool
-	var fenceMarker string
+	lines := strings.Split(string(body), "\n")
+	fenced := fencedLines(lines)
 
-	for i, line := range strings.Split(string(body), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if marker, ok := fenceMarkerOf(trimmed); ok {
-			switch {
-			case !inFence:
-				inFence, fenceMarker = true, marker
-			case marker == fenceMarker:
-				inFence, fenceMarker = false, ""
-			}
-			continue // a fence delimiter line itself never contains a link
-		}
-		if inFence {
-			continue
+	for i, line := range lines {
+		if fenced[i] {
+			continue // a fence delimiter line, or fenced content, never contains a link
 		}
 
 		for _, link := range extractLineLinks(line) {
@@ -59,6 +49,37 @@ func ExtractWikiLinks(body []byte) ([]WikiLink, error) {
 	}
 
 	return links, nil
+}
+
+// fencedLines reports, for each line of lines, whether that line is
+// either a fenced-code-block delimiter itself or falls inside one —
+// both cases where the line's own content must never be treated as real
+// wikilink or heading syntax. Shared by ExtractWikiLinks and
+// internal/artifacts.ParseDocument (013-document-model-chunking/
+// research.md #3) — factored out of ExtractWikiLinks's own original
+// inline fence-tracking loop, behavior-identical.
+func fencedLines(lines []string) []bool {
+	fenced := make([]bool, len(lines))
+
+	var inFence bool
+	var fenceMarker string
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if marker, ok := fenceMarkerOf(trimmed); ok {
+			fenced[i] = true
+			switch {
+			case !inFence:
+				inFence, fenceMarker = true, marker
+			case marker == fenceMarker:
+				inFence, fenceMarker = false, ""
+			}
+			continue
+		}
+		fenced[i] = inFence
+	}
+
+	return fenced
 }
 
 // fenceMarkerOf reports whether trimmed opens or closes a fenced code
