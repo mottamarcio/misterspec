@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -41,24 +42,29 @@ func checkWikilinks(root string, cfg project.Configuration, filePath string) []F
 
 // classifyWikilink resolves one link's Target against the project's real
 // artifacts, returning the single Finding that applies (if any) — never
-// more than one per link (FR-006, FR-007, FR-008).
+// more than one per link (FR-006, FR-007, FR-008). Delegates the actual
+// resolution to ids.ResolveTarget (012-references-backlinks/research.md
+// #2) rather than repeating its ParseAny+Scan composition inline —
+// behavior here is unchanged: a malformed target (ids.ErrInvalidIDSyntax)
+// is still CodeInvalidWikilink; any other resolution error (e.g. a
+// filesystem-level Scan failure) is still silently swallowed, exactly as
+// before this refactor, since that case is not expected in practice and
+// was never reported as a Finding.
 func classifyWikilink(root string, cfg project.Configuration, filePath string, link artifacts.WikiLink) (Finding, bool) {
-	id, err := ids.ParseAny(link.Target)
+	id, paths, err := ids.ResolveTarget(root, cfg, link.Target)
 	if err != nil {
-		return Finding{
-			Code:     CodeInvalidWikilink,
-			Severity: SeverityError,
-			Path:     filePath,
-			Message:  fmt.Sprintf("wikilink target %q is not a well-formed entity ID: %v", link.Target, err),
-		}, true
-	}
-
-	result, err := ids.Scan(root, cfg, id.Type)
-	if err != nil {
+		if errors.Is(err, ids.ErrInvalidIDSyntax) {
+			return Finding{
+				Code:     CodeInvalidWikilink,
+				Severity: SeverityError,
+				Path:     filePath,
+				Message:  fmt.Sprintf("wikilink target %q is not a well-formed entity ID: %v", link.Target, err),
+			}, true
+		}
 		return Finding{}, false
 	}
 
-	switch matches := len(result.Paths[id.Number]); {
+	switch matches := len(paths); {
 	case matches == 0:
 		return Finding{
 			Code:     CodeBrokenWikilink,
@@ -71,7 +77,7 @@ func classifyWikilink(root string, cfg project.Configuration, filePath string, l
 			Code:     CodeAmbiguousWikilink,
 			Severity: SeverityError,
 			Path:     filePath,
-			Message:  fmt.Sprintf("wikilink target %v resolves to %d artifacts: %v", id, matches, result.Paths[id.Number]),
+			Message:  fmt.Sprintf("wikilink target %v resolves to %d artifacts: %v", id, matches, paths),
 		}, true
 	default:
 		return Finding{}, false

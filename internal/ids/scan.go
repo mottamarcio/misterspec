@@ -95,6 +95,30 @@ func buildScanResult(t EntityType, width int, claims map[int][]string) ScanResul
 	return result
 }
 
+// ResolveTarget parses raw via ParseAny (width-tolerant, type-inferring —
+// the same tolerance ParseMetadata's frontmatter fields and
+// internal/validation's wikilink classification already rely on) and
+// then Scans for it, returning every matching artifact path: zero
+// (unresolved), one (resolved), or more than one (ambiguous — a
+// duplicate ID). Only a genuinely malformed raw string is an error; zero
+// or many matches are not (012-references-backlinks/research.md #2 — a
+// small, shared composition of ParseAny+Scan, factored out of
+// internal/validation/wikilinks.go's classifyWikilink, which used to
+// repeat this same pair of calls inline).
+func ResolveTarget(root string, cfg project.Configuration, raw string) (EntityID, []string, error) {
+	id, err := ParseAny(raw)
+	if err != nil {
+		return EntityID{}, nil, err
+	}
+
+	result, err := Scan(root, cfg, id.Type)
+	if err != nil {
+		return EntityID{}, nil, err
+	}
+
+	return id, result.Paths[id.Number], nil
+}
+
 // idDirPattern matches a canonical entity directory name, e.g. "SPEC-014".
 var idDirPattern = regexp.MustCompile(`^([A-Z]+)-(\d+)$`)
 
