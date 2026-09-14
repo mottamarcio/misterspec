@@ -14,12 +14,20 @@
 //
 // Collect never ranks or numerically scores its own output beyond the
 // Tier-level distinctions it already labels every Candidate with, and
-// applies no token budget — both remain Phase 7's own job
-// (specs/015-context-collector/research.md #2). No CLI command is added
-// here either — Phase 8's own later "internal context" command is the
+// applies no token budget itself — this package's own Rank and
+// ApplyBudget (Phase 7, docs/context-engine-implementation.md §17-20)
+// are the next, later step in the same pipeline: Rank assigns every
+// Candidate a Score meaningful only within its own Tier — Tier always
+// dominates Score, never the reverse (§17.1's own "important ranking
+// invariant") — and ApplyBudget fits a ranked list into a token
+// budget, filling tier by tier, always preserving mandatory content in
+// full. Neither performs any I/O of its own; both operate purely on
+// values this package already produces. No CLI command is added here
+// either — Phase 8's own later "internal context" command is the
 // actual entry point this capability eventually feeds.
 //
-// See specs/015-context-collector/contracts/collector.md for this
-// package's exported contract and specs/015-context-collector/
-// data-model.md for its entity definitions and Collect's own algorithm.
+// See specs/015-context-collector/contracts/collector.md and
+// specs/016-ranking-budgeting/contracts/ranking-budgeting.md for this
+// package's exported contract, and each feature's own data-model.md
+// for its entity definitions and algorithms.
 package contextengine
