@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/mottamarcio/misterspec/internal/agents"
@@ -19,6 +20,55 @@ func TestInspect_UninitializedDirectory(t *testing.T) {
 	}
 	if result.Initialized {
 		t.Error("Inspect() Initialized = true, want false for an empty directory")
+	}
+	if !result.Empty {
+		t.Error("Inspect() Empty = false, want true for an empty directory (010-interactive-init-tui)")
+	}
+}
+
+func TestInspect_NonExistentDirectory(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "does-not-exist-yet")
+
+	result, err := bootstrap.Inspect(root)
+	if err != nil {
+		t.Fatalf("Inspect() unexpected error: %v", err)
+	}
+	if result.Initialized {
+		t.Error("Inspect() Initialized = true, want false for a non-existent directory")
+	}
+	if !result.Empty {
+		t.Error("Inspect() Empty = false, want true for a non-existent directory")
+	}
+}
+
+func TestInspect_NonEmptyUninitializedDirectory(t *testing.T) {
+	root := t.TempDir()
+	testutil.WriteFile(t, root, "README.md", "# an existing, unrelated repository\n")
+
+	result, err := bootstrap.Inspect(root)
+	if err != nil {
+		t.Fatalf("Inspect() unexpected error: %v", err)
+	}
+	if result.Initialized {
+		t.Error("Inspect() Initialized = true, want false — no .misterspec/config.yaml here")
+	}
+	if result.Empty {
+		t.Error("Inspect() Empty = true, want false — the directory already contains other files")
+	}
+}
+
+func TestInspect_AlreadyInitializedDirectoryIsNeverReportedEmpty(t *testing.T) {
+	root := testutil.Project(t)
+
+	result, err := bootstrap.Inspect(root)
+	if err != nil {
+		t.Fatalf("Inspect() unexpected error: %v", err)
+	}
+	if !result.Initialized {
+		t.Fatal("Inspect() Initialized = false, want true")
+	}
+	if result.Empty {
+		t.Error("Inspect() Empty = true, want false — an initialized project is never reported empty")
 	}
 }
 
