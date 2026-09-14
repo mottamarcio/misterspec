@@ -10,4 +10,9 @@
 // operations.Resolve/Inspect's fail-fast error semantics are a poor fit
 // for validation's "collect every anomaly" philosophy. It depends only
 // on internal/ids, internal/artifacts, and internal/project.
+//
+// It also checks each entity's body for wikilinks (internal/artifacts.
+// ExtractWikiLinks), classifying every target as invalid, broken,
+// ambiguous, or resolved — see specs/011-wikilink-foundation/contracts/
+// wikilinks.md.
 package validation

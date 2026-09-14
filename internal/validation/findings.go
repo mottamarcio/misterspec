@@ -39,4 +39,13 @@ const (
 	CodeUnresolvedDependency = "unresolved_dependency"
 	CodeFrontmatterMalformed = "frontmatter_malformed"
 	CodeRequiredFieldMissing = "required_field_missing"
+	// CodeInvalidWikilink marks a wikilink whose target token is not even
+	// syntactically a recognizable entity ID (011-wikilink-foundation).
+	CodeInvalidWikilink = "invalid_wikilink"
+	// CodeBrokenWikilink marks a wikilink whose target is syntactically
+	// valid but resolves to no existing artifact.
+	CodeBrokenWikilink = "broken_wikilink"
+	// CodeAmbiguousWikilink marks a wikilink whose target resolves to
+	// more than one existing artifact.
+	CodeAmbiguousWikilink = "ambiguous_wikilink"
 )

@@ -12,4 +12,10 @@
 // See specs/001-core-foundation/contracts/packages.md for the package's
 // exported contract and specs/001-core-foundation/data-model.md for the
 // Artifact/Metadata/Canonical Path entity definitions.
+//
+// It also exposes an artifact's Markdown body (ReadBody) and a pure
+// lexical scan for author-written "[[TARGET]]" wikilinks within it
+// (ExtractWikiLinks) — see specs/011-wikilink-foundation/contracts/
+// wikilinks.md. Extraction never resolves a target against real project
+// state; internal/validation is where that happens.
 package artifacts
