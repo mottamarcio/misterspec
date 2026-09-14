@@ -195,6 +195,8 @@ func checkEntity(root string, cfg project.Configuration, t ids.EntityType, numbe
 		findings = append(findings, checkDependencyList(root, cfg, filePath, "supersedes", meta.Supersedes)...)
 	}
 
+	findings = append(findings, checkWikilinks(root, cfg, filePath)...)
+
 	return findings
 }
 

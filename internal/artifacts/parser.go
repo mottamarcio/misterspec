@@ -49,7 +49,7 @@ func ParseMetadata(path string) (Metadata, error) {
 		return Metadata{}, fmt.Errorf("artifacts: reading %s: %w", path, err)
 	}
 
-	block, err := extractFrontmatter(data)
+	block, _, err := splitFrontmatter(data)
 	if err != nil {
 		return Metadata{}, fmt.Errorf("%w: %s: %v", ErrFrontmatterMalformed, path, err)
 	}
@@ -116,25 +116,34 @@ func parseFieldIDList(raw []string, field, path string) ([]ids.EntityID, error) 
 	return out, nil
 }
 
-// extractFrontmatter returns the YAML content between the first two
-// "---" delimiter lines at the very start of data
-// (docs/architecture-specification.md §22-31). Anything after the closing
-// delimiter (the Markdown body) is not returned — body structure
-// validation is out of scope for this feature.
-func extractFrontmatter(data []byte) ([]byte, error) {
+// splitFrontmatter splits data into its two halves: the YAML content
+// between the first two "---" delimiter lines at the very start of data
+// (docs/architecture-specification.md §22-31), and the Markdown body —
+// everything after the closing delimiter's own line. ParseMetadata uses
+// only the frontmatter half, exactly as before this function gained the
+// body half; internal/artifacts.ReadBody (011-wikilink-foundation) is
+// the body half's own caller. Widened rather than duplicated, since the
+// delimiter-scanning logic is identical either way
+// (specs/011-wikilink-foundation/research.md) — extractFrontmatter's
+// original name and single-purpose behavior predate this widening.
+func splitFrontmatter(data []byte) (frontmatter, body []byte, err error) {
 	lines := strings.Split(string(data), "\n")
 
 	if len(lines) == 0 || strings.TrimRight(lines[0], "\r") != "---" {
-		return nil, fmt.Errorf("does not start with a %q frontmatter delimiter", "---")
+		return nil, nil, fmt.Errorf("does not start with a %q frontmatter delimiter", "---")
 	}
 
 	for i := 1; i < len(lines); i++ {
 		if strings.TrimRight(lines[i], "\r") == "---" {
-			return []byte(strings.Join(lines[1:i], "\n")), nil
+			frontmatter = []byte(strings.Join(lines[1:i], "\n"))
+			if i+1 < len(lines) {
+				body = []byte(strings.Join(lines[i+1:], "\n"))
+			}
+			return frontmatter, body, nil
 		}
 	}
 
-	return nil, fmt.Errorf("no closing %q frontmatter delimiter found", "---")
+	return nil, nil, fmt.Errorf("no closing %q frontmatter delimiter found", "---")
 }
 
 // parseFieldID parses a frontmatter field's raw ID string (e.g.
