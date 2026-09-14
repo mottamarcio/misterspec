@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -16,6 +17,23 @@ func fixtureSkillsFS() fstest.MapFS {
 	return fstest.MapFS{
 		"skills/one.md": {Data: []byte("# Skill One\n")},
 		"skills/two.md": {Data: []byte("# Skill Two\n")},
+	}
+}
+
+// fixtureNestedSkillsFS mirrors a real canonical Skill layout — one
+// directory per Skill, each containing its own SKILL.md
+// (009-canonical-skills-content's research.md) — the shape ListFS/
+// InstallFS could not discover before this feature's recursive-walk
+// change (a single-level fs.ReadDir explicitly skips directory
+// entries). Rooted at "." (no "skills/" prefix inside the FS itself),
+// matching exactly how kit.SkillsFS (already fs.Sub'd) and
+// claude.Install's own sourceDir "." already use it — this is the
+// actual production shape, not the "skills/"-prefixed layout
+// kit.TemplatesFS uses.
+func fixtureNestedSkillsFS() fstest.MapFS {
+	return fstest.MapFS{
+		"create-plan/SKILL.md":  {Data: []byte("# create-plan\n")},
+		"create-tasks/SKILL.md": {Data: []byte("# create-tasks\n")},
 	}
 }
 
@@ -262,6 +280,96 @@ func TestInstall_IsInstallFSOverTemplates(t *testing.T) {
 	for i := range viaInstall {
 		if viaInstall[i].Resource != viaInstallFS[i].Resource || viaInstall[i].Status != viaInstallFS[i].Status || viaInstall[i].Path != viaInstallFS[i].Path {
 			t.Errorf("Install()[%d] = %+v, InstallFS(...)[%d] = %+v — want identical shape", i, viaInstall[i], i, viaInstallFS[i])
+		}
+	}
+}
+
+// --- 009-canonical-skills-content: ListFS/InstallFS become recursive ---
+
+func TestListFS_DiscoversNestedResources(t *testing.T) {
+	resources := installer.ListFS(fixtureNestedSkillsFS(), ".", "skill")
+	if len(resources) != 2 {
+		t.Fatalf("ListFS() = %d resources, want 2: %+v", len(resources), resources)
+	}
+
+	names := make([]string, len(resources))
+	for i, r := range resources {
+		names[i] = r.Name
+	}
+	sort.Strings(names)
+	want := []string{"create-plan/SKILL.md", "create-tasks/SKILL.md"}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Errorf("names = %v, want %v — Resource.Name must be the path relative to sourceDir, not a bare filename, for a nested resource", names, want)
+			break
+		}
+	}
+}
+
+func TestInstallFS_NestedResourceInstallsAtNestedPath(t *testing.T) {
+	target := t.TempDir()
+
+	outcomes, err := installer.InstallFS(fixtureNestedSkillsFS(), ".", "skill", target, false)
+	if err != nil {
+		t.Fatalf("InstallFS() unexpected error: %v", err)
+	}
+	if len(outcomes) != 2 {
+		t.Fatalf("InstallFS() = %d outcomes, want 2: %+v", len(outcomes), outcomes)
+	}
+
+	for _, o := range outcomes {
+		if o.Status != installer.Installed {
+			t.Fatalf("Outcome for %q Status = %v, want Installed (Err: %v)", o.Resource.Name, o.Status, o.Err)
+		}
+		got, err := os.ReadFile(filepath.Join(target, o.Path))
+		if err != nil {
+			t.Fatalf("reading installed file at nested path %s: %v", o.Path, err)
+		}
+		want, err := fs.ReadFile(fixtureNestedSkillsFS(), o.Resource.Name)
+		if err != nil {
+			t.Fatalf("reading fixture source %s: %v", o.Resource.Name, err)
+		}
+		if string(got) != string(want) {
+			t.Errorf("installed file %s not byte-identical to fixture source", o.Path)
+		}
+	}
+
+	// Parent directories (e.g. "create-plan/") must be created
+	// automatically — WriteAtomicFile's existing MkdirAll, unchanged.
+	if _, err := os.Stat(filepath.Join(target, "create-plan")); err != nil {
+		t.Errorf("nested parent directory not created: %v", err)
+	}
+}
+
+func TestListFS_FlatFixturesUnaffectedByRecursion(t *testing.T) {
+	// The exact resource set for every existing flat fixture must be
+	// identical before and after the recursive-walk change — asserted
+	// directly here, not only inferred from other tests still passing
+	// (research.md's backward-compatibility claim).
+	resources := installer.ListFS(fixtureSkillsFS(), "skills", "skill")
+	if len(resources) != 2 {
+		t.Fatalf("ListFS() = %d resources, want 2: %+v", len(resources), resources)
+	}
+	names := make([]string, len(resources))
+	for i, r := range resources {
+		names[i] = r.Name
+	}
+	sort.Strings(names)
+	want := []string{"one.md", "two.md"}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Errorf("names = %v, want %v — a flat fixture's Resource.Name must remain a bare filename", names, want)
+			break
+		}
+	}
+
+	templateResources := installer.List()
+	if len(templateResources) != 8 {
+		t.Fatalf("List() = %d resources, want 8 (kit.TemplatesFS is flat — recursion must not change its count)", len(templateResources))
+	}
+	for _, r := range templateResources {
+		if strings.Contains(r.Name, "/") {
+			t.Errorf("template Resource.Name = %q contains a path separator, want a bare filename (kit.TemplatesFS is flat)", r.Name)
 		}
 	}
 }

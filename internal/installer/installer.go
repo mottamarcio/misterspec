@@ -14,7 +14,11 @@ import (
 
 // Resource is one embedded item available for installation (FR-002).
 type Resource struct {
-	// Name is the embedded file's own name (e.g. "program.md.tmpl").
+	// Name is the resource's path relative to sourceDir, using fs.FS's
+	// own forward-slash convention (e.g. "program.md.tmpl" for a flat
+	// source, "create-plan/SKILL.md" for a nested one — a bare filename
+	// is simply the zero-nesting case; 009-canonical-skills-content's
+	// research.md).
 	Name string
 	// Kind categorizes this resource — "template" for everything
 	// 005-embedded-kit embeds; a later feature's source (e.g. Skills)
@@ -49,27 +53,44 @@ func List() []Resource {
 // hardcoded kit.TemplatesFS/"templates", and kind sets every returned
 // Resource.Kind — so a caller installing a different resource type (e.g.
 // Skills) doesn't inherit "template" as a mislabel.
+//
+// ListFS walks sourceDir recursively (009-canonical-skills-content's
+// research.md) — not only its immediate children — so a resource set
+// with real subdirectories (a Skill's own "<name>/SKILL.md" layout, for
+// example) is discovered in full. Resource.Name is each file's path
+// relative to sourceDir; for a flat source (every kit template, every
+// fixture in this package's own tests) that is simply the bare
+// filename, unchanged from before this generalization.
 func ListFS(source fs.FS, sourceDir, kind string) []Resource {
-	entries, err := fs.ReadDir(source, sourceDir)
+	var resources []Resource
+
+	err := fs.WalkDir(source, sourceDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		name := p
+		if sourceDir != "." {
+			name = strings.TrimPrefix(p, sourceDir+"/")
+		}
+
+		resources = append(resources, Resource{
+			Name:         name,
+			Kind:         kind,
+			ArtifactType: artifactTypeFromFilename(path.Base(name)),
+		})
+		return nil
+	})
 	if err != nil {
-		// The embedded kit is compiled into the binary; a read failure
+		// The embedded kit is compiled into the binary; a walk failure
 		// here means the embed itself is broken, not a runtime
 		// condition callers can meaningfully recover from. A
 		// caller-supplied fixture fs.FS in a test is expected to be
 		// well-formed for the same reason.
-		panic("installer: reading " + sourceDir + ": " + err.Error())
-	}
-
-	resources := make([]Resource, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		resources = append(resources, Resource{
-			Name:         entry.Name(),
-			Kind:         kind,
-			ArtifactType: artifactTypeFromFilename(entry.Name()),
-		})
+		panic("installer: walking " + sourceDir + ": " + err.Error())
 	}
 
 	sort.Slice(resources, func(i, j int) bool { return resources[i].Name < resources[j].Name })
@@ -146,7 +167,11 @@ func InstallFS(source fs.FS, sourceDir, kind, targetDir string, overwrite bool) 
 // independent of whether a given source's resource set can ever trigger
 // it.
 func installOneFS(source fs.FS, sourceDir, targetDir string, r Resource, overwrite bool) Outcome {
-	relDest := filepath.Join(sourceDir, r.Name)
+	// r.Name uses fs.FS's forward-slash convention (possibly multi-
+	// segment for a nested resource); FromSlash converts it to the
+	// host's own separator before joining into an OS path (research.md
+	// — correct beyond Unix, not only coincidentally correct there).
+	relDest := filepath.Join(sourceDir, filepath.FromSlash(r.Name))
 	destRel, err := artifacts.RelativeWithinRoot(targetDir, relDest)
 	if err != nil {
 		return Outcome{Resource: r, Status: Failed, Err: err}
