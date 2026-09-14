@@ -32,6 +32,12 @@ type Request struct {
 	Intent Intent
 	// Query is an optional free-text question.
 	Query string
+	// Budget optionally overrides DefaultBudget (FR-004, 016-ranking-
+	// budgeting/research.md #6). nil means "not specified" —
+	// DefaultBudget is used. A non-nil pointer, even to zero or a
+	// negative number, is a real, explicit budget request — never
+	// silently promoted to the default.
+	Budget *int
 }
 
 // recognizedIntents is the set validateIntent checks Intent against.
