@@ -18,4 +18,12 @@
 // (ExtractWikiLinks) — see specs/011-wikilink-foundation/contracts/
 // wikilinks.md. Extraction never resolves a target against real project
 // state; internal/validation is where that happens.
+//
+// It also structures a body into an ordered, flat list of heading-
+// bounded Sections (ParseDocument), breaks it into fully-traceable
+// Chunks (Chunks), and estimates a deterministic, approximate token
+// cost for any text (EstimateTokens/Estimator) — see
+// specs/013-document-model-chunking/contracts/document-chunking.md. All
+// three are pure functions of their inputs: no filesystem access, no
+// mutation, no entity-ID lookup.
 package artifacts

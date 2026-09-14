@@ -121,6 +121,45 @@ func TestExtractWikiLinks_FencedCodeBlockIsExcluded(t *testing.T) {
 	}
 }
 
+// TestExtractWikiLinks_TildeFencedCodeBlockIsExcluded pins down current
+// behavior before 013-document-model-chunking's planned fencedLines
+// extraction: "~~~" fences work exactly like "```" ones.
+func TestExtractWikiLinks_TildeFencedCodeBlockIsExcluded(t *testing.T) {
+	body := "" +
+		"~~~markdown\n" +
+		"[[SPEC-014]]\n" +
+		"~~~\n" +
+		"[[SPEC-011]]\n"
+
+	links, err := artifacts.ExtractWikiLinks([]byte(body))
+	if err != nil {
+		t.Fatalf("ExtractWikiLinks() unexpected error: %v", err)
+	}
+	if len(links) != 1 || links[0].Target != "SPEC-011" {
+		t.Errorf("links = %+v, want exactly [SPEC-011]", links)
+	}
+}
+
+// TestExtractWikiLinks_MismatchedFenceMarkersDoNotClose pins down
+// current behavior before the fencedLines extraction: a "```" fence is
+// only closed by another "```" line, never by a "~~~" one — the fence
+// stays open through the rest of the body in that case.
+func TestExtractWikiLinks_MismatchedFenceMarkersDoNotClose(t *testing.T) {
+	body := "" +
+		"```markdown\n" +
+		"[[SPEC-014]]\n" +
+		"~~~\n" +
+		"[[SPEC-011]]\n"
+
+	links, err := artifacts.ExtractWikiLinks([]byte(body))
+	if err != nil {
+		t.Fatalf("ExtractWikiLinks() unexpected error: %v", err)
+	}
+	if len(links) != 0 {
+		t.Errorf("links = %+v, want none — the \"```\" fence is never closed by a \"~~~\" line", links)
+	}
+}
+
 func TestExtractWikiLinks_UnterminatedBracketsAreNotALink(t *testing.T) {
 	links, err := artifacts.ExtractWikiLinks([]byte("This has a stray [[SPEC-014 with no closing brackets.\n"))
 	if err != nil {
