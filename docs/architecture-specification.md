@@ -2571,9 +2571,41 @@ Write and test:
 /analyze
 ```
 
-## Phase 7 — Dogfooding
+## Phase 7 — Second Brain
 
-Initialize the misterspec repository using misterspec.
+Turn the existing artifact model into a lightweight, local-first project
+knowledge graph and retrieval layer — inspired by personal-knowledge-
+management tools such as Obsidian's wikilink/backlink graph, but built
+minimally into misterspec itself: no external app, no editor plugin, no
+graphical UI, nothing the community is required to install.
+
+Goal: find and assemble the smallest sufficient project context for the
+current agent operation, reducing token usage, repeated repository
+exploration, and agent startup cost per operation.
+
+Implement:
+
+```text
+artifact wikilinks ([[SPEC-014]], [[SPEC-014|alias]])
+formal + semantic reference graph (parent/depends_on/supersedes + wikilinks)
+backlinks
+section-aware Markdown chunking with provenance
+disposable, rebuildable SQLite + FTS5 index (never authoritative)
+incremental fingerprint-based synchronization
+intent-aware, tiered, budgeted context retrieval
+misterspec internal context
+retrieval diagnostics (token-reduction metrics)
+```
+
+The filesystem remains the sole source of truth; the index is always
+disposable and fully reconstructible from it. The coding agent retains
+all semantic judgment — misterspec only resolves structure, ranks
+retrieval candidates, and enforces a token budget. Existing Skills and
+internal operations keep working unmodified until this phase's own
+retrieval quality is dogfooded and proven; only then are Skills updated
+to consume a Context Pack first.
+
+Full implementation specification: `docs/context-engine-implementation.md`.
 
 ---
 
