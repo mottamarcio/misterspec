@@ -5,6 +5,20 @@ contract is one new package, `internal/bootstrap`, composing
 `internal/project`, `internal/installer`, and `internal/agents`
 unmodified (research.md).
 
+**Reconciled against the actual implementation (T013)** — unlike every
+prior feature so far, no drift was found: every signature below (types,
+field names, function signatures, both sentinel errors) matches the
+shipped code exactly, including `Bootstrap`'s internal ordering (Inspect
+check, then `registry.Get`, then `os.MkdirAll`, then config, then
+templates, then the agent's own `Install`) as drafted. The one detail
+this draft left implicit and worth naming explicitly now that it's
+implemented: `writeDefaultConfig` and the `configFilePath` constant it
+uses are unexported, package-local to `internal/bootstrap` (mirroring
+`project`'s own unexported `configFilePath`) — never part of this
+package's public surface, consistent with research.md's decision that
+config-writing stays out of `internal/project` itself without needing to
+be part of `bootstrap`'s public API either.
+
 ## `internal/bootstrap` — User Story 1: Inspect
 
 ```go
