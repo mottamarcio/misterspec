@@ -8,8 +8,9 @@ import (
 
 // newInternalCmd builds the "internal" parent *cobra.Command and
 // attaches every internalcmd.NewXxxCmd() constructor as a subcommand —
-// the single place the ten operation commands are wired into the tree
-// (User Story 1). Hidden: true is set separately (User Story 3).
+// the single place the operation commands are wired into the tree
+// (User Story 1, 008-cli-cobra). Hidden: true is set separately (User
+// Story 3). references/backlinks added in 012-references-backlinks.
 func newInternalCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    "internal",
@@ -27,6 +28,8 @@ func newInternalCmd() *cobra.Command {
 		internalcmd.NewInventoryCmd(),
 		internalcmd.NewValidateCmd(),
 		internalcmd.NewStatusCmd(),
+		internalcmd.NewReferencesCmd(),
+		internalcmd.NewBacklinksCmd(),
 	)
 	return cmd
 }

@@ -106,6 +106,91 @@ func TestScan_KnowledgeFlatFilesWithSlugs(t *testing.T) {
 	}
 }
 
+func TestResolveTarget_ResolvesToExactlyOneArtifact(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md", "---\nid: KNOW-003\n---\n")
+
+	id, paths, err := ids.ResolveTarget(root, cfg, "KNOW-003")
+	if err != nil {
+		t.Fatalf("ResolveTarget() unexpected error: %v", err)
+	}
+	if id.Type != ids.Knowledge || id.Number != 3 {
+		t.Errorf("ResolveTarget() id = %+v, want Type=Knowledge Number=3", id)
+	}
+	if len(paths) != 1 {
+		t.Fatalf("ResolveTarget() paths = %v, want exactly 1", paths)
+	}
+}
+
+func TestResolveTarget_BrokenReturnsZeroPaths(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+
+	id, paths, err := ids.ResolveTarget(root, cfg, "SPEC-999")
+	if err != nil {
+		t.Fatalf("ResolveTarget() unexpected error: %v", err)
+	}
+	if id.Type != ids.Spec || id.Number != 999 {
+		t.Errorf("ResolveTarget() id = %+v, want Type=Spec Number=999", id)
+	}
+	if len(paths) != 0 {
+		t.Errorf("ResolveTarget() paths = %v, want none for a nonexistent target", paths)
+	}
+}
+
+func TestResolveTarget_AmbiguousReturnsEveryClaimingPath(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-005-a.md", "---\nid: KNOW-005\n---\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-005-b.md", "---\nid: KNOW-005\n---\n")
+
+	id, paths, err := ids.ResolveTarget(root, cfg, "KNOW-005")
+	if err != nil {
+		t.Fatalf("ResolveTarget() unexpected error: %v", err)
+	}
+	if id.Number != 5 {
+		t.Errorf("ResolveTarget() id.Number = %d, want 5", id.Number)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("ResolveTarget() paths = %v, want exactly 2 claiming paths", paths)
+	}
+}
+
+func TestResolveTarget_MalformedTargetIsError(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+
+	_, _, err := ids.ResolveTarget(root, cfg, "nodash")
+	if err == nil {
+		t.Fatal("ResolveTarget() expected an error for a malformed target, got nil")
+	}
+}
+
+func TestResolveTarget_DifferentZeroPaddingWidthStillResolves(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig() // cfg.IDWidth is 3
+
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md", "---\nid: SPEC-002\n---\n")
+
+	// Written with width 1, not the project's configured width 3 — must
+	// still resolve, matching how a frontmatter field already tolerates
+	// this (internal/artifacts's parseFieldID) and how 011's own wikilink
+	// classification already does.
+	id, paths, err := ids.ResolveTarget(root, cfg, "SPEC-2")
+	if err != nil {
+		t.Fatalf("ResolveTarget() unexpected error: %v", err)
+	}
+	if id.Number != 2 {
+		t.Errorf("ResolveTarget() id.Number = %d, want 2", id.Number)
+	}
+	if len(paths) != 1 {
+		t.Fatalf("ResolveTarget() paths = %v, want exactly 1", paths)
+	}
+}
+
 func TestScan_TaskHeadingsInsideTasksFiles(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()
