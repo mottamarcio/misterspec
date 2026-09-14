@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"errors"
+	"os"
 
 	"github.com/mottamarcio/misterspec/internal/agents"
 	"github.com/mottamarcio/misterspec/internal/project"
@@ -25,6 +26,14 @@ type InspectResult struct {
 	// AgentInstalled mirrors agents.CurrentInstall's own second return
 	// value directly — true iff InstalledAgent is meaningful.
 	AgentInstalled bool
+	// Empty is true when !Initialized and targetDir contains no
+	// entries (or does not exist yet at all) — false otherwise,
+	// including whenever Initialized is true (an initialized project
+	// is never reported empty). Powers the interactive init flow's
+	// non-empty-directory warning (010-interactive-init-tui's
+	// research.md); added additively — every existing caller is
+	// unaffected.
+	Empty bool
 }
 
 // Inspect determines whether targetDir is already a misterspec project
@@ -42,7 +51,11 @@ func Inspect(targetDir string) (InspectResult, error) {
 	proj, err := project.Detect(targetDir)
 	if err != nil {
 		if errors.Is(err, project.ErrNotInitialized) {
-			return InspectResult{Initialized: false}, nil
+			empty, statErr := isEmptyDir(targetDir)
+			if statErr != nil {
+				return InspectResult{}, statErr
+			}
+			return InspectResult{Initialized: false, Empty: empty}, nil
 		}
 		return InspectResult{}, err
 	}
@@ -62,4 +75,18 @@ func Inspect(targetDir string) (InspectResult, error) {
 	}
 
 	return result, nil
+}
+
+// isEmptyDir reports whether dir contains no entries — true also when
+// dir does not exist yet at all, since there is nothing there to be
+// non-empty. Any other stat/read error is returned as-is.
+func isEmptyDir(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	return len(entries) == 0, nil
 }

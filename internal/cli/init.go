@@ -2,21 +2,41 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/mottamarcio/misterspec/internal/agents/builtin"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
 	"github.com/mottamarcio/misterspec/internal/cli/internalcmd"
 	"github.com/mottamarcio/misterspec/internal/installer"
+	"github.com/mottamarcio/misterspec/internal/tui"
 	"github.com/mottamarcio/misterspec/kit"
 )
 
-// newInitCmd builds the public "init" command: --agent (required),
-// --dir (default "."). Calls bootstrap.Bootstrap directly against the
-// real builtin.Default() registry and the real kit.SkillsFS, and
-// reports the result through internalcmd's envelope helper (User Story
-// 2, research.md).
+// isInteractiveTerminal reports whether both stdin and stdout are
+// attached to a real terminal — an overridable package variable
+// (010-interactive-init-tui's research.md) so newInitCmd's own tests
+// never depend on go test's actual TTY status.
+var isInteractiveTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// tuiRunInit is tui.RunInit, as an overridable package variable so
+// tests can substitute a stub that never launches a real Bubble Tea
+// program (010-interactive-init-tui's research.md).
+var tuiRunInit = tui.RunInit
+
+// newInitCmd builds the public "init" command: --agent (required for
+// the non-interactive path, checked explicitly inside RunE rather than
+// via Cobra's MarkFlagRequired so its own failure still goes through
+// the JSON envelope), --dir (default "."). With --agent provided, calls
+// bootstrap.Bootstrap directly — 008-cli-cobra's own behavior,
+// unchanged (SC-005). Without it, in an interactive terminal, launches
+// the interactive flow (010-interactive-init-tui); without one, fails
+// with the exact same JSON error shape a missing --agent already
+// produced before this feature existed (research.md).
 func newInitCmd() *cobra.Command {
 	var dir, agent string
 
@@ -27,32 +47,36 @@ func newInitCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if agent == "" {
-				return internalcmd.WriteError(cmd.OutOrStdout(), fmt.Errorf("%w: --agent is required", internalcmd.ErrInvalidArgument))
-			}
+			if agent != "" {
+				outcome, err := bootstrap.Bootstrap(dir, agent, builtin.Default(), kit.SkillsFS)
+				if err != nil {
+					return internalcmd.WriteError(cmd.OutOrStdout(), err)
+				}
 
-			outcome, err := bootstrap.Bootstrap(dir, agent, builtin.Default(), kit.SkillsFS)
-			if err != nil {
-				return internalcmd.WriteError(cmd.OutOrStdout(), err)
-			}
-
-			return internalcmd.WriteSuccess(cmd.OutOrStdout(), map[string]any{
-				"bootstrap": map[string]any{
-					"project_root":   outcome.ProjectRoot,
-					"config_written": outcome.ConfigWritten,
-					"templates":      outcomesJSON(outcome.TemplateOutcomes),
-					"agent": map[string]any{
-						"adapter_id":       outcome.AgentInstall.AdapterID,
-						"integration_path": outcome.AgentInstall.IntegrationPath,
-						"outcomes":         outcomesJSON(outcome.AgentInstall.Outcomes),
+				return internalcmd.WriteSuccess(cmd.OutOrStdout(), map[string]any{
+					"bootstrap": map[string]any{
+						"project_root":   outcome.ProjectRoot,
+						"config_written": outcome.ConfigWritten,
+						"templates":      outcomesJSON(outcome.TemplateOutcomes),
+						"agent": map[string]any{
+							"adapter_id":       outcome.AgentInstall.AdapterID,
+							"integration_path": outcome.AgentInstall.IntegrationPath,
+							"outcomes":         outcomesJSON(outcome.AgentInstall.Outcomes),
+						},
 					},
-				},
-			})
+				})
+			}
+
+			if !isInteractiveTerminal() {
+				return internalcmd.WriteError(cmd.OutOrStdout(), fmt.Errorf("%w: --agent is required outside an interactive terminal", internalcmd.ErrInvalidArgument))
+			}
+
+			return tuiRunInit(dir, builtin.Default(), kit.SkillsFS)
 		},
 	}
 
 	cmd.Flags().StringVar(&dir, "dir", ".", "target directory to bootstrap")
-	cmd.Flags().StringVar(&agent, "agent", "", "agent ID to install Skills for (required)")
+	cmd.Flags().StringVar(&agent, "agent", "", "agent ID to install Skills for (non-interactive path)")
 	return cmd
 }
 
