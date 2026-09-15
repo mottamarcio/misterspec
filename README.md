@@ -23,7 +23,24 @@ its way to the same answer.
 
 ## Install
 
-Requires Go 1.23.4 or newer.
+**Download a pre-built binary** (no Go toolchain, no repository clone needed) from the
+[latest release](https://github.com/mottamarcio/misterspec/releases/latest) — pick the
+one matching your OS/architecture, rename it to `misterspec`, then:
+
+| Asset | OS / Architecture |
+|---|---|
+| `misterspec-linux-amd64` | Linux, x86-64 |
+| `misterspec-linux-arm64` | Linux, ARM64 |
+| `misterspec-darwin-amd64` | macOS, Intel |
+| `misterspec-darwin-arm64` | macOS, Apple Silicon (M1/M2/M3/M4) |
+| `misterspec-windows-amd64.exe` | Windows, x86-64 |
+
+```sh
+chmod +x misterspec
+./misterspec --help
+```
+
+**Or build from source** (requires Go 1.23.4 or newer):
 
 ```sh
 git clone https://github.com/mottamarcio/misterspec.git
