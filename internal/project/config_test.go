@@ -17,15 +17,16 @@ func TestLoad_Valid(t *testing.T) {
 	}
 
 	want := project.Configuration{
-		SchemaVersion:    1,
-		AgentID:          "claude-code",
-		ArtifactsDir:     "ai",
-		RawDir:           "ai/raw",
-		KnowledgeDir:     "ai/knowledge",
-		ConstitutionPath: "ai/memory/constitution.md",
-		LearningsDir:     "ai/memory/learnings",
-		ProgramsRoot:     "ai/programs",
-		IDWidth:          3,
+		SchemaVersion:       1,
+		AgentID:             "claude-code",
+		ArtifactsDir:        "ai",
+		RawDir:              "ai/raw",
+		KnowledgeDir:        "ai/knowledge",
+		ConstitutionPath:    "ai/memory/constitution.md",
+		LearningsDir:        "ai/memory/learnings",
+		ProgramsRoot:        "ai/programs",
+		IDWidth:             3,
+		GitBranchAutomation: true,
 	}
 	if cfg != want {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
@@ -45,6 +46,26 @@ func TestLoad_DefaultsAppliedWhenFieldsOmitted(t *testing.T) {
 	}
 	if cfg.IDWidth != project.DefaultIDWidth {
 		t.Errorf("IDWidth = %d, want default %d", cfg.IDWidth, project.DefaultIDWidth)
+	}
+	if cfg.GitBranchAutomation != project.DefaultGitBranchAutomation {
+		t.Errorf("GitBranchAutomation = %v, want default %v", cfg.GitBranchAutomation, project.DefaultGitBranchAutomation)
+	}
+}
+
+// TestLoad_GitBranchAutomationExplicitFalse (022-feature-branch-
+// automation) — an explicit "false" in the YAML must be honored, not
+// silently replaced by the default (same "absent means default" rule
+// every other optional field already follows).
+func TestLoad_GitBranchAutomationExplicitFalse(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, testutil.DefaultConfigYAML+"git_branch_automation: false\n")
+
+	cfg, err := project.Load(root)
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if cfg.GitBranchAutomation {
+		t.Error("GitBranchAutomation = true, want false (explicit override in config.yaml)")
 	}
 }
 

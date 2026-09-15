@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -60,6 +61,28 @@ func WriteFile(t *testing.T, root, relPath, contents string) string {
 		t.Fatalf("testutil: writing %s: %v", relPath, err)
 	}
 	return full
+}
+
+// InitGitRepo turns root (already a valid misterspec project, e.g. from
+// Project) into a real Git repository with one initial commit on its
+// default branch, via the real `git` CLI (022-feature-branch-automation)
+// — the same tool internal/vcs itself shells out to, so fixtures behave
+// identically to a genuine user project.
+func InitGitRepo(t *testing.T, root string) {
+	t.Helper()
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("testutil: git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	run("init", "-q")
+	run("add", "-A")
+	run("-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "init")
 }
 
 // Subdir creates and returns the absolute path of a directory nested

@@ -12,15 +12,16 @@ import (
 
 func testConfig() project.Configuration {
 	return project.Configuration{
-		SchemaVersion:    1,
-		AgentID:          "claude-code",
-		ArtifactsDir:     "ai",
-		RawDir:           "ai/raw",
-		KnowledgeDir:     "ai/knowledge",
-		ConstitutionPath: "ai/memory/constitution.md",
-		LearningsDir:     "ai/memory/learnings",
-		ProgramsRoot:     "ai/programs",
-		IDWidth:          3,
+		SchemaVersion:       1,
+		AgentID:             "claude-code",
+		ArtifactsDir:        "ai",
+		RawDir:              "ai/raw",
+		KnowledgeDir:        "ai/knowledge",
+		ConstitutionPath:    "ai/memory/constitution.md",
+		LearningsDir:        "ai/memory/learnings",
+		ProgramsRoot:        "ai/programs",
+		IDWidth:             3,
+		GitBranchAutomation: true,
 	}
 }
 

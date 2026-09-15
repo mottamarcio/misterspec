@@ -56,6 +56,11 @@ type Configuration struct {
 	// IDWidth is the zero-padding width for numeric ID suffixes (e.g.
 	// 3 for SPEC-014). Must be a positive integer.
 	IDWidth int `yaml:"id_width"`
+
+	// GitBranchAutomation controls whether creating a Feature/Spec
+	// automatically manages a dedicated Git branch for that Feature
+	// (022-feature-branch-automation). Defaults to true.
+	GitBranchAutomation bool `yaml:"git_branch_automation"`
 }
 
 // Default configuration values, used by Load to fill in fields the project
@@ -63,13 +68,14 @@ type Configuration struct {
 // constitution (Principle IV) and FR-005, these defaults apply only to
 // genuinely optional fields — never to a field Load treats as required.
 const (
-	DefaultArtifactsDir     = "ai"
-	DefaultRawDir           = "ai/raw"
-	DefaultKnowledgeDir     = "ai/knowledge"
-	DefaultConstitutionPath = "ai/memory/constitution.md"
-	DefaultLearningsDir     = "ai/memory/learnings"
-	DefaultProgramsRoot     = "ai/programs"
-	DefaultIDWidth          = 3
+	DefaultArtifactsDir        = "ai"
+	DefaultRawDir              = "ai/raw"
+	DefaultKnowledgeDir        = "ai/knowledge"
+	DefaultConstitutionPath    = "ai/memory/constitution.md"
+	DefaultLearningsDir        = "ai/memory/learnings"
+	DefaultProgramsRoot        = "ai/programs"
+	DefaultIDWidth             = 3
+	DefaultGitBranchAutomation = true
 )
 
 // configFilePath is the fixed location of a project's configuration file,
@@ -104,15 +110,16 @@ func (e *ConfigError) Unwrap() error {
 // apply) from "the key was present with an empty/zero value" (non-nil —
 // never silently defaulted; FR-005).
 type configYAML struct {
-	SchemaVersion    *int    `yaml:"schema_version"`
-	AgentID          *string `yaml:"agent_id"`
-	ArtifactsDir     *string `yaml:"artifacts_dir"`
-	RawDir           *string `yaml:"raw_dir"`
-	KnowledgeDir     *string `yaml:"knowledge_dir"`
-	ConstitutionPath *string `yaml:"constitution_path"`
-	LearningsDir     *string `yaml:"learnings_dir"`
-	ProgramsRoot     *string `yaml:"programs_root"`
-	IDWidth          *int    `yaml:"id_width"`
+	SchemaVersion       *int    `yaml:"schema_version"`
+	AgentID             *string `yaml:"agent_id"`
+	ArtifactsDir        *string `yaml:"artifacts_dir"`
+	RawDir              *string `yaml:"raw_dir"`
+	KnowledgeDir        *string `yaml:"knowledge_dir"`
+	ConstitutionPath    *string `yaml:"constitution_path"`
+	LearningsDir        *string `yaml:"learnings_dir"`
+	ProgramsRoot        *string `yaml:"programs_root"`
+	IDWidth             *int    `yaml:"id_width"`
+	GitBranchAutomation *bool   `yaml:"git_branch_automation"`
 }
 
 // Load reads and validates root's .misterspec/config.yaml, returning a
@@ -196,6 +203,12 @@ func validateConfig(raw configYAML) (Configuration, error) {
 		return Configuration{}, &ConfigError{Field: "id_width", Reason: "must be a positive integer"}
 	default:
 		cfg.IDWidth = *raw.IDWidth
+	}
+
+	if raw.GitBranchAutomation == nil {
+		cfg.GitBranchAutomation = DefaultGitBranchAutomation
+	} else {
+		cfg.GitBranchAutomation = *raw.GitBranchAutomation
 	}
 
 	return cfg, nil
