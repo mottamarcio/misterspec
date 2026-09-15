@@ -53,9 +53,8 @@ func (m Model) viewPreview() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("This will create:") + "\n\n")
 	b.WriteString("  " + m.preview.configPath + "\n")
-	b.WriteString(fmt.Sprintf("  kit templates: %d files\n", len(m.preview.templates)))
-	for _, r := range m.preview.templates {
-		b.WriteString("    " + r.name + "\n")
+	for _, dir := range m.preview.directories {
+		b.WriteString("  " + dir + "/\n")
 	}
 	agentID := ""
 	if m.selectedAgent != nil {
@@ -84,7 +83,7 @@ func (m Model) viewSuccess() string {
 	if m.outcome.ConfigWritten {
 		b.WriteString("  Configuration written\n")
 	}
-	b.WriteString(fmt.Sprintf("  %d kit resources installed\n", len(m.outcome.TemplateOutcomes)))
+	b.WriteString(fmt.Sprintf("  %d directories scaffolded\n", len(m.outcome.DirectoriesScaffolded)))
 	b.WriteString(fmt.Sprintf("  %d Skills installed for %s\n", len(m.outcome.AgentInstall.Outcomes), m.outcome.AgentInstall.AdapterID))
 	return b.String()
 }

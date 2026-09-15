@@ -29,14 +29,14 @@ func TestView_Preview_ShowsPreviewContent(t *testing.T) {
 		screen: ScreenPreview,
 		preview: previewContent{
 			configPath:      ".misterspec/config.yaml",
-			templates:       []resourceSummary{{name: "program.md.tmpl", kind: "template"}},
+			directories:     []string{"ai", "ai/raw"},
 			skillResources:  []resourceSummary{{name: "skill-one/SKILL.md", kind: "skill"}},
 			agentTargetPath: ".claude/skills",
 		},
 	}
 
 	out := m.View()
-	for _, want := range []string{".misterspec/config.yaml", "program.md.tmpl", "skill-one/SKILL.md", ".claude/skills"} {
+	for _, want := range []string{".misterspec/config.yaml", "ai/raw", "skill-one/SKILL.md", ".claude/skills"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("View() missing %q\ngot: %s", want, out)
 		}
@@ -129,14 +129,15 @@ func TestView_Success_ShowsOutcomeSummary(t *testing.T) {
 	m := Model{
 		screen: ScreenSuccess,
 		outcome: bootstrap.BootstrapOutcome{
-			ProjectRoot:   "/tmp/fixture-project",
-			ConfigWritten: true,
-			AgentInstall:  agents.InstallResult{AdapterID: "fake-agent"},
+			ProjectRoot:           "/tmp/fixture-project",
+			ConfigWritten:         true,
+			DirectoriesScaffolded: []string{"ai", "ai/raw", "ai/knowledge", "ai/memory", "ai/memory/learnings", "ai/programs"},
+			AgentInstall:          agents.InstallResult{AdapterID: "fake-agent"},
 		},
 	}
 
 	out := m.View()
-	for _, want := range []string{"/tmp/fixture-project", "fake-agent"} {
+	for _, want := range []string{"/tmp/fixture-project", "6 directories scaffolded", "fake-agent"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("View() missing %q\ngot: %s", want, out)
 		}

@@ -23,7 +23,16 @@ its way to the same answer.
 
 ## Install
 
-Requires Go 1.23.4 or newer.
+**Download a pre-built binary** (no Go toolchain, no repository clone needed) from the
+[latest release](https://github.com/mottamarcio/misterspec/releases/latest) — pick the
+archive for your OS/architecture, then:
+
+```sh
+chmod +x misterspec
+./misterspec --help
+```
+
+**Or build from source** (requires Go 1.23.4 or newer):
 
 ```sh
 git clone https://github.com/mottamarcio/misterspec.git

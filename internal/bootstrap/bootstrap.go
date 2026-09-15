@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/mottamarcio/misterspec/internal/agents"
-	"github.com/mottamarcio/misterspec/internal/installer"
 )
 
 // ErrAlreadyInitialized is returned by Bootstrap when targetDir (or an
@@ -21,8 +20,8 @@ var ErrAlreadyInitialized = errors.New("bootstrap: already initialized")
 var ErrUnknownAgent = errors.New("bootstrap: unknown agent")
 
 // BootstrapOutcome is the result of one Bootstrap call — the specific
-// outcome of its configuration, kit-resource, and agent-install parts,
-// never a single pass/fail flag (FR-008, SC-004).
+// outcome of its configuration and agent-install parts, never a single
+// pass/fail flag (FR-008, SC-004).
 type BootstrapOutcome struct {
 	// ProjectRoot is the bootstrapped project's root (targetDir,
 	// created if it did not yet exist).
@@ -30,9 +29,11 @@ type BootstrapOutcome struct {
 	// ConfigWritten is whether .misterspec/config.yaml was written
 	// successfully.
 	ConfigWritten bool
-	// TemplateOutcomes is the per-kit-resource result, reused directly
-	// from internal/installer.Install.
-	TemplateOutcomes []installer.Outcome
+	// DirectoriesScaffolded is the relative paths of every directory
+	// project.Configuration's own defaults name, scaffolded via
+	// scaffoldDirectories, in a fixed order (021-init-scaffold-
+	// distribution).
+	DirectoriesScaffolded []string
 	// AgentInstall is the chosen agent's own Install result, reused
 	// directly — includes its own per-Skill Outcomes.
 	AgentInstall agents.InstallResult
@@ -41,8 +42,11 @@ type BootstrapOutcome struct {
 // Bootstrap creates a new misterspec project at targetDir (creating the
 // directory itself if it does not yet exist), for the given,
 // already-chosen agentID: it writes a default project configuration,
-// installs the framework's kit resources, and installs Skills for that
-// agent via its own registered Adapter.
+// scaffolds every directory that configuration names, and installs
+// Skills for that agent via its own registered Adapter. It installs no
+// unused artifact templates into the target project
+// (021-init-scaffold-distribution — templates render from the binary's
+// own embedded copy, never a project's own on-disk copy).
 //
 // Bootstrap checks Inspect and registry.Get(agentID) before writing
 // anything (FR-004, FR-007, SC-001, SC-002) — an already-initialized
@@ -73,11 +77,11 @@ func Bootstrap(targetDir, agentID string, registry *agents.Registry, skills fs.F
 	}
 	outcome.ConfigWritten = true
 
-	templateOutcomes, err := installer.Install(targetDir, false)
+	directories, err := scaffoldDirectories(targetDir)
 	if err != nil {
 		return outcome, err
 	}
-	outcome.TemplateOutcomes = templateOutcomes
+	outcome.DirectoriesScaffolded = directories
 
 	installResult, err := adapter.Install(context.Background(), agents.InstallRequest{
 		ProjectRoot: targetDir,

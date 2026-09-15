@@ -2,13 +2,29 @@ package tui
 
 import (
 	"io/fs"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/mottamarcio/misterspec/internal/agents"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
 	"github.com/mottamarcio/misterspec/internal/installer"
+	"github.com/mottamarcio/misterspec/internal/project"
 )
+
+// previewDirectories mirrors scaffoldDirectories' own fixed list
+// (internal/bootstrap/scaffold.go) without importing it — that
+// function is unexported bootstrap-internal machinery, while this is
+// purely a read-only Preview-screen concern computed directly from
+// project.Default* constants (research.md #5).
+var previewDirectories = []string{
+	project.DefaultArtifactsDir,
+	project.DefaultRawDir,
+	project.DefaultKnowledgeDir,
+	filepath.ToSlash(filepath.Dir(project.DefaultConstitutionPath)),
+	project.DefaultLearningsDir,
+	project.DefaultProgramsRoot,
+}
 
 // bootstrapResultMsg carries bootstrap.Bootstrap's result back into
 // Update, once ScreenInstalling's command completes.
@@ -114,7 +130,7 @@ func (m Model) updateAgentSelection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func buildPreview(skills fs.FS, agent agents.Adapter) previewContent {
 	return previewContent{
 		configPath:      ".misterspec/config.yaml",
-		templates:       toResourceSummaries(installer.List()),
+		directories:     append([]string(nil), previewDirectories...),
 		skillResources:  toResourceSummaries(installer.ListFS(skills, ".", "skill")),
 		agentTargetPath: agent.TargetPath(),
 	}

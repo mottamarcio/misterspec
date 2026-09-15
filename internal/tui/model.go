@@ -27,8 +27,12 @@ const (
 // from already-exported, read-only calls (research.md) — never a new
 // deterministic operation.
 type previewContent struct {
-	configPath      string
-	templates       []resourceSummary
+	configPath string
+	// directories is computed directly from project.Default* constants
+	// (research.md #5) — nothing exists on disk yet at Preview time,
+	// so this mirrors scaffoldDirectories' own fixed list rather than
+	// reading it back from the filesystem.
+	directories     []string
 	skillResources  []resourceSummary
 	agentTargetPath string
 }
