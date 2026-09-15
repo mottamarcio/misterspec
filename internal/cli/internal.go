@@ -30,6 +30,7 @@ func newInternalCmd() *cobra.Command {
 		internalcmd.NewStatusCmd(),
 		internalcmd.NewReferencesCmd(),
 		internalcmd.NewBacklinksCmd(),
+		internalcmd.NewContextCmd(),
 	)
 	return cmd
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
+	contextengine "github.com/mottamarcio/misterspec/internal/context"
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/project"
 	"github.com/mottamarcio/misterspec/internal/validation"
@@ -41,6 +42,8 @@ func classify(err error) (code string, exitCode int) {
 		return "unsupported_type", 2
 	case errors.Is(err, operations.ErrInvalidSlug), errors.Is(err, ErrInvalidArgument):
 		return "invalid_argument", 2
+	case errors.Is(err, contextengine.ErrUnsupportedIntent):
+		return "unsupported_intent", 2
 	case errors.Is(err, artifacts.ErrPathOutsideProject):
 		return "path_outside_project", 5
 	case errors.Is(err, bootstrap.ErrAlreadyInitialized):

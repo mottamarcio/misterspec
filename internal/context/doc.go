@@ -22,12 +22,20 @@
 // invariant") — and ApplyBudget fits a ranked list into a token
 // budget, filling tier by tier, always preserving mandatory content in
 // full. Neither performs any I/O of its own; both operate purely on
-// values this package already produces. No CLI command is added here
-// either — Phase 8's own later "internal context" command is the
-// actual entry point this capability eventually feeds.
+// values this package already produces.
 //
-// See specs/015-context-collector/contracts/collector.md and
-// specs/016-ranking-budgeting/contracts/ranking-budgeting.md for this
-// package's exported contract, and each feature's own data-model.md
-// for its entity definitions and algorithms.
+// Render (Phase 8, 017-internal-context-command) is this package's own
+// last, purely presentational step: it converts an already-computed
+// Result into a well-formed Markdown context pack, grouped by Tier,
+// without altering selection, ranking, or budgeting in any way. The
+// actual CLI entry point — "misterspec internal context" — lives in
+// internal/cli/internalcmd, which orchestrates Collect, Rank,
+// ApplyBudget, and (optionally) Render in sequence; this package
+// remains unaware of any CLI, JSON, or index-lifecycle concern.
+//
+// See specs/015-context-collector/contracts/collector.md,
+// specs/016-ranking-budgeting/contracts/ranking-budgeting.md, and
+// specs/017-internal-context-command/contracts/context-command.md for
+// this package's exported contract, and each feature's own
+// data-model.md for its entity definitions and algorithms.
 package contextengine

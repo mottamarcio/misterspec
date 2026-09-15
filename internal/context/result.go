@@ -23,6 +23,28 @@ const (
 	TierSecondHop
 )
 
+// String returns t's own stable, lowercase label — used both by
+// Render's own Markdown section headings and by the internal "context"
+// command's own JSON "tier" field (017-internal-context-command/
+// research.md #5). Never changes across releases without a deliberate,
+// reviewed decision, since callers may match on it.
+func (t Tier) String() string {
+	switch t {
+	case TierMandatory:
+		return "mandatory"
+	case TierStructural:
+		return "structural"
+	case TierSemantic:
+		return "semantic"
+	case TierText:
+		return "text"
+	case TierSecondHop:
+		return "second_hop"
+	default:
+		return "unknown"
+	}
+}
+
 // Reason is one specific justification for including a Candidate.
 // Relation is one of "constitution", "target", "parent", "depends_on",
 // "supersedes", "wikilink", "backlink", or "text_match" (data-model.md).

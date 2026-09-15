@@ -1,6 +1,9 @@
 package contextengine
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // Intent names what kind of work a Request's context is for. The zero
 // value ("") means no particular intent (docs/context-engine-
@@ -49,11 +52,19 @@ var recognizedIntents = map[Intent]bool{
 	IntentAnalysis:       true,
 }
 
+// ErrUnsupportedIntent is returned (wrapped) by validateIntent when a
+// Request's Intent is neither "" nor one of the recognized values
+// (017-internal-context-command/spec.md FR-002, research.md #4) — an
+// errors.Is-matchable sentinel the internal "context" command's own
+// classify function maps onto its own "unsupported_intent" JSON error
+// code.
+var ErrUnsupportedIntent = errors.New("contextengine: unsupported intent")
+
 // validateIntent reports whether i is "" (no preference) or one of the
 // recognized Intent values (FR-002).
 func validateIntent(i Intent) error {
 	if i == "" || recognizedIntents[i] {
 		return nil
 	}
-	return fmt.Errorf("contextengine: unrecognized intent %q", i)
+	return fmt.Errorf("%w: %v", ErrUnsupportedIntent, i)
 }

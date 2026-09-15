@@ -2,6 +2,30 @@ package contextengine
 
 import "testing"
 
+func TestTierString_EachRecognizedTierHasItsOwnLabel(t *testing.T) {
+	cases := []struct {
+		tier Tier
+		want string
+	}{
+		{TierMandatory, "mandatory"},
+		{TierStructural, "structural"},
+		{TierSemantic, "semantic"},
+		{TierText, "text"},
+		{TierSecondHop, "second_hop"},
+	}
+	for _, c := range cases {
+		if got := c.tier.String(); got != c.want {
+			t.Errorf("Tier(%d).String() = %q, want %q", c.tier, got, c.want)
+		}
+	}
+}
+
+func TestTierString_OutOfRangeValueIsUnknown(t *testing.T) {
+	if got := Tier(999).String(); got != "unknown" {
+		t.Errorf("Tier(999).String() = %q, want %q", got, "unknown")
+	}
+}
+
 func TestMergeAndSort_MergesReasonsForSameChunk(t *testing.T) {
 	candidates := []Candidate{
 		{Path: "a.md", StartLine: 1, EndLine: 2, Reasons: []Reason{{Tier: TierStructural, Relation: "depends_on"}}},
