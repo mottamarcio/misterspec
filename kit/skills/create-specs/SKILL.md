@@ -108,7 +108,9 @@ Required operations:
 4. For each, run `internal create spec --parent FEAT-###`, then write
    its body: intent, numbered requirements, acceptance scenarios (Given/
    When/Then), edge cases, constraints, non-goals, and any dependency on
-   another Spec (`depends_on`).
+   another Spec (`depends_on`) — resolving any genuinely ambiguous
+   requirement boundary per the Interaction Rules below before finalizing
+   its text.
 5. Run `internal validate SPEC-###` for each newly created Spec.
 6. Report completion per the Completion Contract below.
 
@@ -123,9 +125,22 @@ Required operations:
 
 ## Interaction Rules
 
-If a requirement's exact boundary is ambiguous, prefer a narrower,
-clearly testable requirement plus a named open question over a broad,
-untestable one.
+If a requirement's boundary has multiple reasonable interpretations with
+materially different implications, do not resolve it silently — ask.
+Present a full-sentence question, 2-4 concrete options, and mark exactly
+one option "(Recommended)" with a one-sentence reason, then wait for the
+user's answer before finalizing that requirement's text. Once answered,
+reflect the choice directly in the requirement itself — never leave it as
+a vague placeholder plus a silent annotation. If the user's reply doesn't
+map to any offered option, ask a quick disambiguation rather than
+guessing. If the per-invocation question budget is reached with a real
+ambiguity still unresolved, record it under the new Spec's own
+`## Unresolved Questions` section instead of asking further.
+
+If a requirement's boundary instead has an obvious, low-stakes default —
+not a genuine fork with materially different implications — apply the
+default and record the assumption inline; do not interrupt the user for
+this case.
 
 ## Validation Rules
 
@@ -170,6 +185,8 @@ same behavior boundary.
 ## Completion Contract
 
 Every invocation ends with a concise operational summary naming:
+
+Render this summary using structured formatting, not prose paragraphs: present **Artifacts** as a Markdown table when more than one artifact is involved (columns matching what's relevant — ID, path/type, and status or a one-line summary), or a single bullet when there is exactly one; present **Important findings** and **Attention** as bullet lists. This applies equally to a failure/stop report.
 
 - **Outcome** — one or more Specs created, or none (already covered).
 - **Artifacts** — every Spec ID created, with a one-line intent summary
