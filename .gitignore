@@ -30,6 +30,11 @@ go.work.sum
 # env file
 .env
 
+# Disposable misterspec context-engine cache (014-sqlite-index) — never
+# authoritative, fully rebuildable, including inside any fixture project
+# (e.g. specs/019-dogfooding-evaluation/fixture/.misterspec/cache/).
+**/.misterspec/cache/
+
 # Editor/IDE
 # .idea/
 # .vscode/
