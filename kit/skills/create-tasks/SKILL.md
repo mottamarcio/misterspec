@@ -46,6 +46,11 @@ The Plan's own `Requirement Coverage` and `Implementation Sequence`.
 The Spec's own requirements directly, for precise requirement
 references on each Task.
 
+The Context Pack returned by `internal context` (below) is a starting
+point, not a boundary — this Skill remains free to read further
+repository files or run further deterministic operations whenever the
+pack alone is insufficient.
+
 ## Conditional Context
 
 If the Plan identifies components with real ordering constraints
@@ -96,6 +101,10 @@ Required operations:
   canonical file.
 - `internal inspect SPEC-###` — read the Spec's requirements, to
   reference precisely in each Task.
+- `internal context SPEC-### --intent tasks` — request a budgeted
+  Context Pack before broader exploration. If this fails, proceed
+  using this Skill's own Optional Context above instead — it is never
+  a Failure Condition.
 - `internal create-artifact tasks --for SPEC-###` — scaffold the Tasks
   artifact at its fixed canonical location.
 - `internal validate SPEC-###` — confirm the Spec (now with Tasks) is
@@ -110,19 +119,22 @@ duplicate number, not a pre-check this Skill performs itself.
 
 1. Run `internal resolve SPEC-###` and `internal inspect SPEC-###` to
    read the Spec's requirements.
-2. Read the Spec's own Plan for its `Implementation Sequence` and
+2. Run `internal context SPEC-### --intent tasks` and begin from its
+   returned items. If the request fails, proceed using this Skill's
+   own Optional Context above instead.
+3. Read the Spec's own Plan for its `Implementation Sequence` and
    `Requirement Coverage`.
-3. Run `internal create-artifact tasks --for SPEC-###` if the Tasks
+4. Run `internal create-artifact tasks --for SPEC-###` if the Tasks
    artifact does not exist yet.
-4. Decompose the Plan into Tasks, each with: a title; an unchecked
+5. Decompose the Plan into Tasks, each with: a title; an unchecked
    completion checkbox; the requirement(s) it serves (`SPEC-###:R#`);
    what it depends on (another Task, or "none"); its file/component
    scope; and how it will be verified (e.g. a specific `go test`
    invocation). Number each `## TASK-NNN` sequentially, checking
    existing Tasks first so numbers are never reused.
-5. Run `internal validate SPEC-###` to confirm no duplicate Task numbers
+6. Run `internal validate SPEC-###` to confirm no duplicate Task numbers
    and no Task referencing a nonexistent requirement.
-6. Report completion per the Completion Contract below.
+7. Report completion per the Completion Contract below.
 
 ## Decision Rules
 

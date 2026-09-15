@@ -44,6 +44,11 @@ currently executable (its own dependencies, if any, already complete).
 The selected Task's own scope, requirement references, and verification
 method; the real repository source code it touches.
 
+The Context Pack returned by `internal context` (below) is a starting
+point, not a boundary — this Skill remains free to read further
+repository files or run further deterministic operations whenever the
+pack alone is insufficient.
+
 ## Optional Context
 
 The Spec's own requirements and acceptance scenarios directly, for
@@ -103,6 +108,10 @@ Required operations:
   canonical file.
 - `internal inspect SPEC-###` — read the Spec's requirements the
   selected Task serves.
+- `internal context SPEC-### --intent implementation` — request a
+  budgeted Context Pack before broader exploration. If this fails,
+  proceed using this Skill's own Required Context above instead — it
+  is never a Failure Condition.
 - `internal validate SPEC-###` — confirm the project is still
   structurally valid after the Task's own changes (this checks
   artifact structure, not the code change's own correctness — that is
@@ -111,17 +120,20 @@ Required operations:
 ## Procedure
 
 1. Run `internal resolve SPEC-###` and `internal inspect SPEC-###`.
-2. Read the Spec's Tasks artifact; select one Task whose own
+2. Run `internal context SPEC-### --intent implementation` and begin
+   from its returned items. If the request fails, proceed using this
+   Skill's own Required Context above instead.
+3. Read the Spec's Tasks artifact; select one Task whose own
    dependencies are already complete.
-3. Load the context that Task's own scope names.
-4. Implement the change directly in the repository.
-5. Verify it by the Task's own stated method (e.g. run the named `go
+4. Load the context that Task's own scope names.
+5. Implement the change directly in the repository.
+6. Verify it by the Task's own stated method (e.g. run the named `go
    test` command); record the evidence.
-6. If verification succeeds, check the Task's completion checkbox and
+7. If verification succeeds, check the Task's completion checkbox and
    record its evidence in the Tasks artifact directly.
-7. Run `internal validate SPEC-###` to confirm the project's structure
+8. Run `internal validate SPEC-###` to confirm the project's structure
    is still valid.
-8. Report completion per the Completion Contract below.
+9. Report completion per the Completion Contract below.
 
 ## Decision Rules
 
