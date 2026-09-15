@@ -25,15 +25,16 @@ const configFilePath = ".misterspec/config.yaml"
 // impossible (research.md).
 func writeDefaultConfig(targetDir, agentID string) error {
 	cfg := project.Configuration{
-		SchemaVersion:    1,
-		AgentID:          agentID,
-		ArtifactsDir:     project.DefaultArtifactsDir,
-		RawDir:           project.DefaultRawDir,
-		KnowledgeDir:     project.DefaultKnowledgeDir,
-		ConstitutionPath: project.DefaultConstitutionPath,
-		LearningsDir:     project.DefaultLearningsDir,
-		ProgramsRoot:     project.DefaultProgramsRoot,
-		IDWidth:          project.DefaultIDWidth,
+		SchemaVersion:       1,
+		AgentID:             agentID,
+		ArtifactsDir:        project.DefaultArtifactsDir,
+		RawDir:              project.DefaultRawDir,
+		KnowledgeDir:        project.DefaultKnowledgeDir,
+		ConstitutionPath:    project.DefaultConstitutionPath,
+		LearningsDir:        project.DefaultLearningsDir,
+		ProgramsRoot:        project.DefaultProgramsRoot,
+		IDWidth:             project.DefaultIDWidth,
+		GitBranchAutomation: project.DefaultGitBranchAutomation,
 	}
 
 	data, err := yaml.Marshal(cfg)
