@@ -59,3 +59,5 @@ is published at:
 ## License
 
 [MIT](./LICENSE)
+
+<!-- copilot review connectivity test, safe to delete -->
