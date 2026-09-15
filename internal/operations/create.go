@@ -12,6 +12,7 @@ import (
 	"github.com/mottamarcio/misterspec/internal/lock"
 	"github.com/mottamarcio/misterspec/internal/project"
 	"github.com/mottamarcio/misterspec/internal/templates"
+	"github.com/mottamarcio/misterspec/internal/vcs"
 )
 
 // ErrInvalidParent is returned when a Create/CreateArtifact request's
@@ -47,6 +48,25 @@ type CreateRequest struct {
 type CreateResult struct {
 	ID   ids.EntityID
 	Path string // relative to root
+
+	// GitBranch is the relevant Git branch name (022-feature-branch-
+	// automation) — for a Feature, the branch just ensured/created; for
+	// a Spec, its parent Feature's own branch. Empty when automation
+	// did not run at all (see GitSkippedReason) or for entity types
+	// this feature never touches.
+	GitBranch string
+	// GitBranchCreated is true only when GitBranch was newly created by
+	// this call (Feature creation only) — false when an existing branch
+	// was resumed instead, and always false for Spec creation.
+	GitBranchCreated bool
+	// GitSkippedReason is "not_a_git_repo" or "disabled" when Git
+	// automation would otherwise apply but did not run; empty
+	// otherwise.
+	GitSkippedReason string
+	// GitWarning is set only for Spec creation, only when the
+	// currently checked-out branch does not match the parent Feature's
+	// own branch — never blocks the creation.
+	GitWarning string
 }
 
 // createableTypes are the entity types Create supports (FR-009). Task is
@@ -78,6 +98,10 @@ func Create(root string, cfg project.Configuration, req CreateRequest) (CreateRe
 	// parents is ordered outermost to innermost, matching
 	// artifacts.ResolvePath's variadic parents parameter.
 	var parents []ids.EntityID
+	// parentFeatureID is set only for Spec creation (022-feature-
+	// branch-automation) — the parent Feature's own ID, used to derive
+	// the branch a Spec is expected to land on.
+	var parentFeatureID string
 
 	switch req.Type {
 	case ids.Feature:
@@ -100,6 +124,7 @@ func Create(root string, cfg project.Configuration, req CreateRequest) (CreateRe
 			return CreateResult{}, fmt.Errorf("%w: %s has no program parent", ErrInvalidParent, feat.ID)
 		}
 		parents = []ids.EntityID{featParent.Parent.ID, feat.ID}
+		parentFeatureID = feat.ID.String()
 
 	case ids.Knowledge, ids.Learning:
 		if err := validateSlug(req.Slug); err != nil {
@@ -133,6 +158,24 @@ func Create(root string, cfg project.Configuration, req CreateRequest) (CreateRe
 		return CreateResult{}, statErr
 	}
 
+	result := CreateResult{ID: newID, Path: targetRel}
+
+	switch req.Type {
+	case ids.Feature:
+		branch, created, skippedReason, err := ensureFeatureBranch(root, cfg, newID.String(), req.Slug)
+		if err != nil {
+			return CreateResult{}, err
+		}
+		result.GitBranch, result.GitBranchCreated, result.GitSkippedReason = branch, created, skippedReason
+
+	case ids.Spec:
+		branch, warning, skippedReason, err := checkSpecBranch(root, cfg, parentFeatureID)
+		if err != nil {
+			return CreateResult{}, err
+		}
+		result.GitBranch, result.GitWarning, result.GitSkippedReason = branch, warning, skippedReason
+	}
+
 	content, err := renderCreate(req.Type, newID, parents)
 	if err != nil {
 		return CreateResult{}, err
@@ -142,7 +185,59 @@ func Create(root string, cfg project.Configuration, req CreateRequest) (CreateRe
 		return CreateResult{}, err
 	}
 
-	return CreateResult{ID: newID, Path: targetRel}, nil
+	return result, nil
+}
+
+// ensureFeatureBranch creates-and-checks-out (or resumes) the dedicated
+// Git branch for a newly allocated Feature ID, using slug (if given) to
+// make the branch name readable at a glance (022-feature-branch-
+// automation, FR-001/FR-002/FR-007), or reports why it did not
+// (FR-003/FR-006) — never an error for either of those two cases.
+func ensureFeatureBranch(root string, cfg project.Configuration, featureID, slug string) (branch string, created bool, skippedReason string, err error) {
+	if !cfg.GitBranchAutomation {
+		return "", false, "disabled", nil
+	}
+	if !vcs.IsRepo(root) {
+		return "", false, "not_a_git_repo", nil
+	}
+
+	branch, created, err = vcs.EnsureFeatureBranch(root, featureID, slug)
+	if err != nil {
+		return "", false, "", err
+	}
+	return branch, created, "", nil
+}
+
+// checkSpecBranch reports the parent Feature's own branch and, if the
+// currently checked-out branch differs from it, a non-blocking warning
+// (022-feature-branch-automation, FR-004/FR-005) — a Spec never creates
+// or switches a branch itself. Returns an empty branch (no warning
+// possible) when the parent Feature has no dedicated branch at all yet
+// — e.g. it was created before automation was enabled.
+func checkSpecBranch(root string, cfg project.Configuration, parentFeatureID string) (branch, warning, skippedReason string, err error) {
+	if !cfg.GitBranchAutomation {
+		return "", "", "disabled", nil
+	}
+	if !vcs.IsRepo(root) {
+		return "", "", "not_a_git_repo", nil
+	}
+
+	branch, err = vcs.BranchForID(root, parentFeatureID)
+	if err != nil {
+		return "", "", "", err
+	}
+	if branch == "" {
+		return "", "", "", nil
+	}
+
+	current, err := vcs.CurrentBranch(root)
+	if err != nil {
+		return "", "", "", err
+	}
+	if current != "" && current != branch {
+		warning = fmt.Sprintf("current branch %q does not match parent Feature %s's own branch %q", current, parentFeatureID, branch)
+	}
+	return branch, warning, "", nil
 }
 
 // validateParent resolves rawParent and confirms it exists, unambiguously,
