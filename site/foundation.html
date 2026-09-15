@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Core Foundation — misterspec docs</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
+    <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
+
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 001–005</p>
+      <h1>Core Foundation</h1>
+      <p>
+        Everything else in misterspec — the CLI, the Context Engine,
+        every agent integration — is built on five small, read-heavy
+        packages that establish one thing: the project's own
+        deterministic ground truth, computed from the filesystem, never
+        stored separately.
+      </p>
+
+      <h2 id="core-repository-foundation">001 · Core Repository Foundation</h2>
+      <p><strong>What it is:</strong> Three packages — <code>project</code>,
+      <code>artifacts</code>, <code>ids</code> — with no CLI, no
+      writing, no TUI.</p>
+      <p><strong>Why it exists:</strong> Every later feature needs the
+      same three answers: is this an initialized misterspec project?
+      what canonical path does this artifact live at? what's the next
+      free ID for a new entity? Answering these by scanning the
+      filesystem (never a stored counter) is what Constitution
+      Principle III actually requires.</p>
+      <p><strong>Example</strong> — detecting a project and its config:</p>
+      <pre><code>misterspec internal status --dir .
+{"ok":true,"counts":{...},"structural_errors":0}</code></pre>
+
+      <h2 id="read-operations">002 · Read-Only Deterministic Operations</h2>
+      <p><strong>What it is:</strong> <code>internal/operations</code> —
+      <code>Resolve</code>, <code>Inspect</code>, <code>Parent</code>,
+      <code>Children</code>, <code>Inventory</code>,
+      <code>Fingerprint</code>.</p>
+      <p><strong>Why it exists:</strong> Composes 001's own primitives
+      into the actual questions an agent asks: "where exactly is
+      SPEC-014?", "what are FEAT-004's own children?", "has this file
+      changed since it was last indexed?" — building directly on 001,
+      before anything is allowed to write.</p>
+      <p><strong>Example:</strong></p>
+      <pre><code>misterspec internal resolve SPEC-014
+{"ok":true,"id":"SPEC-014","path":"ai/programs/PRG-001/features/FEAT-004/specs/SPEC-014/spec.md"}</code></pre>
+
+      <h2 id="entity-creation">003 · Atomic Entity Creation</h2>
+      <p><strong>What it is:</strong> <code>Create</code> and
+      <code>CreateArtifact</code>, protected by a short-lived,
+      stale-recoverable lock.</p>
+      <p><strong>Why it exists:</strong> The first feature that writes
+      to disk — Constitution Principle II requires ID allocation and
+      initial artifact creation to be one atomic step, never a split
+      "get next ID" followed by "write the file," which would race
+      under concurrent use.</p>
+      <p><strong>Example:</strong></p>
+      <pre><code>misterspec internal create spec --parent FEAT-004
+{"ok":true,"id":"SPEC-015","path":"ai/.../specs/SPEC-015/spec.md"}</code></pre>
+
+      <h2 id="structural-validation">004 · Structural Validation & Project Status</h2>
+      <p><strong>What it is:</strong> <code>internal/validation</code>
+      plus <code>operations.Status</code> — every structural anomaly
+      collected as data, never stopping at the first.</p>
+      <p><strong>Why it exists:</strong> Completes the read-only side of
+      002: a fast, whole-project health check (<code>status</code>) and
+      a specific, itemized structural audit (<code>validate</code>) —
+      exactly what <code>/create-plan</code>, <code>/create-tasks</code>,
+      and <code>/implement</code> all call after every mutation.</p>
+      <p><strong>Example:</strong></p>
+      <pre><code>misterspec internal validate SPEC-014
+{"ok":true,"valid":true,"findings":[]}</code></pre>
+
+      <h2 id="embedded-kit">005 · Embedded Kit & Resource Installer</h2>
+      <p><strong>What it is:</strong> <code>kit</code> (embedded
+      templates/Skills via <code>go:embed</code>) and
+      <code>internal/installer</code> (atomic, no-silent-overwrite
+      materialization).</p>
+      <p><strong>Why it exists:</strong> misterspec ships as one static
+      binary with zero network dependency at install time — every
+      artifact template and canonical Skill file lives inside the
+      compiled binary itself, and <code>installer.Install</code> is the
+      one, generic, agent-agnostic primitive every later adapter
+      (<a href="agents-cli.html">006</a>) reuses rather than
+      reimplementing atomic writes a second time.</p>
+      <p><strong>Example</strong> — what a template scaffold looks like
+      once materialized by <code>internal create</code> (004's own
+      example, above), sourced from this feature's own embedded
+      <code>kit/templates/spec.md.tmpl</code>:</p>
+      <pre><code>---
+id: SPEC-015
+type: spec
+status: draft
+parent: FEAT-004
+---
+## Intent
+</code></pre>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>

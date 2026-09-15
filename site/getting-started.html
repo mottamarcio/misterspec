@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Getting Started — misterspec docs</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
+    <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-12 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
+
+      <p class="text-sm font-medium text-slate-500 mb-1">Overview</p>
+      <h1>Getting Started</h1>
+      <p>
+        misterspec ships as a single static Go binary — no runtime
+        dependency beyond a Go toolchain to build it (or a downloaded
+        release binary, once one is published).
+      </p>
+
+      <h2 id="install"><iconify-icon icon="lucide:download" class="align-[-0.15em] mr-1"></iconify-icon>Install</h2>
+      <p>From source, with Go 1.23.4 or newer:</p>
+      <pre><code>git clone https://github.com/mottamarcio/misterspec.git
+cd misterspec
+go build -o misterspec ./cmd/misterspec
+./misterspec --help</code></pre>
+      <p>
+        <code>--help</code> intentionally shows only <code>init</code> —
+        misterspec's own internal, machine-facing command tree is
+        hidden from normal use (see the
+        <a href="commands.html">Command Reference</a> for the full,
+        documented surface, public and internal alike).
+      </p>
+
+      <h2 id="bootstrap-a-project"><iconify-icon icon="lucide:folder-plus" class="align-[-0.15em] mr-1"></iconify-icon>Bootstrap a project</h2>
+      <p>
+        Inside any repository you want to manage with misterspec, run:
+      </p>
+      <pre><code>misterspec init</code></pre>
+      <p>
+        With no <code>--agent</code> flag and an interactive terminal,
+        this launches a short setup flow: it inspects the target
+        directory, warns you if it's non-empty or already initialized,
+        lets you pick which coding agent to install Skills for, shows a
+        preview of exactly what will be written, and reports the
+        result. To skip the interactive flow entirely (for example, in
+        a script or CI):
+      </p>
+      <pre><code>misterspec init --agent claude-code --dir ./my-project</code></pre>
+      <p>
+        This creates <code>.misterspec/config.yaml</code>, a starter
+        <code>ai/</code> directory, and installs the framework's
+        canonical Skills into the chosen agent's own recognized
+        integration location — see
+        <a href="multi-agent-skills.html">Multi-Agent Skill
+        Integration</a> for the full list of supported agents and
+        exactly where each one's Skills land.
+      </p>
+
+      <h2 id="first-steps"><iconify-icon icon="lucide:play" class="align-[-0.15em] mr-1"></iconify-icon>Your first few commands</h2>
+      <p>
+        Once initialized, everything else happens through your coding
+        agent's own installed Skills (slash commands like
+        <code>/create-constitution</code>, <code>/create-specs</code>,
+        <code>/implement</code>) — misterspec's own deterministic
+        commands run underneath them automatically. To confirm the
+        project is in a healthy state at any point:
+      </p>
+      <pre><code>misterspec internal status --dir ./my-project</code></pre>
+      <pre><code>{"ok":true,"counts":{"program":0,"feature":0,"spec":0,"knowledge":0,"learning":0,"task":0},"specs":{},"structural_errors":0}</code></pre>
+      <p>
+        See the <a href="workflow.html">full Spec-Driven Workflow
+        walkthrough</a> next for exactly which command drives each
+        stage, from a blank repository to a validated, implemented
+        Spec.
+      </p>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>misterspec — Agent-Native Spec-Driven Development</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0">
+    <!-- Hero -->
+    <div class="bg-slate-900 text-white px-6 py-16 lg:px-16">
+      <div class="max-w-3xl mx-auto">
+        <span class="inline-flex items-center gap-1.5 text-xs font-medium bg-white/10 text-slate-200 px-3 py-1 rounded-full mb-6">
+          <iconify-icon icon="lucide:sparkles"></iconify-icon> MVP complete — Specs 001–019
+        </span>
+        <h1 class="text-4xl lg:text-5xl font-bold tracking-tight mb-4">
+          Spec-driven development, built for coding agents.
+        </h1>
+        <p class="text-slate-300 text-lg leading-relaxed">
+          misterspec is a Go binary that gives a coding agent a
+          deterministic backbone — IDs, paths, fingerprints, structural
+          validation, and a local context engine — so the agent can
+          spend its own reasoning on what actually needs judgment, and
+          nothing else.
+        </p>
+        <div class="flex flex-wrap gap-3 mt-8">
+          <a href="getting-started.html" class="inline-flex items-center gap-2 bg-white text-slate-900 font-medium px-5 py-2.5 rounded-lg hover:bg-slate-100 transition-colors">
+            <iconify-icon icon="lucide:rocket"></iconify-icon> Get started
+          </a>
+          <a href="workflow.html" class="inline-flex items-center gap-2 border border-slate-600 text-white font-medium px-5 py-2.5 rounded-lg hover:bg-slate-800 transition-colors">
+            <iconify-icon icon="lucide:git-branch"></iconify-icon> See the workflow
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-6 py-12 lg:px-16 max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-12 prose-a:text-slate-900">
+
+      <h2 id="the-problem"><iconify-icon icon="lucide:circle-alert" class="align-[-0.15em] mr-1"></iconify-icon>The problem</h2>
+      <p>
+        A coding agent working from Markdown specs alone has to
+        rediscover, every single time, things that are actually
+        <em>mechanical</em>: what's the next free ID for a new Spec?
+        Is this artifact's frontmatter well-formed? Does this file
+        already exist? What does this Spec actually depend on, and
+        what does <em>that</em> depend on? None of that requires
+        judgment — it requires correct, repeatable computation. Doing
+        it by reasoning instead of computing it is slow, and
+        occasionally wrong in ways that are hard to notice (a
+        duplicate ID, a drifted path, a stale fingerprint).
+      </p>
+
+      <h2 id="the-idea"><iconify-icon icon="lucide:lightbulb" class="align-[-0.15em] mr-1"></iconify-icon>The idea</h2>
+      <p>
+        misterspec draws one hard line and never crosses it:
+      </p>
+      <blockquote>
+        If an answer depends on what project information <em>means</em>,
+        the coding agent decides it. If an answer can be
+        <em>computed</em> from repository structure, the
+        <code>misterspec</code> binary computes it — and the agent calls
+        that operation instead of reasoning its way to the same answer.
+      </blockquote>
+      <p>
+        Concretely: <code>misterspec</code> is a single static Go
+        binary. It owns ID allocation, canonical paths, content
+        fingerprints, structural validation, and — its most advanced
+        capability — a local, deterministic <strong>Context
+        Engine</strong> that retrieves exactly the project context a
+        given operation needs, ranked and budgeted, without the agent
+        re-exploring the whole repository by hand every time. Every one
+        of these is exposed as a stable, machine-readable JSON command
+        under a hidden <code>misterspec internal …</code> surface — see
+        the <a href="commands.html">Command Reference</a>. The agent's
+        own job — understanding requirements, designing a solution,
+        writing code — is never touched.
+      </p>
+
+      <h2 id="the-lifecycle"><iconify-icon icon="lucide:workflow" class="align-[-0.15em] mr-1"></iconify-icon>The artifact lifecycle</h2>
+      <p>
+        Every unit of work moves through the same fixed sequence of
+        Markdown-with-frontmatter artifacts, all stored under a
+        project's own <code>ai/</code> directory:
+      </p>
+      <div class="not-prose overflow-x-auto my-6">
+        <div class="flex items-center gap-1.5 text-sm font-medium flex-wrap">
+          <span class="px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">Constitution</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">Program</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">Feature</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-3 py-1.5 rounded-md bg-slate-900 text-white">Spec</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">Plan</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">Tasks</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">Implementation</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">Validation</span>
+        </div>
+      </div>
+      <p>
+        A <strong>Constitution</strong> records the project's own
+        non-negotiable rules. A <strong>Program</strong> groups related
+        <strong>Features</strong>; each Feature decomposes into one or
+        more <strong>Specs</strong> (requirements, testable and
+        unambiguous). Each Spec gets a <strong>Plan</strong> (technical
+        strategy) and <strong>Tasks</strong> (ordered, independently
+        verifiable units of work); <strong>Implementation</strong>
+        happens directly against the real repository; and
+        <strong>Validation</strong> records, per requirement, whether it
+        is genuinely satisfied — with real evidence, not intent. See
+        the <a href="workflow.html">full workflow walkthrough</a> for
+        exactly which command drives each stage.
+      </p>
+
+      <h2 id="what-you-get"><iconify-icon icon="lucide:layers" class="align-[-0.15em] mr-1"></iconify-icon>What's actually in the MVP</h2>
+      <ul>
+        <li><strong><a href="foundation.html">Core Foundation</a></strong> — deterministic IDs, paths, fingerprints, atomic entity creation, structural validation.</li>
+        <li><strong><a href="agents-cli.html">Agent Adapters & CLI</a></strong> — a Cobra-based CLI, an interactive setup TUI, and canonical Skill content for coding agents.</li>
+        <li><strong><a href="context-engine.html">The Context Engine</a></strong> — wikilinks, a reference graph, a disposable local search index, and intent-aware ranked/budgeted retrieval.</li>
+        <li><strong><a href="multi-agent-skills.html">Multi-Agent Skill Integration</a></strong> — six supported coding agents, all sharing the same canonical Skills.</li>
+        <li><strong><a href="dogfooding.html">Dogfooding & Evaluation</a></strong> — the Context Engine tested against this project's own real development history.</li>
+      </ul>
+
+    </div>
+
+    <footer class="px-6 py-8 lg:px-16 border-t border-slate-200 text-sm text-slate-500 max-w-3xl mx-auto">
+      misterspec is MIT licensed. See the <a href="https://github.com/mottamarcio/misterspec" class="underline hover:text-slate-900">repository on GitHub</a>.
+    </footer>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>

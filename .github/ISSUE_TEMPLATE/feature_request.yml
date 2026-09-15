@@ -1,0 +1,29 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: A short, specific summary of the feature.
+      placeholder: "Add a --format flag to internal context for plain-text output"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: What should this feature do, and why is it needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected Output/Outcome
+      description: What does success look like? Include an example if you can.
+    validations:
+      required: true
