@@ -1,0 +1,31 @@
+/* Minimal, non-Tailwind-utility rules only — everything expressible as
+   a Tailwind class stays inline in the HTML (Principle IV: no second
+   parallel styling system). This file exists for the handful of
+   things Tailwind's utility classes don't directly cover. */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Sidebar stays full-height and independently scrollable from the
+   main content column. */
+#sidebar-container {
+  height: 100vh;
+  position: sticky;
+  top: 0;
+}
+
+/* Long command output / JSON blocks wrap instead of forcing page-wide
+   horizontal scroll (FR-011). */
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Anchored section targets (command reference, context-engine phases)
+   aren't hidden under the sticky top bar on mobile. */
+section[id],
+h2[id],
+h3[id] {
+  scroll-margin-top: 5rem;
+}

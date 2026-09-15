@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Context Engine — misterspec docs</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
+    <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
+
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 011–017</p>
+      <h1>The Context Engine</h1>
+      <p>
+        misterspec's own "Second Brain" — a local-first, deterministic
+        retrieval layer that finds and assembles the smallest
+        sufficient project context for a given operation, so a coding
+        agent doesn't have to re-explore the whole repository by hand
+        every time. It never replaces the agent's own judgment about
+        what the returned context <em>means</em> — only what to hand it
+        in the first place.
+      </p>
+
+      <div class="not-prose overflow-x-auto my-8 bg-slate-50 border border-slate-200 rounded-lg p-5">
+        <div class="flex items-center gap-1 text-xs font-medium flex-wrap justify-center">
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">011 Wikilinks</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">012 References</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">013 Chunking</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">014 SQLite Index</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">015 Collector</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">016 Ranking</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-slate-900 text-white">017 CLI</span>
+        </div>
+      </div>
+
+      <h2 id="wikilink-foundation">011 · Wikilink Graph Foundation</h2>
+      <p><strong>What it is:</strong> Parsing and structural validation
+      for <code>[[SPEC-014]]</code> / <code>[[SPEC-014|alias]]</code>
+      syntax inside an artifact's own body.</p>
+      <p><strong>Why it exists:</strong> Formal frontmatter fields
+      (<code>depends_on</code>, <code>parent</code>) already capture
+      structural relationships — wikilinks add an explicit,
+      navigable <em>semantic</em> layer for "this is relevant to that"
+      connections a formal field was never meant to carry.</p>
+      <p><strong>Example</strong> — a wikilink inside a Spec's own body:</p>
+      <pre><code>## Related Knowledge
+
+See [[KNOW-003|Authentication Model]] for the constraints this Spec assumes.</code></pre>
+
+      <h2 id="references-backlinks">012 · References and Backlinks</h2>
+      <p><strong>What it is:</strong> Query an artifact's own outgoing
+      formal + semantic relationships (<code>references</code>), and
+      every artifact that points back to it (<code>backlinks</code>).</p>
+      <p><strong>Why it exists:</strong> Turns 011's own parsed
+      wikilinks, plus the formal fields foundation already tracks, into
+      an actually queryable graph — the exact building block the
+      Collector (015) traverses.</p>
+      <p><strong>Example:</strong></p>
+      <pre><code>misterspec internal references SPEC-014
+{"ok":true,"references":{"formal":[{"relation":"depends_on","target":"SPEC-011"}],
+"semantic":[{"relation":"wikilink","target":"KNOW-003"}]}}</code></pre>
+
+      <h2 id="document-model-chunking">013 · Document Model and Chunking</h2>
+      <p><strong>What it is:</strong> A body/section representation
+      (<code>Document</code>/<code>Section</code>/<code>Chunk</code>)
+      with line-range provenance, plus a lightweight token estimator.</p>
+      <p><strong>Why it exists:</strong> Retrieval needs to work on
+      <em>pieces</em> of an artifact (a heading and its own content),
+      not the whole file — and every chunk needs to know exactly where
+      it came from, for both ranking and human review.</p>
+      <p><strong>Example</strong> — one chunk's own provenance:</p>
+      <pre><code>type Chunk struct {
+    ArtifactID string
+    Heading    string  // "## Requirements"
+    Content    string
+    StartLine  int
+    EndLine    int
+}</code></pre>
+
+      <h2 id="sqlite-index">014 · Disposable SQLite Index</h2>
+      <p><strong>What it is:</strong> A local, fully-rebuildable FTS5
+      full-text index over documents, chunks, and links — stored at
+      <code>.misterspec/cache/context.db</code>, never authoritative,
+      never committed.</p>
+      <p><strong>Why it exists:</strong> Fast lookup and free-text
+      search need <em>some</em> index, but Constitution Principle III
+      forbids any secondary authoritative state — deleting this file at
+      any time must cost nothing but a re-sync.</p>
+      <p><strong>Example</strong> — deleting the cache costs nothing:</p>
+      <pre><code>rm -rf .misterspec/cache
+misterspec internal context SPEC-014   # transparently rebuilds, same result</code></pre>
+
+      <h2 id="context-collector">015 · Context Collector and Retrieval</h2>
+      <p><strong>What it is:</strong> <code>Collect</code> — gathers a
+      deduplicated, tier-labeled candidate set: mandatory content
+      (Constitution + target), formal structural relationships, direct
+      wikilinks/backlinks, free-text matches, and one bounded
+      second-hop graph expansion.</p>
+      <p><strong>Why it exists:</strong> This is where 011-014 actually
+      come together into one answer to "what's relevant to this
+      target?" — explicit project structure is always consulted before
+      probabilistic text similarity, never the reverse.</p>
+      <p><strong>Example</strong> — one candidate's own tier and reason:</p>
+      <pre><code>{"path":"ai/.../SPEC-011/spec.md","tier":"structural","reasons":["depends_on"]}</code></pre>
+
+      <h2 id="ranking-budgeting">016 · Ranking and Budgeting</h2>
+      <p><strong>What it is:</strong> <code>Rank</code> assigns every
+      candidate a deterministic score used only to order candidates
+      already sharing the same Tier — Tier always dominates Score, an
+      absolute, never-crossed invariant. <code>ApplyBudget</code> then
+      fits the ranked list into a token budget, tier by tier, always
+      preserving mandatory content in full.</p>
+      <p><strong>Why it exists:</strong> A strong but coincidental
+      textual match must never outrank a real dependency, no matter how
+      well it happens to match the request's own words — and a budget
+      has to actually mean something, not just sort everything by score
+      and cut wherever the numbers run out.</p>
+      <p><strong>Example</strong> — a well-fitting budget, nothing trimmed:</p>
+      <pre><code>{"budget":6000,"budget_exceeded":false,"diagnostics":{"reduction_percent":0}}</code></pre>
+
+      <h2 id="internal-context-command">017 · Internal Context Command</h2>
+      <p><strong>What it is:</strong> <code>misterspec internal
+      context</code> — the one CLI entry point orchestrating 014's
+      index readiness, 015's collection, and 016's ranking/budgeting
+      into one stable JSON response.</p>
+      <p><strong>Why it exists:</strong> This is the actual, callable
+      surface every Context-Pack-aware Skill (see
+      <a href="multi-agent-skills.html">Multi-Agent Skill
+      Integration</a>) uses — see it fully documented, flags and all,
+      in the <a href="commands.html#internal-context">Command
+      Reference</a>.</p>
+      <p><strong>Example</strong> — a deliberately tight budget, showing
+      mandatory content always wins:</p>
+      <pre><code>misterspec internal context SPEC-017 --intent planning --budget 300
+{"ok":true,"context":{"budget":300,"budget_exceeded":true,"overage":7,
+"items":[/* Constitution + target only — everything else trimmed */],
+"diagnostics":{"reduction_percent":80.0}}}</code></pre>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>

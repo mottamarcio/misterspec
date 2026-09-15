@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agent Skill Integration — misterspec docs</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
+    <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
+
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Spec 018</p>
+      <h1>Multi-Agent Skill Integration</h1>
+      <p>
+        Two things bundled into one feature: extending Skill
+        installation beyond Claude Code to five more coding agents, and
+        making four of the canonical Skills actually consume the
+        <a href="context-engine.html">Context Engine</a>'s own output.
+      </p>
+
+      <h2 id="six-agents"><iconify-icon icon="lucide:users" class="align-[-0.15em] mr-1"></iconify-icon>Six supported agents, one Skill format</h2>
+      <p>
+        Research (verified against each agent's own current
+        documentation, not assumed) found that every one of these
+        agents already scans the same open "Agent Skills" convention —
+        a directory per Skill containing a <code>SKILL.md</code> with
+        <code>name</code>/<code>description</code> frontmatter — the
+        exact shape misterspec's own canonical Skills already use. Only
+        the target directory differs:
+      </p>
+      <div class="not-prose overflow-x-auto my-6">
+        <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="text-left px-4 py-2">Agent</th><th class="text-left px-4 py-2">ID</th><th class="text-left px-4 py-2">Skills directory</th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr><td class="px-4 py-2">Claude Code</td><td class="px-4 py-2"><code>claude-code</code></td><td class="px-4 py-2"><code>.claude/skills</code></td></tr>
+            <tr><td class="px-4 py-2">Antigravity</td><td class="px-4 py-2"><code>agy</code></td><td class="px-4 py-2"><code>.agents/skills</code></td></tr>
+            <tr><td class="px-4 py-2">Codex CLI</td><td class="px-4 py-2"><code>codex</code></td><td class="px-4 py-2"><code>.agents/skills</code></td></tr>
+            <tr><td class="px-4 py-2">GitHub Copilot</td><td class="px-4 py-2"><code>copilot</code></td><td class="px-4 py-2"><code>.github/skills</code></td></tr>
+            <tr><td class="px-4 py-2">Cursor</td><td class="px-4 py-2"><code>cursor-agent</code></td><td class="px-4 py-2"><code>.cursor/skills</code></td></tr>
+            <tr><td class="px-4 py-2">Devin for Terminal</td><td class="px-4 py-2"><code>devin</code></td><td class="px-4 py-2"><code>.devin/skills</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        No content transformation is needed for any of the five new
+        adapters — each one is a byte-for-byte copy of the same install
+        logic, differing only in which directory it targets. Two agents
+        (Antigravity and Codex CLI) happen to scan the identical
+        directory — installing for both in the same project is safe;
+        neither corrupts the other's own files.
+      </p>
+      <p><strong>Example</strong> — install for a new agent:</p>
+      <pre><code>misterspec init --agent cursor-agent --dir ./my-project
+# Skills now live at ./my-project/.cursor/skills/&lt;name&gt;/SKILL.md</code></pre>
+
+      <h2 id="context-pack-skills"><iconify-icon icon="lucide:package" class="align-[-0.15em] mr-1"></iconify-icon>Four Skills now request a Context Pack first</h2>
+      <p>
+        <code>/implement</code>, <code>/create-plan</code>,
+        <code>/create-tasks</code>, and <code>/analyze</code> each gained
+        one new early step: call
+        <a href="commands.html#internal-context"><code>internal
+        context</code></a> with the matching intent before any other
+        exploration.
+      </p>
+      <div class="not-prose overflow-x-auto my-6">
+        <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="text-left px-4 py-2">Skill</th><th class="text-left px-4 py-2">Intent</th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr><td class="px-4 py-2"><code>/implement</code></td><td class="px-4 py-2"><code>implementation</code></td></tr>
+            <tr><td class="px-4 py-2"><code>/create-plan</code></td><td class="px-4 py-2"><code>planning</code></td></tr>
+            <tr><td class="px-4 py-2"><code>/create-tasks</code></td><td class="px-4 py-2"><code>tasks</code></td></tr>
+            <tr><td class="px-4 py-2"><code>/analyze</code></td><td class="px-4 py-2"><code>validation</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Crucially, the Context Pack is a bootstrap optimization, never
+        a sandbox: every one of these four Skills explicitly states the
+        agent remains free to read further repository files whenever
+        the pack alone isn't enough, and falls back to its own prior
+        exploration approach if the <code>internal context</code>
+        request fails for any reason.
+      </p>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>
