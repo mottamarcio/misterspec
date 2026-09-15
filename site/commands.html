@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Reference — misterspec docs</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
+    <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-lg prose-h2:mt-10 prose-h2:border-t prose-h2:pt-8 prose-h2:border-slate-200 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-code:before:content-none prose-code:after:content-none">
+
+      <p class="text-sm font-medium text-slate-500 mb-1">Reference</p>
+      <h1>Command Reference</h1>
+      <p>
+        Every command <code>misterspec</code> currently registers — the
+        public surface and the hidden, agent-facing
+        <code>internal</code> surface alike. misterspec treats
+        <code>internal</code> as a real, documented contract
+        (Constitution Principle IX: structured JSON, stable error
+        codes) — never a hidden implementation detail.
+      </p>
+      <p>
+        Every command below accepts <code>--dir &lt;path&gt;</code>
+        (default <code>.</code>) unless noted otherwise. Every failure
+        returns <code>{"ok":false,"error":{"code","message"}}</code>
+        with a distinct process exit code.
+      </p>
+
+      <h2 id="init">misterspec init <span class="text-xs font-normal text-slate-400 ml-2">public</span></h2>
+      <p><strong>Purpose:</strong> Bootstrap a new misterspec project.</p>
+      <p><strong>Flags:</strong> <code>--dir</code> (target directory, default <code>.</code>); <code>--agent &lt;id&gt;</code> (agent to install Skills for — omit for the interactive TUI in a real terminal).</p>
+      <pre><code>misterspec init --agent claude-code --dir ./my-project</code></pre>
+
+      <h2 id="internal-resolve">internal resolve &lt;id&gt;</h2>
+      <p><strong>Purpose:</strong> Resolve an entity ID to its canonical artifact.</p>
+      <pre><code>misterspec internal resolve SPEC-014
+{"ok":true,"id":"SPEC-014","path":"ai/programs/PRG-001/features/FEAT-004/specs/SPEC-014/spec.md"}</code></pre>
+
+      <h2 id="internal-inspect">internal inspect &lt;id&gt;</h2>
+      <p><strong>Purpose:</strong> Return deterministic metadata for an artifact.</p>
+      <pre><code>misterspec internal inspect SPEC-014
+{"ok":true,"entity":{"id":"SPEC-014","type":"spec","status":"ready","parent":"FEAT-004","depends_on":["SPEC-011"],"supersedes":[]}}</code></pre>
+
+      <h2 id="internal-parent">internal parent &lt;id&gt;</h2>
+      <p><strong>Purpose:</strong> Return the structural parent.</p>
+      <pre><code>misterspec internal parent SPEC-014
+{"ok":true,"parent":{"id":"FEAT-004","type":"feature"}}</code></pre>
+
+      <h2 id="internal-children">internal children &lt;id&gt;</h2>
+      <p><strong>Purpose:</strong> Return structural children.</p>
+      <p><strong>Flags:</strong> <code>--type &lt;entity-type&gt;</code> (filter to one entity type).</p>
+      <pre><code>misterspec internal children FEAT-004 --type spec
+{"ok":true,"children":[{"id":"SPEC-011","type":"spec"},{"id":"SPEC-014","type":"spec"}]}</code></pre>
+
+      <h2 id="internal-create">internal create &lt;type&gt;</h2>
+      <p><strong>Purpose:</strong> Atomically allocate the next ID and scaffold its initial artifact.</p>
+      <p><strong>Flags:</strong> <code>--parent &lt;id&gt;</code> (required for feature, spec); <code>--slug &lt;name&gt;</code> (required for knowledge, learning).</p>
+      <pre><code>misterspec internal create spec --parent FEAT-004
+{"ok":true,"created":{"id":"SPEC-015","type":"spec","path":"ai/.../specs/SPEC-015/spec.md"}}</code></pre>
+
+      <h2 id="internal-create-artifact">internal create-artifact &lt;kind&gt;</h2>
+      <p><strong>Purpose:</strong> Create a canonical subordinate artifact (plan, tasks, validation) for a Spec.</p>
+      <p><strong>Flags:</strong> <code>--for &lt;spec-id&gt;</code> (required).</p>
+      <pre><code>misterspec internal create-artifact plan --for SPEC-014
+{"ok":true,"created":{"type":"plan","path":"ai/.../SPEC-014/plan.md","for":"SPEC-014"}}</code></pre>
+
+      <h2 id="internal-fingerprint">internal fingerprint &lt;path&gt;</h2>
+      <p><strong>Purpose:</strong> Calculate a source file's content fingerprint.</p>
+      <pre><code>misterspec internal fingerprint ai/.../SPEC-014/spec.md
+{"ok":true,"source":{"path":"ai/.../spec.md","algorithm":"sha256","fingerprint":"sha256:..."}}</code></pre>
+
+      <h2 id="internal-inventory">internal inventory &lt;dir&gt;</h2>
+      <p><strong>Purpose:</strong> Return a deterministic file inventory for a directory.</p>
+      <pre><code>misterspec internal inventory ai/raw
+{"ok":true,"files":[{"path":"ai/raw/notes.md","extension":".md","size":842}]}</code></pre>
+
+      <h2 id="internal-validate">internal validate [&lt;id&gt;]</h2>
+      <p><strong>Purpose:</strong> Run structural validation — one entity if an ID is given, the whole project otherwise.</p>
+      <pre><code>misterspec internal validate SPEC-014
+{"ok":true,"valid":true,"findings":[]}</code></pre>
+
+      <h2 id="internal-status">internal status</h2>
+      <p><strong>Purpose:</strong> Return a machine-facing structural status summary for the whole project.</p>
+      <pre><code>misterspec internal status
+{"ok":true,"counts":{"program":1,"feature":1,"spec":9,"knowledge":2,"learning":1,"task":0},"specs":{"ready":9},"structural_errors":0}</code></pre>
+
+      <h2 id="internal-references">internal references &lt;id&gt;</h2>
+      <p><strong>Purpose:</strong> Return an artifact's outgoing formal and semantic relationships.</p>
+      <pre><code>misterspec internal references SPEC-014
+{"ok":true,"references":{"formal":[{"relation":"depends_on","target":"SPEC-011"}],"semantic":[{"relation":"wikilink","target":"KNOW-003"}]}}</code></pre>
+
+      <h2 id="internal-backlinks">internal backlinks &lt;id&gt;</h2>
+      <p><strong>Purpose:</strong> Return every artifact that formally or semantically references the given artifact.</p>
+      <pre><code>misterspec internal backlinks SPEC-011
+{"ok":true,"backlinks":{"formal":[{"relation":"depends_on","source":"SPEC-014"}],"semantic":[]}}</code></pre>
+
+      <h2 id="internal-context">internal context &lt;id&gt;</h2>
+      <p><strong>Purpose:</strong> Return a budgeted, ranked context pack for an artifact — the <a href="context-engine.html">Context Engine</a>'s own single entry point.</p>
+      <p><strong>Flags:</strong></p>
+      <ul>
+        <li><code>--intent</code> — <code>planning</code>, <code>tasks</code>, <code>implementation</code>, <code>validation</code>, or <code>analysis</code>.</li>
+        <li><code>--task &lt;text&gt;</code> — the current task's own text.</li>
+        <li><code>--query &lt;text&gt;</code> — free-text query.</li>
+        <li><code>--budget &lt;int&gt;</code> — token budget, including negative (default: 6000 when omitted). Must be a valid integer, or the command fails with <code>invalid_argument</code>.</li>
+        <li><code>--render</code> — additionally include a rendered Markdown context pack.</li>
+      </ul>
+      <pre><code>misterspec internal context SPEC-014 --intent implementation --budget 700
+{"ok":true,"context":{"target":"SPEC-014","intent":"implementation","budget":700,
+"estimated_tokens":589,"budget_exceeded":false,"overage":0,
+"items":[{"path":"ai/.../SPEC-014/spec.md","tier":"mandatory","reasons":["target"],"score":100,"tokens":107}],
+"diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7},
+"rendered":null}}</code></pre>
+
+      <h2 id="errors">Error codes</h2>
+      <p>Every command shares the same error shape and code set:</p>
+      <div class="not-prose overflow-x-auto my-6">
+        <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="text-left px-4 py-2">Code</th><th class="text-left px-4 py-2">Exit</th><th class="text-left px-4 py-2">Meaning</th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr><td class="px-4 py-2"><code>entity_not_found</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">The ID doesn't resolve to any artifact.</td></tr>
+            <tr><td class="px-4 py-2"><code>entity_ambiguous</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">The ID resolves to more than one artifact.</td></tr>
+            <tr><td class="px-4 py-2"><code>invalid_target</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Wrong entity type for this operation.</td></tr>
+            <tr><td class="px-4 py-2"><code>invalid_argument</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">A CLI-boundary problem (bad flag value, unrecognized type/kind).</td></tr>
+            <tr><td class="px-4 py-2"><code>unsupported_intent</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --intent</code> value not recognized.</td></tr>
+            <tr><td class="px-4 py-2"><code>invalid_parent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The given <code>--parent</code> can't have this child type.</td></tr>
+            <tr><td class="px-4 py-2"><code>already_exists</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The target artifact already exists.</td></tr>
+            <tr><td class="px-4 py-2"><code>unsupported_type</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Unrecognized entity/artifact type or kind.</td></tr>
+            <tr><td class="px-4 py-2"><code>path_outside_project</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">A resolved path would escape the project root.</td></tr>
+            <tr><td class="px-4 py-2"><code>project_not_initialized</code></td><td class="px-4 py-2">6</td><td class="px-4 py-2">No <code>.misterspec/config.yaml</code> found.</td></tr>
+            <tr><td class="px-4 py-2"><code>already_initialized</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>init</code> targeted an already-bootstrapped project.</td></tr>
+            <tr><td class="px-4 py-2"><code>unknown_agent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>--agent</code> ID not registered.</td></tr>
+            <tr><td class="px-4 py-2"><code>unexpected_failure</code></td><td class="px-4 py-2">1</td><td class="px-4 py-2">Anything else (e.g. an index I/O error).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>
