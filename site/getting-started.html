@@ -36,8 +36,23 @@
       <p>
         Download a pre-built binary for your OS/architecture from the
         <a href="https://github.com/mottamarcio/misterspec/releases/latest">latest
-        release</a> — no Go toolchain or repository clone needed:
+        release</a> — no Go toolchain or repository clone needed. Pick the one that
+        matches your machine, rename it to <code>misterspec</code>, then:
       </p>
+      <div class="not-prose overflow-x-auto my-6">
+        <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="text-left px-4 py-2">Asset</th><th class="text-left px-4 py-2">OS / Architecture</th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr><td class="px-4 py-2"><code>misterspec-linux-amd64</code></td><td class="px-4 py-2">Linux, x86-64</td></tr>
+            <tr><td class="px-4 py-2"><code>misterspec-linux-arm64</code></td><td class="px-4 py-2">Linux, ARM64</td></tr>
+            <tr><td class="px-4 py-2"><code>misterspec-darwin-amd64</code></td><td class="px-4 py-2">macOS, Intel</td></tr>
+            <tr><td class="px-4 py-2"><code>misterspec-darwin-arm64</code></td><td class="px-4 py-2">macOS, Apple Silicon (M1/M2/M3/M4)</td></tr>
+            <tr><td class="px-4 py-2"><code>misterspec-windows-amd64.exe</code></td><td class="px-4 py-2">Windows, x86-64</td></tr>
+          </tbody>
+        </table>
+      </div>
       <pre><code>chmod +x misterspec
 ./misterspec --help</code></pre>
       <p>Or build from source, with Go 1.23.4 or newer:</p>
