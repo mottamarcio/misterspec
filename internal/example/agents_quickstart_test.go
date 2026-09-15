@@ -30,9 +30,12 @@ func TestAgentsQuickstart_EndToEnd(t *testing.T) {
 		t.Fatal(`registry.Get("claude-code") ok = false, want true`)
 	}
 
-	// An unknown ID is a distinct, non-error absence.
-	if _, ok := registry.Get("codex"); ok {
-		t.Fatal(`registry.Get("codex") ok = true, want false (not built yet)`)
+	// An unknown ID is a distinct, non-error absence. "codex" is now a
+	// real, registered adapter (018-multi-agent-skill-integration) — a
+	// truly nonexistent ID is used here instead to keep proving this
+	// same absence guarantee.
+	if _, ok := registry.Get("not-a-real-agent"); ok {
+		t.Fatal(`registry.Get("not-a-real-agent") ok = true, want false`)
 	}
 
 	// 3. Install a fixture Skills set for the selected adapter.

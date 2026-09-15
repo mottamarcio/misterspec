@@ -51,6 +51,11 @@ Any Spec the named one depends on (`depends_on`), via its own already-
 available metadata — its own requirements and current state, not a
 dedicated cross-reference lookup.
 
+The Context Pack returned by `internal context` (below) is a starting
+point, not a boundary — this Skill remains free to read further
+repository files or run further deterministic operations whenever the
+pack alone is insufficient.
+
 ## Conditional Context
 
 If the Spec depends on another Spec that is not yet implemented, that
@@ -101,6 +106,10 @@ Required operations:
   its `depends_on`/`supersedes` fields (in place of a dedicated
   cross-reference lookup, which does not exist as a separate
   operation).
+- `internal context SPEC-### --intent planning` — request a budgeted
+  Context Pack before broader exploration. If this fails, proceed
+  using this Skill's own Optional Context above instead — it is never
+  a Failure Condition.
 - `internal create-artifact plan --for SPEC-###` — scaffold the Plan
   artifact at its fixed canonical location; never guess the path by
   hand.
@@ -111,13 +120,16 @@ Required operations:
 
 1. Run `internal resolve SPEC-###` and `internal inspect SPEC-###` to
    read the Spec's requirements and dependencies in full.
-2. Inspect the real repository code relevant to those requirements.
-3. Choose a technical strategy; map every requirement (`R1`, `R2`, ...)
+2. Run `internal context SPEC-### --intent planning` and begin from
+   its returned items. If the request fails, proceed using this
+   Skill's own Optional Context above instead.
+3. Inspect the real repository code relevant to those requirements.
+4. Choose a technical strategy; map every requirement (`R1`, `R2`, ...)
    to how the strategy satisfies it.
-4. Run `internal create-artifact plan --for SPEC-###`, then write the
+5. Run `internal create-artifact plan --for SPEC-###`, then write the
    Plan's full body.
-5. Run `internal validate SPEC-###`.
-6. Report completion per the Completion Contract below.
+6. Run `internal validate SPEC-###`.
+7. Report completion per the Completion Contract below.
 
 ## Decision Rules
 

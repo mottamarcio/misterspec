@@ -41,7 +41,7 @@ var requiredSkillHeadings = []string{
 var knownInternalCommands = map[string]bool{
 	"resolve": true, "inspect": true, "parent": true, "children": true,
 	"create": true, "create-artifact": true, "fingerprint": true,
-	"inventory": true, "validate": true, "status": true,
+	"inventory": true, "validate": true, "status": true, "context": true,
 }
 
 // skillOperationsAllowlist is data-model.md's per-Skill operations
@@ -53,10 +53,10 @@ var skillOperationsAllowlist = map[string][]string{
 	"create-program":        {"status", "create", "validate"},
 	"create-feature":        {"resolve", "children", "create", "validate"},
 	"create-specs":          {"resolve", "children", "create", "validate"},
-	"create-plan":           {"resolve", "inspect", "create-artifact", "validate"},
-	"create-tasks":          {"resolve", "inspect", "create-artifact", "validate"},
-	"implement":             {"resolve", "inspect", "validate"},
-	"analyze":               {"resolve", "inspect", "create-artifact", "validate"},
+	"create-plan":           {"resolve", "inspect", "context", "create-artifact", "validate"},
+	"create-tasks":          {"resolve", "inspect", "context", "create-artifact", "validate"},
+	"implement":             {"resolve", "inspect", "context", "validate"},
+	"analyze":               {"resolve", "inspect", "context", "create-artifact", "validate"},
 }
 
 // internalOpRe matches an inline-code-formatted operation mention, e.g.

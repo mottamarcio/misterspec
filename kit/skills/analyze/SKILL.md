@@ -51,6 +51,11 @@ code and test results for what each Task claims to have verified.
 The Spec's `depends_on` metadata (via `internal inspect`), when a
 requirement's satisfaction depends on another Spec's own state.
 
+The Context Pack returned by `internal context` (below) is a starting
+point, not a boundary — this Skill remains free to read further
+repository files or run further deterministic operations whenever the
+pack alone is insufficient.
+
 ## Conditional Context
 
 If a Task's recorded evidence is stale (repository code has changed
@@ -99,6 +104,10 @@ Required operations:
   metadata, including `depends_on`/`supersedes` (in place of a
   dedicated cross-reference lookup, which does not exist as a separate
   operation).
+- `internal context SPEC-### --intent validation` — request a budgeted
+  Context Pack before broader exploration. If this fails, proceed
+  using this Skill's own Optional Context above instead — it is never
+  a Failure Condition.
 - `internal create-artifact validation --for SPEC-###` — scaffold the
   Validation artifact at its fixed canonical location.
 - `internal validate SPEC-###` — confirm the project's own structure
@@ -108,17 +117,20 @@ Required operations:
 ## Procedure
 
 1. Run `internal resolve SPEC-###` and `internal inspect SPEC-###`.
-2. Read the Spec's own Plan (`Requirement Coverage`) and Tasks (their
+2. Run `internal context SPEC-### --intent validation` and begin from
+   its returned items. If the request fails, proceed using this
+   Skill's own Optional Context above instead.
+3. Read the Spec's own Plan (`Requirement Coverage`) and Tasks (their
    completion checkboxes and recorded evidence).
-3. For each requirement, compare what the Plan claims, what Tasks claim
+4. For each requirement, compare what the Plan claims, what Tasks claim
    to have done, and what the actual repository code and test results
    show. Record `Plan coverage`, `Task coverage`, `Code evidence`, `Test
    evidence`, and a `Result` (pass or fail) per requirement.
-4. Note any implementation found that isn't traceable to a requirement
+5. Note any implementation found that isn't traceable to a requirement
    (`Unplanned Implementation`).
-5. Run `internal create-artifact validation --for SPEC-###`, write the
+6. Run `internal create-artifact validation --for SPEC-###`, write the
    full body, then `internal validate SPEC-###`.
-6. Report completion per the Completion Contract below.
+7. Report completion per the Completion Contract below.
 
 ## Decision Rules
 
