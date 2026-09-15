@@ -60,14 +60,14 @@ func TestUpdate_AgentSelection_ConfirmBuildsPreviewAndTransitions(t *testing.T) 
 	if mm.preview.agentTargetPath != ".fake/skills" {
 		t.Errorf("preview.agentTargetPath = %q, want %q", mm.preview.agentTargetPath, ".fake/skills")
 	}
-	if len(mm.preview.templates) == 0 {
-		t.Error("preview.templates is empty, want the kit's resources")
-	}
 	if len(mm.preview.skillResources) != 1 {
 		t.Errorf("preview.skillResources = %d entries, want 1", len(mm.preview.skillResources))
 	}
 	if mm.preview.configPath == "" {
 		t.Error("preview.configPath is empty")
+	}
+	if len(mm.preview.directories) != 6 {
+		t.Errorf("preview.directories = %d entries, want 6", len(mm.preview.directories))
 	}
 }
 

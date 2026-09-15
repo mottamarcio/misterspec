@@ -64,14 +64,16 @@ func TestBootstrap_FreshNonExistentDirectory(t *testing.T) {
 	if !outcome.ConfigWritten {
 		t.Error("outcome.ConfigWritten = false, want true")
 	}
-	if len(outcome.TemplateOutcomes) == 0 {
-		t.Fatal("outcome.TemplateOutcomes is empty, want at least one kit resource")
+
+	// FR-001: no unused templates/ directory is installed into the
+	// target project — BootstrapOutcome has no TemplateOutcomes field
+	// at all anymore (021-init-scaffold-distribution/research.md #1);
+	// verified here as an on-disk absence, since the field itself no
+	// longer exists to assert against.
+	if _, err := os.Stat(filepath.Join(target, "templates")); !os.IsNotExist(err) {
+		t.Errorf("Bootstrap() installed a templates/ directory at %q, want none (FR-001)", filepath.Join(target, "templates"))
 	}
-	for _, o := range outcome.TemplateOutcomes {
-		if o.Status != installer.Installed {
-			t.Errorf("template outcome for %q Status = %v, want Installed (Err: %v)", o.Resource.Name, o.Status, o.Err)
-		}
-	}
+
 	if outcome.AgentInstall.AdapterID != "fake-agent" {
 		t.Errorf("outcome.AgentInstall.AdapterID = %q, want %q", outcome.AgentInstall.AdapterID, "fake-agent")
 	}

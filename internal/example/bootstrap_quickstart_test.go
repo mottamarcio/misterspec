@@ -12,7 +12,6 @@ import (
 
 	"github.com/mottamarcio/misterspec/internal/agents/builtin"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
-	"github.com/mottamarcio/misterspec/internal/installer"
 )
 
 func TestBootstrapQuickstart_EndToEnd(t *testing.T) {
@@ -40,10 +39,8 @@ func TestBootstrapQuickstart_EndToEnd(t *testing.T) {
 	if !outcome.ConfigWritten {
 		t.Fatal("Bootstrap() outcome.ConfigWritten = false, want true")
 	}
-	for _, o := range outcome.TemplateOutcomes {
-		if o.Status != installer.Installed {
-			t.Fatalf("Bootstrap() template outcome for %q = %v, want Installed", o.Resource.Name, o.Status)
-		}
+	if len(outcome.DirectoriesScaffolded) == 0 {
+		t.Fatal("Bootstrap() outcome.DirectoriesScaffolded is empty, want the project's own directory hierarchy (021-init-scaffold-distribution)")
 	}
 	if outcome.AgentInstall.AdapterID != "claude-code" {
 		t.Fatalf("Bootstrap() outcome.AgentInstall.AdapterID = %q, want %q", outcome.AgentInstall.AdapterID, "claude-code")

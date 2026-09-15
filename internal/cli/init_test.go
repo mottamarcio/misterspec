@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -50,9 +51,9 @@ func TestInitCmd_Success(t *testing.T) {
 	var decoded struct {
 		OK        bool `json:"ok"`
 		Bootstrap struct {
-			ProjectRoot   string `json:"project_root"`
-			ConfigWritten bool   `json:"config_written"`
-			Templates     []any  `json:"templates"`
+			ProjectRoot   string   `json:"project_root"`
+			ConfigWritten bool     `json:"config_written"`
+			Directories   []string `json:"directories"`
 			Agent         struct {
 				AdapterID       string `json:"adapter_id"`
 				IntegrationPath string `json:"integration_path"`
@@ -69,18 +70,37 @@ func TestInitCmd_Success(t *testing.T) {
 	if !decoded.Bootstrap.ConfigWritten {
 		t.Error("bootstrap.config_written = false, want true")
 	}
-	if len(decoded.Bootstrap.Templates) == 0 {
-		t.Error("bootstrap.templates is empty, want at least one kit resource")
-	}
 	if decoded.Bootstrap.Agent.AdapterID != "claude-code" {
 		t.Errorf("bootstrap.agent.adapter_id = %q, want %q", decoded.Bootstrap.Agent.AdapterID, "claude-code")
 	}
 	if len(decoded.Bootstrap.Agent.Outcomes) == 0 {
 		t.Error("bootstrap.agent.outcomes is empty, want at least the README.md placeholder (research.md)")
 	}
+	if len(decoded.Bootstrap.Directories) != 6 {
+		t.Errorf("bootstrap.directories = %v, want 6 entries (021-init-scaffold-distribution)", decoded.Bootstrap.Directories)
+	}
+	for _, want := range []string{"ai", "ai/raw", "ai/knowledge", "ai/memory", "ai/memory/learnings", "ai/programs"} {
+		found := false
+		for _, got := range decoded.Bootstrap.Directories {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("bootstrap.directories = %v, missing %q", decoded.Bootstrap.Directories, want)
+		}
+	}
 
 	if _, err := project.Detect(target); err != nil {
 		t.Errorf("project.Detect(target) after init unexpected error: %v", err)
+	}
+
+	// FR-001: the JSON payload no longer names a "templates" key at all
+	// (021-init-scaffold-distribution/research.md #4 — removed, not
+	// left as an empty array).
+	if strings.Contains(output, `"templates"`) {
+		t.Errorf("output still contains a \"templates\" key, want it removed entirely: %s", output)
 	}
 }
 

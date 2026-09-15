@@ -57,7 +57,7 @@ func newInitCmd() *cobra.Command {
 					"bootstrap": map[string]any{
 						"project_root":   outcome.ProjectRoot,
 						"config_written": outcome.ConfigWritten,
-						"templates":      outcomesJSON(outcome.TemplateOutcomes),
+						"directories":    outcome.DirectoriesScaffolded,
 						"agent": map[string]any{
 							"adapter_id":       outcome.AgentInstall.AdapterID,
 							"integration_path": outcome.AgentInstall.IntegrationPath,
