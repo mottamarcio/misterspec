@@ -198,6 +198,8 @@ is still incomplete, rather than restarting from the first Task.
 
 Every invocation ends with a concise operational summary naming:
 
+Render this summary using structured formatting, not prose paragraphs: present **Artifacts** as a Markdown table when more than one artifact is involved (columns matching what's relevant — ID, path/type, and status or a one-line summary), or a single bullet when there is exactly one; present **Important findings** and **Attention** as bullet lists. This applies equally to a failure/stop report.
+
 - **Outcome** — Task completed and verified, or blocked.
 - **Artifacts** — the code files changed, and the Task's own ID.
 - **Important findings** — what changed and why.

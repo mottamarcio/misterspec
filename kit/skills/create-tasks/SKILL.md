@@ -144,6 +144,12 @@ duplicate number, not a pre-check this Skill performs itself.
 - Every requirement the Plan covers must be served by at least one
   Task; a requirement with no Task behind it is a gap, not an
   oversight to silently accept.
+- When a Requirement states an explicit constraint (a specific limit,
+  required format, or measurable threshold), quote that constraint's
+  exact text in the Task description, in addition to the `SPEC-###:R#`
+  reference — not instead of it, so it is not left to implementation-time
+  discretion. A Requirement with no explicit constraint keeps the ID
+  reference alone.
 
 ## Interaction Rules
 
@@ -195,6 +201,8 @@ from the highest existing `TASK-NNN` rather than restarting.
 ## Completion Contract
 
 Every invocation ends with a concise operational summary naming:
+
+Render this summary using structured formatting, not prose paragraphs: present **Artifacts** as a Markdown table when more than one artifact is involved (columns matching what's relevant — ID, path/type, and status or a one-line summary), or a single bullet when there is exactly one; present **Important findings** and **Attention** as bullet lists. This applies equally to a failure/stop report.
 
 - **Outcome** — Tasks created or extended.
 - **Artifacts** — the Tasks file, with the count of Tasks added.
