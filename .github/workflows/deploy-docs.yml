@@ -1,5 +1,8 @@
 name: Deploy documentation site
 
+# Re-triggered after enabling GitHub Pages (Settings > Pages > Source:
+# GitHub Actions) — the first run predated that setting and failed at
+# "Configure Pages" with a 404 from the Pages API.
 on:
   push:
     branches: [dev]
