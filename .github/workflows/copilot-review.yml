@@ -1,0 +1,29 @@
+name: Request Copilot Review
+
+# Automatically requests a GitHub Copilot code review on every pull
+# request targeting dev, stg, or main. Copilot leaves review comments
+# if it finds something worth changing, or approves the PR — merging
+# itself always stays a human decision (branch protection / repository
+# policy, not this workflow).
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+    branches: [dev, stg, main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  request-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request a review from Copilot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers" \
+            -f "reviewers[]=copilot-pull-request-reviewer[bot]"
