@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dogfooding & Evaluation — misterspec docs</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
+    <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
+
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Spec 019</p>
+      <h1>Dogfooding & Evaluation</h1>
+      <p>
+        Before trusting the <a href="context-engine.html">Context
+        Engine</a> for real work, this feature tested it against
+        misterspec's own real development history — and established
+        the project's own governing rule for ranking changes:
+      </p>
+      <blockquote>Tune ranking only from observed failures, never from intuition alone.</blockquote>
+
+      <h2 id="the-methodology"><iconify-icon icon="lucide:flask-conical" class="align-[-0.15em] mr-1"></iconify-icon>The methodology</h2>
+      <p>
+        misterspec's own repository doesn't use its own <code>ai/</code>
+        artifact model to develop itself — it uses this same
+        Spec-Kit-style <code>specs/</code> convention you're reading
+        right now. So a small, real fixture project was built encoding
+        this project's own actual feature dependency graph (Specs 006
+        and 011–018, real <code>depends_on</code> relationships, real
+        condensed summaries) as genuine misterspec artifacts, giving
+        every retrieval check a real, verifiable right answer to test
+        against — not synthetic or invented data.
+      </p>
+
+      <h2 id="the-findings"><iconify-icon icon="lucide:clipboard-check" class="align-[-0.15em] mr-1"></iconify-icon>The findings</h2>
+      <ul>
+        <li><strong>Zero omissions</strong> — every one of the 9 evaluated
+        Specs had 100% of its own real, historical dependencies
+        correctly retrieved and tiered.</li>
+        <li>At the default budget (6000 tokens), nothing was ever
+        trimmed against this small fixture — so a deliberately tighter
+        budget (<code>--budget 700</code>, then <code>--budget
+        300</code>) was run against the most-connected Spec to actually
+        exercise budgeting.</li>
+        <li>Under a realistic, tighter budget, every real dependency
+        survived in full, and lower-priority content was trimmed first
+        — exactly as <a href="context-engine.html#ranking-budgeting">Ranking
+        and Budgeting</a> is designed to behave.</li>
+        <li>A live Claude Code session confirmed <code>/create-plan</code>
+        really does call <code>internal context</code> before other
+        exploration, and that the returned pack was sufficient on its
+        own.</li>
+      </ul>
+
+      <h2 id="the-outcome"><iconify-icon icon="lucide:check-circle-2" class="align-[-0.15em] mr-1"></iconify-icon>The outcome</h2>
+      <p>
+        <strong>No ranking or budgeting change was made.</strong> Every
+        apparent over-inclusion observed at the generous default budget
+        was fully explained by the fixture being smaller than that
+        default — not by any flaw in the ranking algorithm — and the
+        budget-constrained runs directly confirmed the design already
+        works as intended. The evaluation's own full methodology,
+        fixture, and findings are recorded in
+        <code>specs/019-dogfooding-evaluation/report.md</code> in the
+        repository.
+      </p>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>

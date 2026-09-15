@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Adapters & CLI — misterspec docs</title>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="bg-white text-slate-800">
+
+<div class="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-slate-900 text-white px-4 py-3">
+  <a href="index.html" class="font-semibold flex items-center gap-2"><iconify-icon icon="lucide:terminal-square"></iconify-icon> misterspec</a>
+  <button id="nav-toggle" class="p-2" aria-label="Toggle navigation"><iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon></button>
+</div>
+<div id="nav-overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+<div class="flex">
+  <div id="sidebar-container" class="fixed lg:sticky top-0 left-0 z-50 w-72 h-screen bg-slate-900 -translate-x-full lg:translate-x-0 transition-transform duration-200">
+    <div id="sidebar"></div>
+  </div>
+
+  <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
+    <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
+
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 006–010</p>
+      <h1>Agent Adapters & CLI</h1>
+      <p>
+        These five features turned the deterministic packages from
+        <a href="foundation.html">Core Foundation</a> into an actual
+        product: a real binary, a real setup flow, and real content
+        for coding agents to install and run.
+      </p>
+
+      <h2 id="agent-adapter">006 · Agent Adapter Layer</h2>
+      <p><strong>What it is:</strong> The <code>Adapter</code> interface,
+      a <code>Registry</code>, and the first working adapter (Claude
+      Code).</p>
+      <p><strong>Why it exists:</strong> misterspec needed one, generic
+      way to materialize its canonical Skills into any coding agent's
+      own integration location, without inventing a bespoke
+      installation mechanism per agent — see
+      <a href="multi-agent-skills.html">Multi-Agent Skill
+      Integration</a> for the five more adapters built on this exact
+      interface later.</p>
+      <p><strong>Example</strong> — the shape every adapter shares:</p>
+      <pre><code>type Adapter interface {
+    ID() string
+    Name() string
+    TargetPath() string
+    Install(ctx context.Context, req InstallRequest) (InstallResult, error)
+}</code></pre>
+
+      <h2 id="project-bootstrap">007 · Project Bootstrap</h2>
+      <p><strong>What it is:</strong> <code>internal/bootstrap</code> —
+      <code>Inspect</code>, <code>Bootstrap</code>, <code>Verify</code>.</p>
+      <p><strong>Why it exists:</strong> Composes 001's project
+      detection, 005's template installation, and 006's adapter
+      registry into one atomic "set up a new project" operation —
+      rejecting an already-initialized target or an unknown agent ID
+      before writing anything.</p>
+      <p><strong>Example</strong> — 008's own <code>init</code> command
+      (below) is this feature's real, only caller:</p>
+      <pre><code>misterspec init --agent claude-code --dir ./my-project
+# internally: bootstrap.Bootstrap(root, "claude-code")</code></pre>
+
+      <h2 id="cli-cobra">008 · CLI (Cobra) & the <code>internal</code> Command Tree</h2>
+      <p><strong>What it is:</strong> The first real binary
+      (<code>cmd/misterspec</code>), Cobra-based, exposing every
+      deterministic operation as a stable, machine-readable JSON
+      command under a hidden <code>internal</code> tree, plus the
+      public <code>init</code> command.</p>
+      <p><strong>Why it exists:</strong> Turns 001-007's own Go
+      packages into something an agent can actually invoke — see the
+      full <a href="commands.html">Command Reference</a> for every
+      command this feature (and its later additions) registered.</p>
+      <p><strong>Example</strong> — the public surface stays minimal;
+      <code>internal</code> is hidden but still fully callable by name:</p>
+      <pre><code>misterspec --help          # shows only "init"
+misterspec internal status  # still works — just not advertised</code></pre>
+
+      <h2 id="canonical-skills">009 · Canonical Skills Content</h2>
+      <p><strong>What it is:</strong> The nine <code>kit/skills/&lt;name&gt;/SKILL.md</code>
+      files — <code>create-knowledge-base</code>,
+      <code>create-constitution</code>, <code>create-program</code>,
+      <code>create-feature</code>, <code>create-specs</code>,
+      <code>create-plan</code>, <code>create-tasks</code>,
+      <code>implement</code>, <code>analyze</code>.</p>
+      <p><strong>Why it exists:</strong> This is the actual content a
+      coding agent reads and follows — see the full
+      <a href="workflow.html">Spec-Driven Workflow</a> for what each
+      one does and when it runs. Authoring real, multi-file Skill
+      content also surfaced a real bug: <code>internal/installer</code>
+      only ever listed a source directory's immediate children, never
+      descending into a <code>&lt;skill-name&gt;/SKILL.md</code>
+      subdirectory — fixed here, backward-compatible.</p>
+      <p><strong>Example</strong> — every Skill's own frontmatter shape:</p>
+      <pre><code>---
+name: implement
+description: Implement one executable Task against the real codebase, then verify it.
+---</code></pre>
+
+      <h2 id="interactive-init">010 · Interactive <code>init</code> TUI</h2>
+      <p><strong>What it is:</strong> A Bubble Tea-based interactive
+      flow (Inspect → Warning → Agent Selection → Preview → Installing
+      → Success/Error), reusing 007's <code>Bootstrap</code>/
+      <code>Inspect</code> and 006's <code>Registry</code> entirely
+      unmodified.</p>
+      <p><strong>Why it exists:</strong> Running <code>misterspec
+      init</code> with no <code>--agent</code> flag in a real terminal
+      should feel guided, not require memorizing flags — while the
+      exact same non-interactive path (<code>--agent claude-code</code>)
+      keeps working byte-for-byte for scripts and CI.</p>
+      <p><strong>Example</strong> (non-interactive, unchanged by this feature):</p>
+      <pre><code>misterspec init --agent claude-code --dir ./my-project</code></pre>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>
