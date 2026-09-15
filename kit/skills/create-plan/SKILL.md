@@ -144,8 +144,17 @@ Required operations:
 ## Interaction Rules
 
 If the chosen strategy has more than one reasonable option with
-materially different tradeoffs, name the tradeoff in `Risks` or
-`Assumptions` rather than silently picking one without explanation.
+materially different tradeoffs, do not resolve it silently — ask. Present
+a full-sentence question, 2-4 concrete options, and mark exactly one
+option "(Recommended)" with a one-sentence reason, then wait for the
+user's answer before finalizing the Plan's own strategy. Once answered,
+reflect the chosen strategy directly in the Plan — never hedge across
+multiple options. If the user's reply doesn't map to any offered option,
+ask a quick disambiguation rather than guessing.
+
+If only one reasonable approach exists — no genuine fork with materially
+different tradeoffs — proceed without interrupting the user, exactly as
+before.
 
 ## Validation Rules
 
@@ -190,6 +199,8 @@ the Plan's existence, complete its body, and re-validate.
 ## Completion Contract
 
 Every invocation ends with a concise operational summary naming:
+
+Render this summary using structured formatting, not prose paragraphs: present **Artifacts** as a Markdown table when more than one artifact is involved (columns matching what's relevant — ID, path/type, and status or a one-line summary), or a single bullet when there is exactly one; present **Important findings** and **Attention** as bullet lists. This applies equally to a failure/stop report.
 
 - **Outcome** — Plan created or amended.
 - **Artifacts** — the Plan file, with its path.

@@ -203,6 +203,8 @@ processed again.
 
 Every invocation ends with a concise operational summary naming:
 
+Render this summary using structured formatting, not prose paragraphs: present **Artifacts** as a Markdown table when more than one artifact is involved (columns matching what's relevant — ID, path/type, and status or a one-line summary), or a single bullet when there is exactly one; present **Important findings** and **Attention** as bullet lists. This applies equally to a failure/stop report.
+
 - **Outcome** — succeeded, partially succeeded, or found nothing to do.
 - **Artifacts** — every Knowledge artifact created or extended, by ID.
 - **Important findings** — notable facts or constraints surfaced.

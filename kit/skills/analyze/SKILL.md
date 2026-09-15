@@ -85,12 +85,18 @@ validation --for SPEC-###`.
 
 ## Allowed Modifications
 
-The Validation artifact's own content, on a re-run.
+The Validation artifact's own content, on a re-run — and, only on the
+user's explicit, per-finding confirmation, and only for a finding whose
+responsible layer is "implementation incomplete," appending exactly one
+new `## TASK-NNN` entry to the Spec's existing Tasks artifact.
 
 ## Forbidden Mutations
 
 Modifying the Spec, its Plan, its Tasks, or any repository source file
-— this Skill only judges and records; it does not fix.
+— this Skill only judges and records; it does not fix. The one narrow,
+confirmed exception in Allowed Modifications above is an append, never a
+modification, and never automatic — every other Task, and the Spec and
+Plan themselves, remain forbidden to touch.
 
 ## Deterministic Operations
 
@@ -130,7 +136,23 @@ Required operations:
    (`Unplanned Implementation`).
 6. Run `internal create-artifact validation --for SPEC-###`, write the
    full body, then `internal validate SPEC-###`.
-7. Report completion per the Completion Contract below.
+7. For each requirement whose `Result` is `fail` with "implementation
+   incomplete" as the responsible layer: present the gap (the
+   requirement, its recorded evidence, and why it fails), then ask
+   whether to append a tracking Task for it — presenting the choice with
+   a recommended option and a one-sentence reason (e.g. "(Recommended)
+   Yes — track this so `/implement` picks it up next" vs. "No — leave it
+   as a reported finding only"). On explicit confirmation, append exactly
+   one new `## TASK-NNN` entry directly to the Spec's existing Tasks
+   artifact (scanning existing `TASK-NNN` headings for the next number,
+   the same convention `/create-tasks` itself uses), naming the specific
+   failing requirement (`Serves: SPEC-###:R#`), the verification method
+   already recorded against it, and an `Origin: /analyze finding
+   (implementation incomplete)` line with a one-line evidence summary. On
+   decline, or for a fail whose responsible layer is the Spec or Plan
+   itself, make no Task-related offer or write — the finding stays a
+   prose recommendation only.
+8. Report completion per the Completion Contract below.
 
 ## Decision Rules
 
@@ -194,6 +216,8 @@ and must reflect current, not partial, evidence.
 ## Completion Contract
 
 Every invocation ends with a concise operational summary naming:
+
+Render this summary using structured formatting, not prose paragraphs: present **Artifacts** as a Markdown table when more than one artifact is involved (columns matching what's relevant — ID, path/type, and status or a one-line summary), or a single bullet when there is exactly one; present **Important findings** and **Attention** as bullet lists. This applies equally to a failure/stop report.
 
 - **Outcome** — pass (every requirement satisfied) or fail (at least
   one requirement unmet, named specifically).
