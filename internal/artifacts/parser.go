@@ -14,13 +14,14 @@ import (
 // frontmatterYAML is the loosely typed raw shape of an artifact's
 // frontmatter block, decoded before field-level validation.
 type frontmatterYAML struct {
-	ID         string   `yaml:"id"`
-	Type       string   `yaml:"type"`
-	Status     string   `yaml:"status"`
-	Parent     string   `yaml:"parent"`
-	DependsOn  []string `yaml:"depends_on"`
-	Supersedes []string `yaml:"supersedes"`
-	For        string   `yaml:"for"`
+	ID            string   `yaml:"id"`
+	Type          string   `yaml:"type"`
+	Status        string   `yaml:"status"`
+	Parent        string   `yaml:"parent"`
+	DependsOn     []string `yaml:"depends_on"`
+	Supersedes    []string `yaml:"supersedes"`
+	For           string   `yaml:"for"`
+	SchemaVersion int      `yaml:"schema_version"`
 }
 
 // idBearingTypes are the declared frontmatter `type` values that require
@@ -61,8 +62,9 @@ func ParseMetadata(path string) (Metadata, error) {
 	}
 
 	meta := Metadata{
-		Type:   raw.Type,
-		Status: raw.Status,
+		Type:          raw.Type,
+		Status:        raw.Status,
+		SchemaVersion: raw.SchemaVersion,
 	}
 
 	switch {

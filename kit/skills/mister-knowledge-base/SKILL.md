@@ -1,5 +1,5 @@
 ---
-name: create-knowledge-base
+name: mister-knowledge-base
 description: Turn raw source documents into structured, durable Knowledge artifacts.
 ---
 
@@ -12,7 +12,7 @@ the pipeline eventually draws on.
 
 ## Invocation
 
-`/create-knowledge-base`
+`/mister-knowledge-base`
 
 Takes no required argument. Operates on whatever the project's raw
 sources directory currently contains.
@@ -150,7 +150,7 @@ Required operations:
 
 If raw sources are numerous or ambiguous, prefer creating more, narrower
 Knowledge artifacts over one broad one — narrow topics keep later Skills
-(especially `/create-constitution`) able to cite specific Knowledge
+(especially `/mister-constitution`) able to cite specific Knowledge
 precisely.
 
 ## Validation Rules
@@ -184,7 +184,7 @@ sources actually state.
 ## Postconditions
 
 The project's Knowledge base reflects every currently available raw
-source. `/create-constitution` can now draw on it.
+source. `/mister-constitution` can now draw on it.
 
 ## Idempotency
 
@@ -217,14 +217,14 @@ Render this summary using structured formatting, not prose paragraphs: present *
 Once at least one Knowledge artifact exists, recommend:
 
 ```text
-/create-constitution
+/mister-constitution
 ```
 
 If no raw sources were found, recommend populating the raw-sources
-directory first, and do not recommend `/create-constitution` yet — a
+directory first, and do not recommend `/mister-constitution` yet — a
 Constitution distilled from nothing is not durable memory.
 
 ## Related Skills
 
-`/create-constitution` — the next Skill in the pipeline, which draws
+`/mister-constitution` — the next Skill in the pipeline, which draws
 directly on the Knowledge base this Skill produces.

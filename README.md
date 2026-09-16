@@ -60,8 +60,8 @@ misterspec internal status
 ```
 
 Once initialized, the rest of the workflow happens through your coding
-agent's own installed Skills (`/create-constitution`, `/create-specs`,
-`/create-plan`, `/create-tasks`, `/implement`, `/analyze`, …) —
+agent's own installed Skills (`/mister-constitution`, `/mister-specify`,
+`/mister-plan`, `/mister-tasks`, `/mister-implement`, `/mister-analyze`, …) —
 misterspec's own deterministic commands run underneath them
 automatically.
 

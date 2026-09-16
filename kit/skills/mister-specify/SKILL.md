@@ -1,5 +1,5 @@
 ---
-name: create-specs
+name: mister-specify
 description: Write one or more testable Specs for a Feature, with clear requirements and acceptance scenarios.
 ---
 
@@ -11,7 +11,7 @@ and dependencies, ready to be planned and implemented.
 
 ## Invocation
 
-`/create-specs FEAT-###`
+`/mister-specify FEAT-###`
 
 Requires the Feature ID to write Specs for.
 
@@ -55,13 +55,13 @@ each dependency becomes required context for correctly recording
 ## Unnecessary Context
 
 Implementation or technical-design detail — that belongs to
-`/create-plan`, one stage later.
+`/mister-plan`, one stage later.
 
 ## Authority
 
 This Skill decides requirement boundaries and acceptance criteria
 within an already-defined Feature. It does not decide implementation
-strategy — that is `/create-plan`'s responsibility.
+strategy — that is `/mister-plan`'s responsibility.
 
 ## Allowed Reads
 
@@ -201,17 +201,17 @@ Render this summary using structured formatting, not prose paragraphs: present *
 For the primary Spec just created:
 
 ```text
-/create-plan SPEC-###
+/mister-plan SPEC-###
 ```
 
 If the Feature still has unspecified behavior, note as a secondary
 option:
 
 ```text
-/create-specs FEAT-###
+/mister-specify FEAT-###
 ```
 
 ## Related Skills
 
-`/create-feature` — the Skill this one depends on directly.
-`/create-plan` — the next Skill in the pipeline.
+`/mister-features` — the Skill this one depends on directly.
+`/mister-plan` — the next Skill in the pipeline.

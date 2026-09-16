@@ -1,5 +1,5 @@
 ---
-name: create-feature
+name: mister-features
 description: Decompose a Program into one or more Features, each a coherent capability boundary.
 ---
 
@@ -11,7 +11,7 @@ independently deliverable.
 
 ## Invocation
 
-`/create-feature PRG-###`
+`/mister-features PRG-###`
 
 Requires the Program ID to decompose.
 
@@ -53,14 +53,14 @@ capability to decompose first becomes required context.
 
 ## Unnecessary Context
 
-Spec-level requirement detail — that belongs to `/create-specs`, one
+Spec-level requirement detail — that belongs to `/mister-specify`, one
 level down.
 
 ## Authority
 
 This Skill decides capability boundaries and cohesion within an
 already-defined Program. It does not redefine the Program's own scope,
-and does not decide individual requirements — that is `/create-specs`'s
+and does not decide individual requirements — that is `/mister-specify`'s
 responsibility.
 
 ## Allowed Reads
@@ -78,7 +78,7 @@ None — this Skill only creates.
 
 ## Forbidden Mutations
 
-Creating a Spec directly (that is `/create-specs`'s responsibility, one
+Creating a Spec directly (that is `/mister-specify`'s responsibility, one
 level down). Modifying the parent Program. Modifying an existing
 Feature.
 
@@ -183,17 +183,17 @@ Render this summary using structured formatting, not prose paragraphs: present *
 For the primary Feature just created:
 
 ```text
-/create-specs FEAT-###
+/mister-specify FEAT-###
 ```
 
 If the Program still has undecomposed capability, note as a secondary
 option:
 
 ```text
-/create-feature PRG-###
+/mister-features PRG-###
 ```
 
 ## Related Skills
 
-`/create-program` — the Skill this one depends on directly.
-`/create-specs` — the next Skill in the pipeline.
+`/mister-program` — the Skill this one depends on directly.
+`/mister-specify` — the next Skill in the pipeline.

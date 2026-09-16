@@ -40,7 +40,7 @@
           <iconify-icon icon="lucide:scroll" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">1. Knowledge & Constitution</p>
-            <code class="text-sm">/create-knowledge-base</code> then <code class="text-sm">/create-constitution</code>
+            <code class="text-sm">/mister-knowledge-base</code> then <code class="text-sm">/mister-constitution</code>
             <p class="text-sm text-slate-600 mt-1">Turns raw source material into structured Knowledge entries, then distills the project's own non-negotiable rules into a Constitution — the Tier-0 content every later Context Pack always includes.</p>
           </div>
         </div>
@@ -49,7 +49,7 @@
           <iconify-icon icon="lucide:building-2" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">2. Program</p>
-            <code class="text-sm">/create-program</code>
+            <code class="text-sm">/mister-program</code>
             <p class="text-sm text-slate-600 mt-1">Establishes one initiative grouping related Features, via <code>internal create program</code> — the top of the artifact hierarchy.</p>
           </div>
         </div>
@@ -58,7 +58,7 @@
           <iconify-icon icon="lucide:layers-2" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">3. Feature</p>
-            <code class="text-sm">/create-feature PRG-###</code>
+            <code class="text-sm">/mister-features PRG-###</code>
             <p class="text-sm text-slate-600 mt-1">Decomposes a Program into one or more Features — one coherent slice of the initiative each.</p>
           </div>
         </div>
@@ -67,7 +67,7 @@
           <iconify-icon icon="lucide:file-text" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">4. Specs</p>
-            <code class="text-sm">/create-specs FEAT-###</code>
+            <code class="text-sm">/mister-specify FEAT-###</code>
             <p class="text-sm text-slate-600 mt-1">Writes one or more Specs for a Feature — testable, unambiguous requirements, never implementation detail.</p>
           </div>
         </div>
@@ -76,7 +76,7 @@
           <iconify-icon icon="lucide:map" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">5. Plan</p>
-            <code class="text-sm">/create-plan SPEC-###</code>
+            <code class="text-sm">/mister-plan SPEC-###</code>
             <p class="text-sm text-slate-600 mt-1">Designs a concrete technical strategy mapping every requirement to how it will be built. Since 018, requests a planning-intent Context Pack first via <code>internal context</code>.</p>
           </div>
         </div>
@@ -85,8 +85,8 @@
           <iconify-icon icon="lucide:list-checks" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">6. Tasks</p>
-            <code class="text-sm">/create-tasks SPEC-###</code>
-            <p class="text-sm text-slate-600 mt-1">Decomposes the Plan into ordered, independently verifiable Tasks that <code>/implement</code> will pick up one at a time.</p>
+            <code class="text-sm">/mister-tasks SPEC-###</code>
+            <p class="text-sm text-slate-600 mt-1">Decomposes the Plan into ordered, independently verifiable Tasks that <code>/mister-implement</code> will pick up one at a time.</p>
           </div>
         </div>
 
@@ -94,7 +94,7 @@
           <iconify-icon icon="lucide:code-2" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">7. Implementation</p>
-            <code class="text-sm">/implement SPEC-###</code>
+            <code class="text-sm">/mister-implement SPEC-###</code>
             <p class="text-sm text-slate-600 mt-1">Selects the next executable Task, implements it against the real codebase, verifies it by its own stated method, and marks it complete only once that evidence exists.</p>
           </div>
         </div>
@@ -103,7 +103,7 @@
           <iconify-icon icon="lucide:badge-check" class="text-2xl text-slate-900 shrink-0"></iconify-icon>
           <div>
             <p class="font-semibold text-slate-900">8. Validation</p>
-            <code class="text-sm">/analyze SPEC-###</code>
+            <code class="text-sm">/mister-analyze SPEC-###</code>
             <p class="text-sm text-slate-600 mt-1">Compares required behavior against the actual implementation, requirement by requirement, and records a specific, evidence-backed verdict — never a generic pass/fail.</p>
           </div>
         </div>
@@ -114,7 +114,7 @@
       <p>
         Every one of those eight Skills is a thin layer of judgment on
         top of misterspec's own deterministic commands. For example,
-        <code>/create-plan</code>'s own real procedure is:
+        <code>/mister-plan</code>'s own real procedure is:
       </p>
       <pre><code>misterspec internal resolve SPEC-014
 misterspec internal inspect SPEC-014

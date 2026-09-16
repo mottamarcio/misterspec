@@ -249,6 +249,63 @@ func TestValidateProject_DuplicateTaskID(t *testing.T) {
 	}
 }
 
+func TestValidateProject_ConstitutionAbsent(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	// A project with other clean artifacts but no Constitution at all.
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md", "---\nid: PRG-001\ntype: program\nstatus: active\n---\n")
+
+	findings, err := validation.ValidateProject(root, cfg)
+	if err != nil {
+		t.Fatalf("ValidateProject() unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Errorf("ValidateProject() findings = %v, want empty when Constitution does not exist yet", findings)
+	}
+}
+
+func TestValidateProject_ConstitutionFrontmatterMalformed(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, cfg.ConstitutionPath, "# Project Constitution\n\nNo frontmatter at all.\n")
+
+	findings, err := validation.ValidateProject(root, cfg)
+	if err != nil {
+		t.Fatalf("ValidateProject() unexpected error: %v", err)
+	}
+	if !containsCode(findings, validation.CodeFrontmatterMalformed) {
+		t.Errorf("ValidateProject() findings = %v, want %q present", findingCodes(findings), validation.CodeFrontmatterMalformed)
+	}
+}
+
+func TestValidateProject_ConstitutionSchemaVersionMissing(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, cfg.ConstitutionPath, "---\ntype: constitution\n---\n# Project Constitution\n")
+
+	findings, err := validation.ValidateProject(root, cfg)
+	if err != nil {
+		t.Fatalf("ValidateProject() unexpected error: %v", err)
+	}
+	if !containsCode(findings, validation.CodeRequiredFieldMissing) {
+		t.Errorf("ValidateProject() findings = %v, want %q present", findingCodes(findings), validation.CodeRequiredFieldMissing)
+	}
+}
+
+func TestValidateProject_ConstitutionWellFormed(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, cfg.ConstitutionPath, "---\ntype: constitution\nschema_version: 1\n---\n# Project Constitution\n")
+
+	findings, err := validation.ValidateProject(root, cfg)
+	if err != nil {
+		t.Fatalf("ValidateProject() unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Errorf("ValidateProject() findings = %v, want empty for a well-formed Constitution", findings)
+	}
+}
+
 func TestValidateProject_EmptyProject(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()
