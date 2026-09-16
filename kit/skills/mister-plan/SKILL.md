@@ -1,5 +1,5 @@
 ---
-name: create-plan
+name: mister-plan
 description: Design a technical implementation plan mapping a Spec's requirements to a concrete strategy.
 ---
 
@@ -11,7 +11,7 @@ the real repository as it exists today.
 
 ## Invocation
 
-`/create-plan SPEC-###`
+`/mister-plan SPEC-###`
 
 Requires the Spec ID to plan.
 
@@ -63,7 +63,7 @@ dependency's own status becomes required context for sequencing.
 
 ## Unnecessary Context
 
-Task-level decomposition detail — that belongs to `/create-tasks`, one
+Task-level decomposition detail — that belongs to `/mister-tasks`, one
 stage later.
 
 ## Authority
@@ -86,7 +86,7 @@ SPEC-###`.
 ## Allowed Modifications
 
 None — repository source code is not touched by this Skill; only
-`/implement` writes code.
+`/mister-implement` writes code.
 
 ## Forbidden Mutations
 
@@ -167,7 +167,7 @@ new findings after the Plan is created.
 - The named Spec does not exist (`entity_not_found`): stop and report
   it plainly.
 - The Spec has no requirements recorded yet: stop and recommend
-  `/create-specs` first.
+  `/mister-specify` first.
 
 ## Stop Conditions
 
@@ -211,10 +211,10 @@ Render this summary using structured formatting, not prose paragraphs: present *
 ## Recommended Next Step
 
 ```text
-/create-tasks SPEC-###
+/mister-tasks SPEC-###
 ```
 
 ## Related Skills
 
-`/create-specs` — the Skill this one depends on directly.
-`/create-tasks` — the next Skill in the pipeline.
+`/mister-specify` — the Skill this one depends on directly.
+`/mister-tasks` — the next Skill in the pipeline.

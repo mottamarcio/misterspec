@@ -1,5 +1,5 @@
 ---
-name: create-constitution
+name: mister-constitution
 description: Distill the project's Knowledge base into a concise, durable Constitution of non-negotiable invariants.
 ---
 
@@ -12,7 +12,7 @@ records.
 
 ## Invocation
 
-`/create-constitution`
+`/mister-constitution`
 
 Takes no required argument. Operates on the project's existing
 Knowledge base.
@@ -97,7 +97,7 @@ facts Knowledge itself doesn't yet record.
 
 This Skill decides which facts are durable invariants versus ordinary,
 mutable facts. It does not decide project scope or priorities (that is
-`/create-program`'s responsibility) and does not invent new facts
+`/mister-program`'s responsibility) and does not invent new facts
 Knowledge doesn't already support.
 
 ## Allowed Reads
@@ -189,7 +189,7 @@ Outputs.
 ## Failure Conditions
 
 - No Knowledge artifacts exist yet: stop and recommend
-  `/create-knowledge-base` first.
+  `/mister-knowledge-base` first.
 - The project is not initialized (`project_not_initialized`): stop and
   report that `misterspec init` must run first.
 
@@ -206,7 +206,7 @@ other invariant it states traces back to specific Knowledge content.
 
 ## Postconditions
 
-The project has a durable Constitution. `/create-program` can now
+The project has a durable Constitution. `/mister-program` can now
 proceed with it as a known constraint.
 
 ## Idempotency
@@ -241,13 +241,13 @@ Render this summary using structured formatting, not prose paragraphs: present *
 Once the Constitution exists:
 
 ```text
-/create-program
+/mister-program
 ```
 
-If no Knowledge exists yet, recommend `/create-knowledge-base` instead
+If no Knowledge exists yet, recommend `/mister-knowledge-base` instead
 and do not proceed.
 
 ## Related Skills
 
-`/create-knowledge-base` — the Skill this one depends on directly.
-`/create-program` — the next Skill in the pipeline.
+`/mister-knowledge-base` — the Skill this one depends on directly.
+`/mister-program` — the next Skill in the pipeline.

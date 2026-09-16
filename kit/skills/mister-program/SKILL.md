@@ -1,5 +1,5 @@
 ---
-name: create-program
+name: mister-program
 description: Define a new Program capturing one initiative's problem, outcome, and scope.
 ---
 
@@ -11,7 +11,7 @@ project's existing Knowledge and Constitution.
 
 ## Invocation
 
-`/create-program`
+`/mister-program`
 
 Takes no required argument beyond the initiative to describe, provided
 by the user in conversation.
@@ -68,7 +68,7 @@ coarser than either.
 
 This Skill decides problem framing, outcome, and scope boundaries. It
 does not decide how the Program is decomposed into Features — that is
-`/create-feature`'s responsibility.
+`/mister-features`'s responsibility.
 
 ## Allowed Reads
 
@@ -187,10 +187,10 @@ Render this summary using structured formatting, not prose paragraphs: present *
 ## Recommended Next Step
 
 ```text
-/create-feature PRG-###
+/mister-features PRG-###
 ```
 
 ## Related Skills
 
-`/create-constitution` — should generally precede this Skill.
-`/create-feature` — the next Skill in the pipeline.
+`/mister-constitution` — should generally precede this Skill.
+`/mister-features` — the next Skill in the pipeline.

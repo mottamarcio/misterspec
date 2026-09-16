@@ -1,5 +1,5 @@
 ---
-name: implement
+name: mister-implement
 description: Implement one executable Task against the real codebase, then verify it.
 ---
 
@@ -14,14 +14,14 @@ which Invocation form is used.
 
 ## Invocation
 
-`/implement SPEC-###` or `/implement SPEC-### TASK-NNN`
+`/mister-implement SPEC-###` or `/mister-implement SPEC-### TASK-NNN`
 
 Both forms require the Spec ID whose Tasks are being implemented. Given
 only the Spec ID, this Skill implements every currently executable Task
 in that Spec, sequentially, within this one invocation. Given a Task ID
 as well, it implements only that one named Task and stops — every other
 Task in the Spec is left untouched. `TASK-NNN` is numbered per-Spec (no
-global allocator, per `/create-tasks`), so a Task ID is only ever
+global allocator, per `/mister-tasks`), so a Task ID is only ever
 resolved within the Spec ID given alongside it.
 
 ## Responsibility
@@ -214,8 +214,8 @@ actually run, with its result recorded as evidence.
   successfully implemented earlier in the same run before stopping.
 - A Task's own stated scope turns out to be wrong or insufficient once
   attempted: stop, do not silently redefine the Task, and recommend
-  revisiting the Plan (`/create-plan`) or the Tasks themselves
-  (`/create-tasks`).
+  revisiting the Plan (`/mister-plan`) or the Tasks themselves
+  (`/mister-tasks`).
 - Verification fails: do not mark the Task complete; report the
   failure's evidence. In all-tasks mode, stop the sequential run at
   that point — do not continue to any further Task — and still report
@@ -274,30 +274,30 @@ Render this summary using structured formatting, not prose paragraphs: present *
 Named-task mode, once the named Task is done and other Tasks remain:
 
 ```text
-/implement SPEC-### TASK-NNN
+/mister-implement SPEC-### TASK-NNN
 ```
 
 naming the next eligible Task ID — or, to implement every remaining
 Task sequentially instead of naming them one at a time:
 
 ```text
-/implement SPEC-###
+/mister-implement SPEC-###
 ```
 
 All-tasks mode, if it stopped early (blocked or failed) with executable
 Tasks still remaining once resolved:
 
 ```text
-/implement SPEC-###
+/mister-implement SPEC-###
 ```
 
 Once every Task in the Spec is complete:
 
 ```text
-/analyze SPEC-###
+/mister-analyze SPEC-###
 ```
 
 ## Related Skills
 
-`/create-tasks` — the Skill this one depends on directly.
-`/analyze` — the next Skill in the pipeline, once all Tasks are done.
+`/mister-tasks` — the Skill this one depends on directly.
+`/mister-analyze` — the next Skill in the pipeline, once all Tasks are done.

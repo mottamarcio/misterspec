@@ -1,5 +1,5 @@
 ---
-name: analyze
+name: mister-analyze
 description: Compare a Spec's required behavior against its actual implementation and record the verdict.
 ---
 
@@ -11,7 +11,7 @@ whether it is genuinely satisfied — the pipeline's own final check.
 
 ## Invocation
 
-`/analyze SPEC-###`
+`/mister-analyze SPEC-###`
 
 Requires the Spec ID to verify.
 
@@ -141,13 +141,13 @@ Required operations:
    requirement, its recorded evidence, and why it fails), then ask
    whether to append a tracking Task for it — presenting the choice with
    a recommended option and a one-sentence reason (e.g. "(Recommended)
-   Yes — track this so `/implement` picks it up next" vs. "No — leave it
+   Yes — track this so `/mister-implement` picks it up next" vs. "No — leave it
    as a reported finding only"). On explicit confirmation, append exactly
    one new `## TASK-NNN` entry directly to the Spec's existing Tasks
    artifact (scanning existing `TASK-NNN` headings for the next number,
-   the same convention `/create-tasks` itself uses), naming the specific
+   the same convention `/mister-tasks` itself uses), naming the specific
    failing requirement (`Serves: SPEC-###:R#`), the verification method
-   already recorded against it, and an `Origin: /analyze finding
+   already recorded against it, and an `Origin: /mister-analyze finding
    (implementation incomplete)` line with a one-line evidence summary. On
    decline, or for a fail whose responsible layer is the Spec or Plan
    itself, make no Task-related offer or write — the finding stays a
@@ -181,7 +181,7 @@ checkbox.
 
 - The Spec has no Plan or Tasks yet: stop and recommend the missing
   earlier Skill.
-- No Task has been attempted yet: stop and recommend `/implement`
+- No Task has been attempted yet: stop and recommend `/mister-implement`
   first.
 
 ## Stop Conditions
@@ -241,20 +241,20 @@ for this unit of work.
 If a requirement fails because implementation is incomplete:
 
 ```text
-/implement SPEC-###
+/mister-implement SPEC-###
 ```
 
 If a requirement fails because the Plan cannot satisfy it as designed:
 
 ```text
-/create-plan SPEC-###
+/mister-plan SPEC-###
 ```
 
 If a requirement fails because the Spec's own requirement was wrong or
 incomplete:
 
 ```text
-/create-specs FEAT-###
+/mister-specify FEAT-###
 ```
 
 Never recommend a fixed, always-the-same next command — the
@@ -263,6 +263,6 @@ found responsible (§53).
 
 ## Related Skills
 
-`/implement` — the Skill this one depends on directly.
-`/create-plan`, `/create-specs` — the Skills a failed requirement may
+`/mister-implement` — the Skill this one depends on directly.
+`/mister-plan`, `/mister-specify` — the Skills a failed requirement may
 recommend returning to, depending on which layer is responsible.
