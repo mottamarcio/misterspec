@@ -1651,15 +1651,15 @@ It should not contain filesystem business rules.
 MVP:
 
 ```text
-create-knowledge-base
-create-constitution
-create-program
-create-feature
-create-specs
-create-plan
-create-tasks
-implement
-analyze
+mister-knowledge-base
+mister-constitution
+mister-program
+mister-features
+mister-specify
+mister-plan
+mister-tasks
+mister-implement
+mister-analyze
 ```
 
 Canonical source:

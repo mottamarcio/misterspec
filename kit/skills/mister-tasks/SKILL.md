@@ -1,16 +1,16 @@
 ---
-name: create-tasks
+name: mister-tasks
 description: Decompose a Spec's Plan into ordered, independently verifiable Tasks.
 ---
 
 ## Purpose
 
 Decompose a Spec's Plan into ordered, independently verifiable Tasks —
-the concrete units of work `/implement` will pick up one at a time.
+the concrete units of work `/mister-implement` will pick up one at a time.
 
 ## Invocation
 
-`/create-tasks SPEC-###`
+`/mister-tasks SPEC-###`
 
 Requires the Spec ID whose Plan is being decomposed.
 
@@ -60,7 +60,7 @@ ordering becomes required context for Task sequencing.
 ## Unnecessary Context
 
 The actual repository source code's current content — Tasks describe
-*what* to do, not the resulting diff; that is `/implement`'s job.
+*what* to do, not the resulting diff; that is `/mister-implement`'s job.
 
 ## Authority
 
@@ -155,7 +155,7 @@ duplicate number, not a pre-check this Skill performs itself.
 
 If the Plan's implementation sequence is coarse, prefer decomposing it
 into more, smaller Tasks over fewer, larger ones — smaller Tasks are
-easier for `/implement` to pick up and verify one at a time.
+easier for `/mister-implement` to pick up and verify one at a time.
 
 ## Validation Rules
 
@@ -165,7 +165,7 @@ requirement.
 
 ## Failure Conditions
 
-- The named Spec has no Plan yet: stop and recommend `/create-plan`
+- The named Spec has no Plan yet: stop and recommend `/mister-plan`
   first.
 - The Spec does not exist (`entity_not_found`): stop and report it
   plainly.
@@ -184,7 +184,7 @@ zero new findings.
 ## Postconditions
 
 The Spec now has an ordered, verifiable Task list ready for
-`/implement`.
+`/mister-implement`.
 
 ## Idempotency
 
@@ -221,10 +221,10 @@ Render this summary using structured formatting, not prose paragraphs: present *
 ## Recommended Next Step
 
 ```text
-/implement SPEC-###
+/mister-implement SPEC-###
 ```
 
 ## Related Skills
 
-`/create-plan` — the Skill this one depends on directly.
-`/implement` — the next Skill in the pipeline.
+`/mister-plan` — the Skill this one depends on directly.
+`/mister-implement` — the next Skill in the pipeline.

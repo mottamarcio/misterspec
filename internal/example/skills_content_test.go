@@ -48,15 +48,15 @@ var knownInternalCommands = map[string]bool{
 // table — the specific subset of knownInternalCommands each Skill is
 // expected to use.
 var skillOperationsAllowlist = map[string][]string{
-	"create-knowledge-base": {"inventory", "fingerprint", "create", "inspect", "validate"},
-	"create-constitution":   {"inventory", "resolve", "validate"},
-	"create-program":        {"status", "create", "validate"},
-	"create-feature":        {"resolve", "children", "create", "validate"},
-	"create-specs":          {"resolve", "children", "create", "validate"},
-	"create-plan":           {"resolve", "inspect", "context", "create-artifact", "validate"},
-	"create-tasks":          {"resolve", "inspect", "context", "create-artifact", "validate"},
-	"implement":             {"resolve", "inspect", "context", "validate"},
-	"analyze":               {"resolve", "inspect", "context", "create-artifact", "validate"},
+	"mister-knowledge-base": {"inventory", "fingerprint", "create", "inspect", "validate"},
+	"mister-constitution":   {"inventory", "resolve", "validate"},
+	"mister-program":        {"status", "create", "validate"},
+	"mister-features":       {"resolve", "children", "create", "validate"},
+	"mister-specify":        {"resolve", "children", "create", "validate"},
+	"mister-plan":           {"resolve", "inspect", "context", "create-artifact", "validate"},
+	"mister-tasks":          {"resolve", "inspect", "context", "create-artifact", "validate"},
+	"mister-implement":      {"resolve", "inspect", "context", "validate"},
+	"mister-analyze":        {"resolve", "inspect", "context", "create-artifact", "validate"},
 }
 
 // internalOpRe matches an inline-code-formatted operation mention, e.g.
@@ -189,8 +189,8 @@ func stringInSlice(list []string, s string) bool {
 }
 
 func TestSkillsContent_KnowledgeAndConstitution(t *testing.T) {
-	assertSkillConformant(t, "create-knowledge-base")
-	assertSkillConformant(t, "create-constitution")
+	assertSkillConformant(t, "mister-knowledge-base")
+	assertSkillConformant(t, "mister-constitution")
 }
 
 // TestSkillsContent_ConstitutionFrontmatterDocumented is
@@ -200,33 +200,33 @@ func TestSkillsContent_KnowledgeAndConstitution(t *testing.T) {
 // (docs/architecture-specification.md §24), so a written Constitution's
 // frontmatter is not left to whichever model happens to include it.
 func TestSkillsContent_ConstitutionFrontmatterDocumented(t *testing.T) {
-	data, err := fs.ReadFile(kit.SkillsFS, "create-constitution/SKILL.md")
+	data, err := fs.ReadFile(kit.SkillsFS, "mister-constitution/SKILL.md")
 	if err != nil {
-		t.Fatalf("reading kit/skills/create-constitution/SKILL.md: %v", err)
+		t.Fatalf("reading kit/skills/mister-constitution/SKILL.md: %v", err)
 	}
 	section := extractSection(string(data), "Outputs")
 	if section == "" {
-		t.Fatal("create-constitution: Outputs section is empty or missing")
+		t.Fatal("mister-constitution: Outputs section is empty or missing")
 	}
 	if !strings.Contains(section, "type: constitution") {
-		t.Error("create-constitution: Outputs section does not document the required \"type: constitution\" frontmatter field")
+		t.Error("mister-constitution: Outputs section does not document the required \"type: constitution\" frontmatter field")
 	}
 	if !strings.Contains(section, "schema_version") {
-		t.Error("create-constitution: Outputs section does not document the required \"schema_version\" frontmatter field")
+		t.Error("mister-constitution: Outputs section does not document the required \"schema_version\" frontmatter field")
 	}
 }
 
 func TestSkillsContent_ProgramFeatureSpecs(t *testing.T) {
-	assertSkillConformant(t, "create-program")
-	assertSkillConformant(t, "create-feature")
-	assertSkillConformant(t, "create-specs")
+	assertSkillConformant(t, "mister-program")
+	assertSkillConformant(t, "mister-features")
+	assertSkillConformant(t, "mister-specify")
 }
 
 func TestSkillsContent_PlanTasksImplementAnalyze(t *testing.T) {
-	assertSkillConformant(t, "create-plan")
-	assertSkillConformant(t, "create-tasks")
-	assertSkillConformant(t, "implement")
-	assertSkillConformant(t, "analyze")
+	assertSkillConformant(t, "mister-plan")
+	assertSkillConformant(t, "mister-tasks")
+	assertSkillConformant(t, "mister-implement")
+	assertSkillConformant(t, "mister-analyze")
 }
 
 // TestSkillsContent_CreateTasksReportsDependenciesAndParallelism is
@@ -235,19 +235,19 @@ func TestSkillsContent_PlanTasksImplementAnalyze(t *testing.T) {
 // mention Task dependency relationships and parallel-safe groups, not
 // leave that information implicit in tasks.md's own content.
 func TestSkillsContent_CreateTasksReportsDependenciesAndParallelism(t *testing.T) {
-	data, err := fs.ReadFile(kit.SkillsFS, "create-tasks/SKILL.md")
+	data, err := fs.ReadFile(kit.SkillsFS, "mister-tasks/SKILL.md")
 	if err != nil {
-		t.Fatalf("reading kit/skills/create-tasks/SKILL.md: %v", err)
+		t.Fatalf("reading kit/skills/mister-tasks/SKILL.md: %v", err)
 	}
 	section := strings.ToLower(extractSection(string(data), "Completion Contract"))
 	if section == "" {
-		t.Fatal("create-tasks: Completion Contract section is empty or missing")
+		t.Fatal("mister-tasks: Completion Contract section is empty or missing")
 	}
 	if !strings.Contains(section, "depend") {
-		t.Error("create-tasks: Completion Contract section does not mention Task dependency reporting")
+		t.Error("mister-tasks: Completion Contract section does not mention Task dependency reporting")
 	}
 	if !strings.Contains(section, "parallel") {
-		t.Error("create-tasks: Completion Contract section does not mention parallel-safe Task reporting")
+		t.Error("mister-tasks: Completion Contract section does not mention parallel-safe Task reporting")
 	}
 }
 
@@ -257,28 +257,62 @@ func TestSkillsContent_CreateTasksReportsDependenciesAndParallelism(t *testing.T
 // Spec-only form (all executable Tasks, sequentially) and the
 // Spec-plus-Task form (exactly one named Task).
 func TestSkillsContent_ImplementDualInvocation(t *testing.T) {
-	data, err := fs.ReadFile(kit.SkillsFS, "implement/SKILL.md")
+	data, err := fs.ReadFile(kit.SkillsFS, "mister-implement/SKILL.md")
 	if err != nil {
-		t.Fatalf("reading kit/skills/implement/SKILL.md: %v", err)
+		t.Fatalf("reading kit/skills/mister-implement/SKILL.md: %v", err)
 	}
 	section := extractSection(string(data), "Invocation")
 	if section == "" {
-		t.Fatal("implement: Invocation section is empty or missing")
+		t.Fatal("mister-implement: Invocation section is empty or missing")
 	}
 	if !strings.Contains(section, "SPEC-###") {
-		t.Error("implement: Invocation section does not document the Spec-only form (\"SPEC-###\")")
+		t.Error("mister-implement: Invocation section does not document the Spec-only form (\"SPEC-###\")")
 	}
 	if !strings.Contains(section, "SPEC-### TASK-NNN") {
-		t.Error("implement: Invocation section does not document the Spec-plus-Task form (\"SPEC-### TASK-NNN\")")
+		t.Error("mister-implement: Invocation section does not document the Spec-plus-Task form (\"SPEC-### TASK-NNN\")")
+	}
+}
+
+// staleSkillNameRe matches any of the 9 pre-028-mister-prefixed-skill-
+// names slash-command names as a whole word, with its own leading
+// slash — e.g. "/implement" but never the "-implement" substring
+// inside "/mister-implement", so a renamed Skill's own new name never
+// false-positives this check.
+var staleSkillNameRe = regexp.MustCompile(`/(analyze|create-constitution|create-feature|create-knowledge-base|create-plan|create-program|create-specs|create-tasks|implement)\b`)
+
+// TestSkillsContent_NoStaleSkillNameReferences is
+// specs/028-mister-prefixed-skill-names's own whole-feature regression
+// guard: no Skill's own content — self-reference or cross-reference to
+// another Skill — may mention any of the 9 pre-rename slash-command
+// names anywhere under kit.SkillsFS.
+func TestSkillsContent_NoStaleSkillNameReferences(t *testing.T) {
+	err := fs.WalkDir(kit.SkillsFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := fs.ReadFile(kit.SkillsFS, path)
+		if err != nil {
+			return err
+		}
+		for _, m := range staleSkillNameRe.FindAllString(string(data), -1) {
+			t.Errorf("%s: contains stale pre-rename skill reference %q", path, m)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking kit.SkillsFS: %v", err)
 	}
 }
 
 // canonicalSkillNames is docs/architecture-specification.md §38's
 // exact MVP Skill set.
 var canonicalSkillNames = []string{
-	"create-knowledge-base", "create-constitution", "create-program",
-	"create-feature", "create-specs", "create-plan", "create-tasks",
-	"implement", "analyze",
+	"mister-knowledge-base", "mister-constitution", "mister-program",
+	"mister-features", "mister-specify", "mister-plan", "mister-tasks",
+	"mister-implement", "mister-analyze",
 }
 
 // TestSkillsContent_AllNineInstalled is this feature's whole-feature
