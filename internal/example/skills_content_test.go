@@ -206,6 +206,28 @@ func TestSkillsContent_PlanTasksImplementAnalyze(t *testing.T) {
 	assertSkillConformant(t, "analyze")
 }
 
+// TestSkillsContent_ImplementDualInvocation is specs/026-implement-single-task's
+// own contract check (contracts/implement-invocation.md): the implement
+// Skill's Invocation section must document both supported forms — the
+// Spec-only form (all executable Tasks, sequentially) and the
+// Spec-plus-Task form (exactly one named Task).
+func TestSkillsContent_ImplementDualInvocation(t *testing.T) {
+	data, err := fs.ReadFile(kit.SkillsFS, "implement/SKILL.md")
+	if err != nil {
+		t.Fatalf("reading kit/skills/implement/SKILL.md: %v", err)
+	}
+	section := extractSection(string(data), "Invocation")
+	if section == "" {
+		t.Fatal("implement: Invocation section is empty or missing")
+	}
+	if !strings.Contains(section, "SPEC-###") {
+		t.Error("implement: Invocation section does not document the Spec-only form (\"SPEC-###\")")
+	}
+	if !strings.Contains(section, "SPEC-### TASK-NNN") {
+		t.Error("implement: Invocation section does not document the Spec-plus-Task form (\"SPEC-### TASK-NNN\")")
+	}
+}
+
 // canonicalSkillNames is docs/architecture-specification.md §38's
 // exact MVP Skill set.
 var canonicalSkillNames = []string{

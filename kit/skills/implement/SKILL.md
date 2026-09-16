@@ -5,16 +5,24 @@ description: Implement one executable Task against the real codebase, then verif
 
 ## Purpose
 
-Implement one executable Task from a Spec's Tasks artifact against the
-real codebase, then verify it — the one Skill in the pipeline that
-actually writes code, using the agent's own normal coding capabilities.
+Implement executable Task(s) from a Spec's Tasks artifact against the
+real codebase, then verify each one — the one Skill in the pipeline
+that actually writes code, using the agent's own normal coding
+capabilities. Either every currently executable Task in a Spec,
+sequentially in one invocation, or exactly one named Task, depending on
+which Invocation form is used.
 
 ## Invocation
 
-`/implement SPEC-###`
+`/implement SPEC-###` or `/implement SPEC-### TASK-NNN`
 
-Requires the Spec ID whose Tasks are being implemented. Operates on
-whichever Task(s) are next executable.
+Both forms require the Spec ID whose Tasks are being implemented. Given
+only the Spec ID, this Skill implements every currently executable Task
+in that Spec, sequentially, within this one invocation. Given a Task ID
+as well, it implements only that one named Task and stops — every other
+Task in the Spec is left untouched. `TASK-NNN` is numbered per-Spec (no
+global allocator, per `/create-tasks`), so a Task ID is only ever
+resolved within the Spec ID given alongside it.
 
 ## Responsibility
 
@@ -36,8 +44,11 @@ verified.
 
 ## Preconditions
 
-The named Spec must have Tasks already. At least one Task must be
-currently executable (its own dependencies, if any, already complete).
+The named Spec must have Tasks already. In all-tasks mode, at least one
+Task must be currently executable. In named-task mode, the named Task
+must exist within this Spec's own Tasks artifact and be currently
+executable (or already complete, which is its own Failure Condition
+rather than a precondition failure).
 
 ## Required Context
 
@@ -123,17 +134,37 @@ Required operations:
 2. Run `internal context SPEC-### --intent implementation` and begin
    from its returned items. If the request fails, proceed using this
    Skill's own Required Context above instead.
-3. Read the Spec's Tasks artifact; select one Task whose own
-   dependencies are already complete.
-4. Load the context that Task's own scope names.
+3. Read the Spec's Tasks artifact. Branch on whether a Task ID was
+   given:
+   - **Named-task mode** (`SPEC-### TASK-NNN` given): verify `TASK-NNN`
+     exists within this Spec's own Tasks artifact (Failure Conditions
+     if not). If it is already complete, report that and stop (Failure
+     Conditions) unless the user has explicitly confirmed a redo. If
+     its own dependencies are not all complete, stop and report which
+     are outstanding (Failure Conditions). Otherwise select only this
+     Task.
+   - **All-tasks mode** (`SPEC-###` only): select one executable,
+     not-yet-complete Task (its own dependencies already satisfied;
+     already-complete Tasks are skipped, their count tracked for the
+     summary).
+4. Load the context the selected Task's own scope names.
 5. Implement the change directly in the repository.
 6. Verify it by the Task's own stated method (e.g. run the named `go
    test` command); record the evidence.
 7. If verification succeeds, check the Task's completion checkbox and
-   record its evidence in the Tasks artifact directly.
+   record its evidence in the Tasks artifact directly. If verification
+   fails, stop here (Failure Conditions) — do not mark it complete and
+   do not continue to another Task.
 8. Run `internal validate SPEC-###` to confirm the project's structure
    is still valid.
-9. Report completion per the Completion Contract below.
+9. **In named-task mode**: stop and report completion per the
+   Completion Contract below — never proceed to another Task in this
+   invocation.
+   **In all-tasks mode**: re-derive the executable set from the Tasks
+   artifact's current state (a Task just completed may unblock
+   others) and repeat from step 3 until no executable, not-yet-complete
+   Task remains, then report completion per the Completion Contract
+   below.
 
 ## Decision Rules
 
@@ -148,7 +179,12 @@ Required operations:
 ## Interaction Rules
 
 Implement and verify one Task at a time — do not batch multiple Tasks
-into one unverified change, even when they touch related code.
+into one unverified change, even when they touch related code. This
+holds in all-tasks mode too: "sequential" means one Task implemented,
+verified, and marked complete before the next one is even selected —
+never a single unverified multi-Task change. Only the pause-and-ask-
+to-re-invoke behavior between Tasks changes between the two invocation
+forms, not this per-Task verification discipline.
 
 ## Validation Rules
 
@@ -158,14 +194,32 @@ actually run, with its result recorded as evidence.
 
 ## Failure Conditions
 
+- The given Spec identifier does not resolve to an existing Spec (in
+  either invocation form): report that the Spec was not found and do
+  not attempt to resolve or implement any Task.
+- A given Task ID does not exist within the named Spec's own Tasks
+  artifact — including when it exists only under a *different* Spec:
+  report the error and list the valid Task IDs for the named Spec,
+  without modifying any files and without falling back to all-tasks
+  mode.
+- The named Task's own dependencies are not all complete
+  (named-task mode): stop before implementing it and report which
+  prerequisite Task(s) are outstanding.
+- The named Task is already marked complete (named-task mode): report
+  that it is already done and take no further action unless the user
+  explicitly confirms they want it redone.
 - No Task is currently executable (all remaining Tasks have unmet
-  dependencies): stop and report which dependency is blocking.
+  dependencies): stop and report which dependency is blocking. In
+  all-tasks mode, this also ends the run — report every Task
+  successfully implemented earlier in the same run before stopping.
 - A Task's own stated scope turns out to be wrong or insufficient once
   attempted: stop, do not silently redefine the Task, and recommend
   revisiting the Plan (`/create-plan`) or the Tasks themselves
   (`/create-tasks`).
 - Verification fails: do not mark the Task complete; report the
-  failure's evidence.
+  failure's evidence. In all-tasks mode, stop the sequential run at
+  that point — do not continue to any further Task — and still report
+  which earlier Tasks in the same run completed successfully.
 
 ## Stop Conditions
 
@@ -185,8 +239,11 @@ if any, are now potentially executable.
 
 ## Idempotency
 
-Re-running this Skill selects the next executable Task — an already-
-complete Task with recorded evidence is not re-implemented.
+Re-running this Skill in all-tasks mode selects from the currently
+executable, not-yet-complete Tasks — an already-complete Task with
+recorded evidence is skipped, not re-implemented. Re-running in
+named-task mode against an already-complete Task reports it as done
+and takes no action, per Failure Conditions.
 
 ## Resume Behavior
 
@@ -200,8 +257,13 @@ Every invocation ends with a concise operational summary naming:
 
 Render this summary using structured formatting, not prose paragraphs: present **Artifacts** as a Markdown table when more than one artifact is involved (columns matching what's relevant — ID, path/type, and status or a one-line summary), or a single bullet when there is exactly one; present **Important findings** and **Attention** as bullet lists. This applies equally to a failure/stop report.
 
-- **Outcome** — Task completed and verified, or blocked.
-- **Artifacts** — the code files changed, and the Task's own ID.
+- **Outcome** — in named-task mode: the one Task completed and
+  verified, or blocked. In all-tasks mode: every Task implemented and
+  verified in this run, any Task skipped because it was already
+  complete, and whether the run ended because no further Task was
+  executable, a Task failed verification, or every Task in the Spec is
+  now complete.
+- **Artifacts** — the code files changed, and the Task ID(s) involved.
 - **Important findings** — what changed and why.
 - **Attention** — anything discovered that affects a later Task, Plan,
   or the Spec itself.
@@ -209,13 +271,27 @@ Render this summary using structured formatting, not prose paragraphs: present *
 
 ## Recommended Next Step
 
-If executable Tasks remain:
+Named-task mode, once the named Task is done and other Tasks remain:
+
+```text
+/implement SPEC-### TASK-NNN
+```
+
+naming the next eligible Task ID — or, to implement every remaining
+Task sequentially instead of naming them one at a time:
 
 ```text
 /implement SPEC-###
 ```
 
-Once every Task is complete:
+All-tasks mode, if it stopped early (blocked or failed) with executable
+Tasks still remaining once resolved:
+
+```text
+/implement SPEC-###
+```
+
+Once every Task in the Spec is complete:
 
 ```text
 /analyze SPEC-###
