@@ -206,7 +206,15 @@ Render this summary using structured formatting, not prose paragraphs: present *
 
 - **Outcome** — Tasks created or extended.
 - **Artifacts** — the Tasks file, with the count of Tasks added.
-- **Important findings** — how the Plan was decomposed, and why.
+- **Important findings** — how the Plan was decomposed, and why; plus,
+  covering the Tasks file's current full state (not only Tasks added in
+  this run): every dependency relationship between Tasks (e.g. "Task
+  TASK-004 depends on TASK-002"), and every group of Tasks with no
+  dependency between them, named explicitly as safe to implement in
+  parallel — useful to a team splitting work across people. If there is
+  nothing to report (a single Task, or every Task in one strict
+  sequential chain with no parallel opportunity), state that plainly
+  rather than omitting the topic.
 - **Attention** — any requirement not yet served by a Task.
 - **Recommended next step** — naming the exact next Skill invocation.
 

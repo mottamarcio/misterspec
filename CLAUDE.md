@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/026-implement-single-task/plan.md
+specs/027-constitution-frontmatter-task-deps/plan.md
 <!-- SPECKIT END -->

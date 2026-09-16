@@ -193,6 +193,29 @@ func TestSkillsContent_KnowledgeAndConstitution(t *testing.T) {
 	assertSkillConformant(t, "create-constitution")
 }
 
+// TestSkillsContent_ConstitutionFrontmatterDocumented is
+// specs/027-constitution-frontmatter-task-deps's own contract check: the
+// create-constitution Skill's Outputs section must explicitly document
+// the Constitution's own required frontmatter fields
+// (docs/architecture-specification.md §24), so a written Constitution's
+// frontmatter is not left to whichever model happens to include it.
+func TestSkillsContent_ConstitutionFrontmatterDocumented(t *testing.T) {
+	data, err := fs.ReadFile(kit.SkillsFS, "create-constitution/SKILL.md")
+	if err != nil {
+		t.Fatalf("reading kit/skills/create-constitution/SKILL.md: %v", err)
+	}
+	section := extractSection(string(data), "Outputs")
+	if section == "" {
+		t.Fatal("create-constitution: Outputs section is empty or missing")
+	}
+	if !strings.Contains(section, "type: constitution") {
+		t.Error("create-constitution: Outputs section does not document the required \"type: constitution\" frontmatter field")
+	}
+	if !strings.Contains(section, "schema_version") {
+		t.Error("create-constitution: Outputs section does not document the required \"schema_version\" frontmatter field")
+	}
+}
+
 func TestSkillsContent_ProgramFeatureSpecs(t *testing.T) {
 	assertSkillConformant(t, "create-program")
 	assertSkillConformant(t, "create-feature")
@@ -204,6 +227,28 @@ func TestSkillsContent_PlanTasksImplementAnalyze(t *testing.T) {
 	assertSkillConformant(t, "create-tasks")
 	assertSkillConformant(t, "implement")
 	assertSkillConformant(t, "analyze")
+}
+
+// TestSkillsContent_CreateTasksReportsDependenciesAndParallelism is
+// specs/027-constitution-frontmatter-task-deps's own contract check: the
+// create-tasks Skill's Completion Contract section must explicitly
+// mention Task dependency relationships and parallel-safe groups, not
+// leave that information implicit in tasks.md's own content.
+func TestSkillsContent_CreateTasksReportsDependenciesAndParallelism(t *testing.T) {
+	data, err := fs.ReadFile(kit.SkillsFS, "create-tasks/SKILL.md")
+	if err != nil {
+		t.Fatalf("reading kit/skills/create-tasks/SKILL.md: %v", err)
+	}
+	section := strings.ToLower(extractSection(string(data), "Completion Contract"))
+	if section == "" {
+		t.Fatal("create-tasks: Completion Contract section is empty or missing")
+	}
+	if !strings.Contains(section, "depend") {
+		t.Error("create-tasks: Completion Contract section does not mention Task dependency reporting")
+	}
+	if !strings.Contains(section, "parallel") {
+		t.Error("create-tasks: Completion Contract section does not mention parallel-safe Task reporting")
+	}
 }
 
 // TestSkillsContent_ImplementDualInvocation is specs/026-implement-single-task's
