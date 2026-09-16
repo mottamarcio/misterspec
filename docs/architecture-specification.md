@@ -51,15 +51,15 @@ MisterSpec consists of three operational layers:
 │                                                             │
 │ Claude Code / Codex / Gemini / Antigravity / ...           │
 │                                                             │
-│ /create-knowledge-base                                      │
-│ /create-constitution                                        │
-│ /create-program                                             │
-│ /create-feature                                             │
-│ /create-specs                                               │
-│ /create-plan                                                │
-│ /create-tasks                                               │
-│ /implement                                                  │
-│ /analyze                                                    │
+│ /mister-knowledge-base                                      │
+│ /mister-constitution                                        │
+│ /mister-program                                             │
+│ /mister-features                                             │
+│ /mister-specify                                               │
+│ /mister-plan                                                │
+│ /mister-tasks                                               │
+│ /mister-implement                                                  │
+│ /mister-analyze                                                    │
 └───────────────────────────┬─────────────────────────────────┘
                             │
                             │ semantic reasoning
@@ -1065,9 +1065,9 @@ The Constitution should remain concise enough to load frequently.
 `Quality Requirements` is the one section every project's Constitution
 always carries, regardless of what the project's own Knowledge base
 does or doesn't document: a fixed baseline requiring SOLID, DRY, KISS,
-and YAGNI, and test-first practice (TDD/BDD). `/create-constitution`
+and YAGNI, and test-first practice (TDD/BDD). `/mister-constitution`
 writes this baseline unconditionally, not distilled from Knowledge like
-every other section — see `kit/skills/create-constitution/SKILL.md`'s
+every other section — see `kit/skills/mister-constitution/SKILL.md`'s
 own Outputs for its exact text.
 
 ---
@@ -1651,15 +1651,15 @@ It should not contain filesystem business rules.
 MVP:
 
 ```text
-create-knowledge-base
-create-constitution
-create-program
-create-feature
-create-specs
-create-plan
-create-tasks
-implement
-analyze
+mister-knowledge-base
+mister-constitution
+mister-program
+mister-features
+mister-specify
+mister-plan
+mister-tasks
+mister-implement
+mister-analyze
 ```
 
 Canonical source:
@@ -1769,7 +1769,7 @@ The binary defines *how* it is performed.
 
 ---
 
-# 41. `/create-knowledge-base` Operation Contract
+# 41. `/mister-knowledge-base` Operation Contract
 
 Expected deterministic operations:
 
@@ -1794,7 +1794,7 @@ Semantic responsibilities remain with the agent:
 
 ---
 
-# 42. `/create-constitution` Operation Contract
+# 42. `/mister-constitution` Operation Contract
 
 Likely deterministic operations:
 
@@ -1816,7 +1816,7 @@ The Constitution itself does not need a generated entity ID.
 
 ---
 
-# 43. `/create-program` Operation Contract
+# 43. `/mister-program` Operation Contract
 
 Deterministic operations:
 
@@ -1838,7 +1838,7 @@ Semantic responsibilities:
 
 ---
 
-# 44. `/create-feature` Operation Contract
+# 44. `/mister-features` Operation Contract
 
 Deterministic operations:
 
@@ -1858,7 +1858,7 @@ Semantic responsibilities:
 
 ---
 
-# 45. `/create-specs` Operation Contract
+# 45. `/mister-specify` Operation Contract
 
 Deterministic operations:
 
@@ -1881,7 +1881,7 @@ Semantic responsibilities:
 
 ---
 
-# 46. `/create-plan` Operation Contract
+# 46. `/mister-plan` Operation Contract
 
 Deterministic operations:
 
@@ -1904,7 +1904,7 @@ Semantic responsibilities:
 
 ---
 
-# 47. `/create-tasks` Operation Contract
+# 47. `/mister-tasks` Operation Contract
 
 Deterministic operations:
 
@@ -1939,7 +1939,7 @@ Semantic responsibilities:
 
 ---
 
-# 48. `/implement` Operation Contract
+# 48. `/mister-implement` Operation Contract
 
 Deterministic operations:
 
@@ -1965,7 +1965,7 @@ Semantic responsibilities:
 
 ---
 
-# 49. `/analyze` Operation Contract
+# 49. `/mister-analyze` Operation Contract
 
 Deterministic operations:
 
@@ -2042,7 +2042,7 @@ Next step
 
 Create the project's primary memory and invariants:
 
-/create-constitution
+/mister-constitution
 ```
 
 ---
@@ -2052,23 +2052,23 @@ Create the project's primary memory and invariants:
 ```text
 Populate ai/raw/
        ↓
-/create-knowledge-base
+/mister-knowledge-base
        ↓
-/create-constitution
+/mister-constitution
        ↓
-/create-program
+/mister-program
        ↓
-/create-feature PRG-###
+/mister-features PRG-###
        ↓
-/create-specs FEAT-###
+/mister-specify FEAT-###
        ↓
-/create-plan SPEC-###
+/mister-plan SPEC-###
        ↓
-/create-tasks SPEC-###
+/mister-tasks SPEC-###
        ↓
-/implement SPEC-###
+/mister-implement SPEC-###
        ↓
-/analyze SPEC-###
+/mister-analyze SPEC-###
 ```
 
 This is the normal flow, not a mandatory linear state machine.
@@ -2079,22 +2079,22 @@ Skills must inspect current state.
 
 # 53. Next-Step Behavior for Branching Cases
 
-After `/create-feature`:
+After `/mister-features`:
 
 Primary recommendation:
 
 ```text
-/create-specs FEAT-001
+/mister-specify FEAT-001
 ```
 
 Possible secondary note:
 
 ```text
-You can continue decomposing PRG-001 with /create-feature PRG-001
+You can continue decomposing PRG-001 with /mister-features PRG-001
 before specifying this Feature.
 ```
 
-After failed `/analyze`:
+After failed `/mister-analyze`:
 
 Do not recommend a mechanically fixed command.
 
@@ -2110,7 +2110,7 @@ The Spec remains valid, but the implementation is incomplete.
 
 Run:
 
-/implement SPEC-014
+/mister-implement SPEC-014
 ```
 
 Or:
@@ -2120,7 +2120,7 @@ The current Plan cannot satisfy R4 without changing the public API.
 
 Review the implementation strategy:
 
-/create-plan SPEC-014
+/mister-plan SPEC-014
 ```
 
 ---
@@ -2161,7 +2161,7 @@ A Skill must not casually modify upstream artifacts.
 
 Examples:
 
-`/create-plan`:
+`/mister-plan`:
 
 ```text
 may modify plan.md
@@ -2169,7 +2169,7 @@ may modify plan.md
 must not rewrite spec.md
 ```
 
-`/create-tasks`:
+`/mister-tasks`:
 
 ```text
 may modify tasks.md
@@ -2177,7 +2177,7 @@ may modify tasks.md
 must not rewrite plan.md unless the user explicitly requests refinement
 ```
 
-`/implement`:
+`/mister-implement`:
 
 ```text
 may modify code
@@ -2187,7 +2187,7 @@ may update task completion/evidence
 must not rewrite Spec requirements
 ```
 
-`/analyze`:
+`/mister-analyze`:
 
 ```text
 may modify validation.md
@@ -2352,7 +2352,7 @@ The misterspec binary may deterministically:
 * calculate hashes;
 * inspect metadata such as path and size.
 
-If an agent cannot read a PDF, `/create-knowledge-base` must surface the source as unreadable rather than pretending it was processed.
+If an agent cannot read a PDF, `/mister-knowledge-base` must surface the source as unreadable rather than pretending it was processed.
 
 ---
 
@@ -2485,11 +2485,11 @@ the misterspec repository itself should run:
 ```text
 place PRD in ai/raw/
 ↓
-/create-knowledge-base
+/mister-knowledge-base
 ↓
-/create-constitution
+/mister-constitution
 ↓
-/create-program
+/mister-program
 ↓
 ...
 ```
@@ -2568,15 +2568,15 @@ success screen
 Write and test:
 
 ```text
-/create-knowledge-base
-/create-constitution
-/create-program
-/create-feature
-/create-specs
-/create-plan
-/create-tasks
-/implement
-/analyze
+/mister-knowledge-base
+/mister-constitution
+/mister-program
+/mister-features
+/mister-specify
+/mister-plan
+/mister-tasks
+/mister-implement
+/mister-analyze
 ```
 
 ## Phase 7 — Second Brain
@@ -2632,23 +2632,23 @@ The developer can then:
 ```text
 populate ai/raw/
 
-run /create-knowledge-base
+run /mister-knowledge-base
 
-run /create-constitution
+run /mister-constitution
 
-run /create-program
+run /mister-program
 
-run /create-feature
+run /mister-features
 
-run /create-specs
+run /mister-specify
 
-run /create-plan
+run /mister-plan
 
-run /create-tasks
+run /mister-tasks
 
-run /implement
+run /mister-implement
 
-run /analyze
+run /mister-analyze
 ```
 
 During this lifecycle:

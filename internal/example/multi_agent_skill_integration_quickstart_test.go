@@ -70,10 +70,10 @@ func TestMultiAgentSkillIntegrationQuickstart_EndToEnd(t *testing.T) {
 	// 4-5. The four updated Skills each request a Context Pack with
 	// their own correct intent (quickstart.md §4-5).
 	wantIntent := map[string]string{
-		"implement":    "implementation",
-		"create-plan":  "planning",
-		"create-tasks": "tasks",
-		"analyze":      "validation",
+		"mister-implement": "implementation",
+		"mister-plan":      "planning",
+		"mister-tasks":     "tasks",
+		"mister-analyze":   "validation",
 	}
 	for skill, intent := range wantIntent {
 		data, err := fs.ReadFile(kit.SkillsFS, skill+"/SKILL.md")

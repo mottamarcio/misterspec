@@ -41,6 +41,27 @@ func TestParseMetadata_WellFormed(t *testing.T) {
 	}
 }
 
+func TestParseMetadata_SchemaVersion(t *testing.T) {
+	root := testutil.Project(t)
+	path := testutil.WriteFile(t, root, "ai/memory/constitution.md", ""+
+		"---\n"+
+		"type: constitution\n"+
+		"schema_version: 1\n"+
+		"---\n"+
+		"# Project Constitution\n")
+
+	meta, err := artifacts.ParseMetadata(path)
+	if err != nil {
+		t.Fatalf("ParseMetadata() unexpected error: %v", err)
+	}
+	if meta.Type != "constitution" {
+		t.Errorf("meta.Type = %q, want %q", meta.Type, "constitution")
+	}
+	if meta.SchemaVersion != 1 {
+		t.Errorf("meta.SchemaVersion = %d, want 1", meta.SchemaVersion)
+	}
+}
+
 func TestParseMetadata_ArtifactNotFound(t *testing.T) {
 	root := testutil.Project(t)
 
