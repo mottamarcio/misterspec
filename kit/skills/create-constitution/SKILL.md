@@ -29,10 +29,22 @@ The project's full Knowledge base — every existing `KNOW-NNN` artifact.
 
 ## Outputs
 
-The project's Constitution (`ai/memory/constitution.md`), structured per
-its required schema: `Product Invariants`, `Architecture Invariants`,
-`Security Invariants`, `Data Invariants`, `Integration Invariants`,
-`Quality Requirements`, `Compatibility Requirements`.
+The project's Constitution (`ai/memory/constitution.md`), always opening
+with this required frontmatter block, written verbatim regardless of
+which model or agent integration is running this Skill
+(`docs/architecture-specification.md` §24):
+
+```yaml
+---
+type: constitution
+schema_version: 1
+---
+```
+
+Followed by the body, structured per its required schema:
+`Product Invariants`, `Architecture Invariants`, `Security Invariants`,
+`Data Invariants`, `Integration Invariants`, `Quality Requirements`,
+`Compatibility Requirements`.
 
 `Quality Requirements` always includes this fixed baseline, verbatim,
 regardless of what Knowledge does or doesn't say — it is written, not
@@ -116,7 +128,10 @@ Required operations:
 - `internal resolve KNOW-###` — confirm a Knowledge artifact's canonical
   location before citing it, rather than guessing its path.
 - `internal validate` — confirm the project's overall structure remains
-  valid after this invocation.
+  valid after this invocation; this now also structurally checks the
+  Constitution's own required frontmatter (`type`, `schema_version`),
+  independent of whatever the model actually wrote — no new operation,
+  an existing one made more complete.
 
 ## Procedure
 
@@ -129,11 +144,17 @@ Required operations:
    the seven required Constitution sections.
 4. Write or amend `ai/memory/constitution.md` directly (the Constitution
    has no independent entity ID and no `internal create` operation of
-   its own — §22). Ensure `Quality Requirements` contains the fixed
-   baseline from Outputs above, unconditionally — this step does not
-   depend on step 3 finding anything; append any Knowledge-derived
-   quality facts after it.
-5. Run `internal validate` once, at the end.
+   its own — §22). When creating the file for the first time, write the
+   required frontmatter block from Outputs first, before the body. When
+   amending an existing file, preserve its frontmatter unchanged if it
+   already contains both required fields; if either is missing, add it
+   without disturbing the rest of the frontmatter or the body. Ensure
+   `Quality Requirements` contains the fixed baseline from Outputs
+   above, unconditionally — this step does not depend on step 3 finding
+   anything; append any Knowledge-derived quality facts after it.
+5. Run `internal validate` once, at the end — this also structurally
+   checks the Constitution's own frontmatter; treat a reported finding
+   there the same as any other validation finding from this step.
 6. Report completion per the Completion Contract below.
 
 ## Decision Rules
@@ -158,10 +179,12 @@ the completion summary's Attention section instead.
 
 ## Validation Rules
 
-The Constitution must contain all seven required sections. It must not
-contain an entity ID or duplicate any specific fact verbatim from
-Knowledge — only the distilled invariant. `Quality Requirements` must
-contain the fixed baseline from Outputs.
+The Constitution must open with the required frontmatter (`type:
+constitution`, `schema_version`) from Outputs. It must contain all
+seven required sections. It must not contain an entity ID or duplicate
+any specific fact verbatim from Knowledge — only the distilled
+invariant. `Quality Requirements` must contain the fixed baseline from
+Outputs.
 
 ## Failure Conditions
 

@@ -21,6 +21,11 @@ type Metadata struct {
 	// (docs/architecture-specification.md §28-30), since those artifact
 	// types have no independent ID or `parent:` field of their own.
 	For *ids.EntityID
+	// SchemaVersion is populated from a `schema_version:` frontmatter
+	// key — required for the Constitution (docs/architecture-
+	// specification.md §24), which has no `id` field of its own to
+	// validate against. Zero means the field was absent.
+	SchemaVersion int
 }
 
 var (

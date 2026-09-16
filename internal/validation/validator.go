@@ -49,7 +49,44 @@ func ValidateProject(root string, cfg project.Configuration) ([]Finding, error) 
 		})
 	}
 
+	findings = append(findings, checkConstitution(root, cfg)...)
+
 	return findings, nil
+}
+
+// checkConstitution structurally checks the project's Constitution file
+// (docs/architecture-specification.md §24) — additive to, not folded
+// into, projectEntityTypes' own loop, since the Constitution has no
+// EntityType/ID of its own (027-constitution-frontmatter-task-deps,
+// research.md). A Constitution that does not exist yet is not a
+// structural problem (create-constitution/SKILL.md's own Preconditions
+// already allow first-run creation) — only a present-but-malformed or
+// present-but-incomplete one produces a Finding.
+func checkConstitution(root string, cfg project.Configuration) []Finding {
+	path := cfg.ConstitutionPath
+
+	meta, err := artifacts.ParseMetadata(filepath.Join(root, path))
+	if err != nil {
+		if errors.Is(err, artifacts.ErrArtifactNotFound) {
+			return nil
+		}
+		code := CodeFrontmatterMalformed
+		if errors.Is(err, artifacts.ErrRequiredFieldMissing) {
+			code = CodeRequiredFieldMissing
+		}
+		return []Finding{{Code: code, Severity: SeverityError, Path: path, Message: err.Error()}}
+	}
+
+	if meta.SchemaVersion == 0 {
+		return []Finding{{
+			Code:     CodeRequiredFieldMissing,
+			Severity: SeverityError,
+			Path:     path,
+			Message:  fmt.Sprintf("%s: field \"schema_version\" is required for type %q", path, meta.Type),
+		}}
+	}
+
+	return nil
 }
 
 func sortedNumbers(paths map[int][]string) []int {
