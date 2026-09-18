@@ -41,6 +41,56 @@ func TestCollect_TargetWithNoConnectionsStillReturnsMandatoryBaseline(t *testing
 	}
 }
 
+// TestCollect_CandidateLinesAreFileAbsoluteNotBodyRelative covers
+// 033-context-pack-output-contract research.md Decision 1: chunkArtifact
+// must add the frontmatter's own line offset to every Chunk's
+// StartLine/EndLine before building a Candidate — verified against a
+// fixture's own real, file-absolute line numbers, not the numbers
+// artifacts.ParseDocument would report relative to the post-frontmatter
+// body alone.
+func TestCollect_CandidateLinesAreFileAbsoluteNotBodyRelative(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md", ""+
+		"---\n"+ // file line 1
+		"id: KNOW-001\n"+ // file line 2
+		"type: knowledge\n"+ // file line 3
+		"status: active\n"+ // file line 4
+		"---\n"+ // file line 5
+		"## Summary\n"+ // file line 6 — body-relative line 1
+		"\n"+
+		"Some facts.\n"+ // file line 8
+		"\n"+
+		"## Details\n"+ // file line 10 — body-relative line 5
+		"\n"+
+		"More facts.\n") // file line 12
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	var summary, details *Candidate
+	for i := range set.Candidates {
+		switch set.Candidates[i].Heading {
+		case "Summary":
+			summary = &set.Candidates[i]
+		case "Details":
+			details = &set.Candidates[i]
+		}
+	}
+	if summary == nil || details == nil {
+		t.Fatalf("Candidates = %+v, want both a Summary and a Details heading", set.Candidates)
+	}
+	if summary.StartLine != 6 {
+		t.Errorf("Summary.StartLine = %d, want 6 (file-absolute) — got body-relative %d instead if this reads 1", summary.StartLine, summary.StartLine)
+	}
+	if details.StartLine != 10 {
+		t.Errorf("Details.StartLine = %d, want 10 (file-absolute) — got body-relative %d instead if this reads 5", details.StartLine, details.StartLine)
+	}
+}
+
 func TestCollect_NoConstitutionIsNotAnError(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()

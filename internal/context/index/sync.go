@@ -241,12 +241,23 @@ func indexOneArtifact(tx *sql.Tx, root string, cfg project.Configuration, relPat
 	if err != nil {
 		return err
 	}
-	body, err := artifacts.ReadBody(full)
+	body, bodyStartLine, err := artifacts.ReadBodyWithOffset(full)
 	if err != nil {
 		return err
 	}
+	offset := bodyStartLine - 1
 	doc := artifacts.ParseDocument(body)
 	chunks := artifacts.Chunks(relPath, doc)
+	for i := range chunks {
+		// File-absolute, not body-relative — the same fix
+		// internal/context/collector.go's chunkArtifact applies, needed
+		// here too so a chunk found both directly and via this index's
+		// own text search reports the identical (Path, StartLine,
+		// EndLine) identity and deduplicates correctly
+		// (033-context-pack-output-contract research.md Decision 1).
+		chunks[i].StartLine += offset
+		chunks[i].EndLine += offset
+	}
 
 	var artifactID sql.NullString
 	if meta.ID != nil {
