@@ -1662,6 +1662,14 @@ mister-implement
 mister-analyze
 ```
 
+Optional, downstream documentation (029-spec-wrap-up-docs) — not part
+of the required MVP pipeline above, usable at any point once a Spec
+has a Plan:
+
+```text
+mister-wrap-up
+```
+
 Canonical source:
 
 ```text
