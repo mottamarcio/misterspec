@@ -34,6 +34,8 @@ func classify(err error) (code string, exitCode int) {
 		return "entity_not_found", 3
 	case errors.Is(err, operations.ErrEntityAmbiguous):
 		return "entity_ambiguous", 3
+	case errors.Is(err, operations.ErrSpecContextRequired):
+		return "spec_context_required", 3
 	case errors.Is(err, operations.ErrInvalidTarget), errors.Is(err, validation.ErrInvalidTarget):
 		return "invalid_target", 2
 	case errors.Is(err, operations.ErrInvalidParent):

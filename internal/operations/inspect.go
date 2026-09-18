@@ -27,7 +27,17 @@ type InspectResult struct {
 // Supersedes are left empty, per research.md's Task metadata scope
 // decision.
 func Inspect(root string, cfg project.Configuration, rawID string) (InspectResult, error) {
-	loc, err := Resolve(root, cfg, rawID)
+	var loc ResolvedLocation
+	var err error
+	if strings.Contains(rawID, ":") {
+		// A composite Task reference ("SPEC-014:TASK-003") — Resolve's
+		// generic path never accepts this syntax (ids.ParseAny only
+		// parses a single-prefix ID), so it goes straight to ResolveTask
+		// (031-canonical-task-identity contracts/task-identity-resolution.md §2).
+		loc, err = ResolveTask(root, cfg, rawID, nil)
+	} else {
+		loc, err = Resolve(root, cfg, rawID)
+	}
 	if err != nil {
 		return InspectResult{}, err
 	}

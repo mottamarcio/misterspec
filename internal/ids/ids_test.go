@@ -5,7 +5,12 @@ import (
 	"testing"
 
 	"github.com/mottamarcio/misterspec/internal/ids"
+	"github.com/mottamarcio/misterspec/internal/project"
 )
+
+func taskRefTestConfig() project.Configuration {
+	return project.Configuration{IDWidth: 3}
+}
 
 func TestParse_Valid(t *testing.T) {
 	got, err := ids.Parse(ids.Spec, "SPEC-014", 3)
@@ -52,6 +57,80 @@ func TestNextID_EmptySlice(t *testing.T) {
 	want := ids.EntityID{Type: ids.Spec, Prefix: "SPEC", Number: 1, Width: 3}
 	if got != want {
 		t.Errorf("NextID(nil) = %+v, want %+v", got, want)
+	}
+}
+
+func TestTaskID_StringAndEquality(t *testing.T) {
+	spec := ids.EntityID{Type: ids.Spec, Prefix: "SPEC", Number: 14, Width: 3}
+	local := ids.EntityID{Type: ids.Task, Prefix: "TASK", Number: 3, Width: 3}
+	id := ids.TaskID{Spec: spec, Local: local}
+
+	if got, want := id.String(), "SPEC-014:TASK-003"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+
+	same := ids.TaskID{Spec: spec, Local: local}
+	if id != same {
+		t.Errorf("TaskID{%v} != TaskID{%v}, want equal", id, same)
+	}
+
+	otherSpec := ids.TaskID{Spec: ids.EntityID{Type: ids.Spec, Prefix: "SPEC", Number: 15, Width: 3}, Local: local}
+	if id == otherSpec {
+		t.Errorf("TaskID with different owning Specs compared equal: %v == %v", id, otherSpec)
+	}
+}
+
+func TestParseTaskRef_ValidComposite(t *testing.T) {
+	cfg := taskRefTestConfig()
+	got, err := ids.ParseTaskRef("SPEC-014:TASK-003", cfg)
+	if err != nil {
+		t.Fatalf("ParseTaskRef() unexpected error: %v", err)
+	}
+	want := ids.TaskID{
+		Spec:  ids.EntityID{Type: ids.Spec, Prefix: "SPEC", Number: 14, Width: 3},
+		Local: ids.EntityID{Type: ids.Task, Prefix: "TASK", Number: 3, Width: 3},
+	}
+	if got != want {
+		t.Errorf("ParseTaskRef() = %+v, want %+v", got, want)
+	}
+}
+
+func TestParseTaskRef_ValidBare(t *testing.T) {
+	cfg := taskRefTestConfig()
+	got, err := ids.ParseTaskRef("TASK-003", cfg)
+	if err != nil {
+		t.Fatalf("ParseTaskRef() unexpected error: %v", err)
+	}
+	if got.Spec.Number != 0 {
+		t.Errorf("ParseTaskRef() bare form Spec = %+v, want zero-value (no Spec half given)", got.Spec)
+	}
+	want := ids.EntityID{Type: ids.Task, Prefix: "TASK", Number: 3, Width: 3}
+	if got.Local != want {
+		t.Errorf("ParseTaskRef() Local = %+v, want %+v", got.Local, want)
+	}
+}
+
+func TestParseTaskRef_Invalid(t *testing.T) {
+	cfg := taskRefTestConfig()
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{"missing task half", "SPEC-014:"},
+		{"missing spec half", ":TASK-003"},
+		{"wrong separator", "SPEC-014-TASK-003"},
+		{"wrong ID width on spec half", "SPEC-14:TASK-003"},
+		{"wrong ID width on task half", "SPEC-014:TASK-3"},
+		{"wrong entity type in spec slot", "TASK-003:TASK-004"},
+		{"wrong entity type in task slot", "SPEC-014:SPEC-003"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ids.ParseTaskRef(tt.raw, cfg)
+			if !errors.Is(err, ids.ErrInvalidIDSyntax) {
+				t.Fatalf("ParseTaskRef(%q) error = %v, want errors.Is(err, ErrInvalidIDSyntax)", tt.raw, err)
+			}
+		})
 	}
 }
 

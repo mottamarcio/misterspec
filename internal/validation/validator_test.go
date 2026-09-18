@@ -1,6 +1,7 @@
 package validation_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mottamarcio/misterspec/internal/project"
@@ -232,20 +233,95 @@ func TestValidateProject_DuplicateIDAcrossPrograms(t *testing.T) {
 	}
 }
 
-func TestValidateProject_DuplicateTaskID(t *testing.T) {
+// TestValidateProject_SameTaskNumberAcrossDifferentSpecsIsNotADuplicate
+// covers 031-canonical-task-identity spec.md User Story 2: two different
+// Specs each legitimately numbering their first task TASK-001 is valid
+// per-Spec numbering, not a project-wide duplicate. (Prior to
+// 031-canonical-task-identity, this scenario was incorrectly flagged as
+// CodeDuplicateID — see that feature's research.md Decision 2.)
+func TestValidateProject_SameTaskNumberAcrossDifferentSpecsIsNotADuplicate(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()
 	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
-		"---\ntype: tasks\nfor: SPEC-001\n---\n# Tasks\n\n## TASK-001 — First\n\n- [ ] Complete\n")
+		"---\ntype: tasks\nfor: SPEC-001\n---\n# Tasks\n\n## TASK-001 — First in Spec 1\n\n- [ ] Complete\n")
 	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md",
-		"---\ntype: tasks\nfor: SPEC-002\n---\n# Tasks\n\n## TASK-001 — Also first, oops\n\n- [ ] Complete\n")
+		"---\ntype: tasks\nfor: SPEC-002\n---\n# Tasks\n\n## TASK-001 — First in Spec 2\n\n- [ ] Complete\n")
 
 	findings, err := validation.ValidateProject(root, cfg)
 	if err != nil {
 		t.Fatalf("ValidateProject() unexpected error: %v", err)
 	}
+	if containsCode(findings, validation.CodeDuplicateID) {
+		t.Errorf("ValidateProject() findings = %v, want no %q — different Specs sharing a Task number is valid", findingCodes(findings), validation.CodeDuplicateID)
+	}
+}
+
+// TestValidateProject_DuplicateTaskIDWithinSameSpec covers spec.md User
+// Story 2: two "## TASK-001" headings inside the same Spec's tasks.md
+// must still be flagged, scoped to that Spec.
+func TestValidateProject_DuplicateTaskIDWithinSameSpec(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"---\ntype: tasks\nfor: SPEC-001\n---\n# Tasks\n\n## TASK-001 — First\n\n- [ ] Complete\n\n## TASK-001 — Also first, oops\n\n- [ ] Complete\n")
+
+	findings, err := validation.ValidateProject(root, cfg)
+	if err != nil {
+		t.Fatalf("ValidateProject() unexpected error: %v", err)
+	}
+	var dupFindings []validation.Finding
+	for _, f := range findings {
+		if f.Code == validation.CodeDuplicateID {
+			dupFindings = append(dupFindings, f)
+		}
+	}
+	if len(dupFindings) != 1 {
+		t.Fatalf("ValidateProject() CodeDuplicateID findings = %+v, want exactly 1", dupFindings)
+	}
+	if !strings.Contains(dupFindings[0].Message, "SPEC-001") {
+		t.Errorf("ValidateProject() duplicate finding message = %q, want it to name SPEC-001", dupFindings[0].Message)
+	}
+}
+
+// TestValidateEntity_SpecScopedTaskDuplicate covers spec.md FR-011:
+// validating a single Spec must surface that Spec's own Task duplicate,
+// the same way project-wide validation would.
+func TestValidateEntity_SpecScopedTaskDuplicate(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md",
+		"---\nid: SPEC-001\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"---\ntype: tasks\nfor: SPEC-001\n---\n# Tasks\n\n## TASK-001 — First\n\n- [ ] Complete\n\n## TASK-001 — Also first, oops\n\n- [ ] Complete\n")
+
+	findings, err := validation.ValidateEntity(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("ValidateEntity() unexpected error: %v", err)
+	}
 	if !containsCode(findings, validation.CodeDuplicateID) {
-		t.Errorf("ValidateProject() findings = %v, want %q present for duplicate Task IDs", findingCodes(findings), validation.CodeDuplicateID)
+		t.Errorf("ValidateEntity() findings = %v, want %q present", findingCodes(findings), validation.CodeDuplicateID)
+	}
+}
+
+// TestValidateEntity_SpecScopedTaskDuplicate_DifferentSpecUnaffected
+// covers FR-011's negative case: a duplicate Task in another Spec must
+// not leak into a different Spec's own validation.
+func TestValidateEntity_SpecScopedTaskDuplicate_DifferentSpecUnaffected(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md",
+		"---\nid: SPEC-001\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"---\ntype: tasks\nfor: SPEC-001\n---\n# Tasks\n\n## TASK-001 — Only one\n\n- [ ] Complete\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md",
+		"---\ntype: tasks\nfor: SPEC-002\n---\n# Tasks\n\n## TASK-001 — First\n\n- [ ] Complete\n\n## TASK-001 — Also first, oops\n\n- [ ] Complete\n")
+
+	findings, err := validation.ValidateEntity(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("ValidateEntity() unexpected error: %v", err)
+	}
+	if containsCode(findings, validation.CodeDuplicateID) {
+		t.Errorf("ValidateEntity(SPEC-001) findings = %v, want no %q — the duplicate belongs to SPEC-002", findingCodes(findings), validation.CodeDuplicateID)
 	}
 }
 
