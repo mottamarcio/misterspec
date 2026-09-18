@@ -42,6 +42,7 @@ var knownInternalCommands = map[string]bool{
 	"resolve": true, "inspect": true, "parent": true, "children": true,
 	"create": true, "create-artifact": true, "fingerprint": true,
 	"inventory": true, "validate": true, "status": true, "context": true,
+	"commits-since-file": true,
 }
 
 // skillOperationsAllowlist is data-model.md's per-Skill operations
@@ -57,6 +58,7 @@ var skillOperationsAllowlist = map[string][]string{
 	"mister-tasks":          {"resolve", "inspect", "context", "create-artifact", "validate"},
 	"mister-implement":      {"resolve", "inspect", "context", "validate"},
 	"mister-analyze":        {"resolve", "inspect", "context", "create-artifact", "validate"},
+	"mister-wrap-up":        {"resolve", "inspect", "inventory", "context", "commits-since-file"},
 }
 
 // internalOpRe matches an inline-code-formatted operation mention, e.g.
@@ -229,6 +231,12 @@ func TestSkillsContent_PlanTasksImplementAnalyze(t *testing.T) {
 	assertSkillConformant(t, "mister-analyze")
 }
 
+// TestSkillsContent_WrapUp is 029-spec-wrap-up-docs's own structural
+// conformance check for the 10th canonical Skill.
+func TestSkillsContent_WrapUp(t *testing.T) {
+	assertSkillConformant(t, "mister-wrap-up")
+}
+
 // TestSkillsContent_CreateTasksReportsDependenciesAndParallelism is
 // specs/027-constitution-frontmatter-task-deps's own contract check: the
 // create-tasks Skill's Completion Contract section must explicitly
@@ -312,17 +320,20 @@ func TestSkillsContent_NoStaleSkillNameReferences(t *testing.T) {
 var canonicalSkillNames = []string{
 	"mister-knowledge-base", "mister-constitution", "mister-program",
 	"mister-features", "mister-specify", "mister-plan", "mister-tasks",
-	"mister-implement", "mister-analyze",
+	"mister-implement", "mister-analyze", "mister-wrap-up",
 }
 
-// TestSkillsContent_AllNineInstalled is this feature's whole-feature
-// check (plan.md Phase 6, T024): exactly §38's nine Skills exist under
-// kit.SkillsFS — no more, no fewer (catching a stray leftover file the
-// same way T008's README.md removal was meant to) — and installing them
-// for the real Claude Code adapter lands every one at
-// .claude/skills/<name>/SKILL.md, byte-identical to kit.SkillsFS's own
-// content (quickstart.md's validation strategy).
-func TestSkillsContent_AllNineInstalled(t *testing.T) {
+// TestSkillsContent_AllCanonicalSkillsInstalled is this feature's
+// whole-feature check (plan.md Phase 6, T024; renamed by
+// 029-spec-wrap-up-docs from its original "AllNineInstalled" once a
+// 10th canonical Skill, mister-wrap-up, made that count stale):
+// exactly §38's canonical Skills exist under kit.SkillsFS — no more,
+// no fewer (catching a stray leftover file the same way T008's
+// README.md removal was meant to) — and installing them for the real
+// Claude Code adapter lands every one at .claude/skills/<name>/SKILL.md,
+// byte-identical to kit.SkillsFS's own content (quickstart.md's
+// validation strategy).
+func TestSkillsContent_AllCanonicalSkillsInstalled(t *testing.T) {
 	entries, err := fs.ReadDir(kit.SkillsFS, ".")
 	if err != nil {
 		t.Fatalf("reading kit.SkillsFS root: %v", err)
