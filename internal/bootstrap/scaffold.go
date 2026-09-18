@@ -62,7 +62,7 @@ func scaffoldDirectories(targetDir string) ([]string, error) {
 			continue
 		}
 
-		if err := installer.WriteAtomicFile(filepath.Join(abs, gitkeepFilename), nil); err != nil {
+		if err := installer.WriteAtomicFile(filepath.Join(abs, gitkeepFilename), nil, installer.DefaultFileMode); err != nil {
 			return nil, err
 		}
 	}

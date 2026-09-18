@@ -77,16 +77,23 @@
       command this feature (and its later additions) registered.</p>
       <p><strong>Example</strong> — the public surface stays minimal;
       <code>internal</code> is hidden but still fully callable by name:</p>
-      <pre><code>misterspec --help          # shows only "init"
+      <pre><code>misterspec --help          # shows only "init", "--version", "--update"
 misterspec internal status  # still works — just not advertised</code></pre>
+      <p>
+        (Specs 001–010 shipped as the framework's original MVP; the
+        public surface has grown once since, deliberately, when
+        Spec 030 added <code>--version</code> and <code>--update</code>
+        — see the <a href="commands.html">Command Reference</a>.)
+      </p>
 
       <h2 id="canonical-skills">009 · Canonical Skills Content</h2>
-      <p><strong>What it is:</strong> The nine <code>kit/skills/&lt;name&gt;/SKILL.md</code>
+      <p><strong>What it is:</strong> The ten <code>kit/skills/&lt;name&gt;/SKILL.md</code>
       files — <code>mister-knowledge-base</code>,
       <code>mister-constitution</code>, <code>mister-program</code>,
       <code>mister-features</code>, <code>mister-specify</code>,
       <code>mister-plan</code>, <code>mister-tasks</code>,
-      <code>mister-implement</code>, <code>mister-analyze</code>.</p>
+      <code>mister-implement</code>, <code>mister-analyze</code>, and
+      (added by Spec 029) <code>mister-wrap-up</code>.</p>
       <p><strong>Why it exists:</strong> This is the actual content a
       coding agent reads and follows — see the full
       <a href="workflow.html">Spec-Driven Workflow</a> for what each
@@ -97,7 +104,7 @@ misterspec internal status  # still works — just not advertised</code></pre>
       subdirectory — fixed here, backward-compatible.</p>
       <p><strong>Example</strong> — every Skill's own frontmatter shape:</p>
       <pre><code>---
-name: implement
+name: mister-implement
 description: Implement one executable Task against the real codebase, then verify it.
 ---</code></pre>
 

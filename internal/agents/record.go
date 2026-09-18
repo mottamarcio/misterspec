@@ -6,17 +6,24 @@ import (
 	"path/filepath"
 
 	"github.com/mottamarcio/misterspec/internal/installer"
+	"github.com/mottamarcio/misterspec/internal/selfupdate"
 )
 
 // SchemaVersion is install.json's schema version
 // (docs/architecture-specification.md §22).
 const SchemaVersion = 1
 
-// FrameworkVersion is this build's misterspec version — hardcoded to the
-// MVP target release named at the top of
-// docs/architecture-specification.md; no version-detection machinery
-// exists yet to derive it otherwise (research.md).
-const FrameworkVersion = "0.1.0"
+// FrameworkVersion returns this build's misterspec version — the
+// same build-time-embedded value "misterspec --version" reports
+// (internal/selfupdate.Report()), or "development build" for a build
+// with no embedded version. Previously a hardcoded "0.1.0" constant with
+// no version-detection machinery to derive it otherwise (pre-030); now
+// that internal/selfupdate.Version exists, install.json's own
+// misterspec_version field reflects the actual running binary instead
+// of a permanently stale literal (specs/030-cli-version-update).
+func FrameworkVersion() string {
+	return selfupdate.Report()
+}
 
 // InstallRecord mirrors docs/architecture-specification.md §22's
 // install.json schema exactly. It is explicitly non-authoritative
@@ -45,7 +52,7 @@ const installRecordPath = ".misterspec/install.json"
 func RecordInstall(projectRoot string, result InstallResult) error {
 	record := InstallRecord{
 		SchemaVersion:     SchemaVersion,
-		MisterspecVersion: FrameworkVersion,
+		MisterspecVersion: FrameworkVersion(),
 	}
 	record.Agent.ID = result.AdapterID
 	record.Agent.IntegrationPath = result.IntegrationPath
@@ -55,7 +62,7 @@ func RecordInstall(projectRoot string, result InstallResult) error {
 		return err
 	}
 
-	return installer.WriteAtomicFile(filepath.Join(projectRoot, installRecordPath), data)
+	return installer.WriteAtomicFile(filepath.Join(projectRoot, installRecordPath), data, installer.DefaultFileMode)
 }
 
 // CurrentInstall reads a project's installation record. It returns

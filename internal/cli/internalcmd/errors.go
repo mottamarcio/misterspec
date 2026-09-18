@@ -2,12 +2,14 @@ package internalcmd
 
 import (
 	"errors"
+	"os"
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
 	contextengine "github.com/mottamarcio/misterspec/internal/context"
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/project"
+	"github.com/mottamarcio/misterspec/internal/selfupdate"
 	"github.com/mottamarcio/misterspec/internal/validation"
 )
 
@@ -50,6 +52,14 @@ func classify(err error) (code string, exitCode int) {
 		return "already_initialized", 5
 	case errors.Is(err, bootstrap.ErrUnknownAgent):
 		return "unknown_agent", 5
+	case errors.Is(err, selfupdate.ErrChecksumMismatch):
+		return "checksum_mismatch", 7
+	case errors.Is(err, selfupdate.ErrReleaseCheckFailed):
+		return "release_check_failed", 8
+	case errors.Is(err, selfupdate.ErrNoCompatibleAsset):
+		return "no_compatible_asset", 8
+	case errors.Is(err, os.ErrPermission):
+		return "permission_denied", 9
 	default:
 		return "unexpected_failure", 1
 	}
