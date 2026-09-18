@@ -83,6 +83,37 @@ func TestInspect_TaskNarrowedMetadata(t *testing.T) {
 	}
 }
 
+// TestInspect_CompositeTaskReferenceScopedToOwningSpec covers spec.md
+// User Story 1: Inspect(SPEC-A:TASK-001) must return Spec A's own task,
+// even though Spec B has an unrelated TASK-001 of its own.
+func TestInspect_CompositeTaskReferenceScopedToOwningSpec(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"---\ntype: tasks\nfor: SPEC-001\n---\n# Tasks\n\n## TASK-001 — Spec 1's task\n\n- [ ] Complete\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md",
+		"---\ntype: tasks\nfor: SPEC-002\n---\n# Tasks\n\n## TASK-001 — Spec 2's task\n\n- [x] Complete\n")
+
+	resultA, err := operations.Inspect(root, cfg, "SPEC-001:TASK-001")
+	if err != nil {
+		t.Fatalf("Inspect(SPEC-001:TASK-001) unexpected error: %v", err)
+	}
+	if resultA.Metadata.Status != "pending" {
+		t.Errorf("Inspect(SPEC-001:TASK-001) Status = %q, want %q", resultA.Metadata.Status, "pending")
+	}
+	if resultA.Metadata.Parent == nil || resultA.Metadata.Parent.String() != "SPEC-001" {
+		t.Errorf("Inspect(SPEC-001:TASK-001) Parent = %v, want SPEC-001", resultA.Metadata.Parent)
+	}
+
+	resultB, err := operations.Inspect(root, cfg, "SPEC-002:TASK-001")
+	if err != nil {
+		t.Fatalf("Inspect(SPEC-002:TASK-001) unexpected error: %v", err)
+	}
+	if resultB.Metadata.Status != "complete" {
+		t.Errorf("Inspect(SPEC-002:TASK-001) Status = %q, want %q", resultB.Metadata.Status, "complete")
+	}
+}
+
 func TestInspect_InvalidTarget(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()

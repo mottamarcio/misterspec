@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/030-cli-version-update/plan.md
+specs/031-canonical-task-identity/plan.md
 <!-- SPECKIT END -->

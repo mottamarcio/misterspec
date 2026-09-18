@@ -189,19 +189,39 @@ func scanFlatFiles(root, dir string, t EntityType) (map[int][]string, error) {
 	return claims, nil
 }
 
-// scanTaskHeadings globs pattern (relative to root) for tasks.md files and
+// taskClaim is one "## TASK-NNN" heading found while scanning tasks.md
+// files, tagged with the Spec number of the tasks.md file it came from —
+// the single shared low-level scan every Task-identity view in this
+// package (scanTaskHeadings's project-wide map, and ScanTasks's
+// per-Spec/cross-Spec views) is built from
+// (031-canonical-task-identity/research.md Decision 2, FR-005).
+type taskClaim struct {
+	Spec int
+	Task int
+	Path string // "<tasks.md path>#TASK-NNN"
+}
+
+// scanTaskClaims globs pattern (relative to root) for tasks.md files and
 // parses their "## TASK-NNN — ..." headings (docs/architecture-specification.md
-// §29), returning a map of number -> claiming "path#TASK-NNN" references.
-// Unlike other entity types, Task IDs are declared inside a shared file
-// rather than named by their own directory or filename.
-func scanTaskHeadings(root, pattern string) (map[int][]string, error) {
+// §29), tagging each with the owning Spec's number (parsed from the
+// tasks.md file's own "SPEC-###" parent directory, the same convention
+// scanDirs already uses via idDirPattern). A tasks.md whose parent
+// directory does not match the canonical "SPEC-###" shape is skipped —
+// it cannot be attributed to an owning Spec, mirroring how scanDirs
+// silently skips a malformed entity directory name.
+func scanTaskClaims(root, pattern string) ([]taskClaim, error) {
 	matches, err := filepath.Glob(filepath.Join(root, pattern))
 	if err != nil {
 		return nil, err
 	}
 
-	claims := map[int][]string{}
+	var claims []taskClaim
 	for _, m := range matches {
+		specNumber, ok := specNumberFromTasksPath(m)
+		if !ok {
+			continue
+		}
+
 		rel, err := filepath.Rel(root, m)
 		if err != nil {
 			continue
@@ -223,7 +243,11 @@ func scanTaskHeadings(root, pattern string) (map[int][]string, error) {
 			if err != nil || number < 1 {
 				continue
 			}
-			claims[number] = append(claims[number], fmt.Sprintf("%s#%s", rel, sub[1]))
+			claims = append(claims, taskClaim{
+				Spec: specNumber,
+				Task: number,
+				Path: fmt.Sprintf("%s#%s", rel, sub[1]),
+			})
 		}
 		scanErr := scanner.Err()
 		f.Close()
@@ -232,4 +256,154 @@ func scanTaskHeadings(root, pattern string) (map[int][]string, error) {
 		}
 	}
 	return claims, nil
+}
+
+// specNumberFromTasksPath extracts the Spec number from a tasks.md
+// absolute path's parent directory (e.g.
+// ".../specs/SPEC-014/tasks.md" -> 14, true), or (0, false) if that
+// directory does not match the canonical "SPEC-###" shape.
+func specNumberFromTasksPath(taskFilePath string) (int, bool) {
+	base := filepath.Base(filepath.Dir(taskFilePath))
+	sub := idDirPattern.FindStringSubmatch(base)
+	if sub == nil || sub[1] != Spec.Prefix() {
+		return 0, false
+	}
+	number, err := strconv.Atoi(sub[2])
+	if err != nil || number < 1 {
+		return 0, false
+	}
+	return number, true
+}
+
+// scanTaskHeadings returns a map of number -> claiming "path#TASK-NNN"
+// references, project-wide across every Spec — the same shape and
+// cross-Spec-merging behavior Scan(..., Task) has always had, preserved
+// here for callers (operations.Status, generic Scan) that only need a
+// raw count/enumeration of every Task heading and do not need per-Spec
+// scoping (031-canonical-task-identity/research.md Decision 2 — this is
+// a view built on scanTaskClaims, not a second parser). Callers that
+// need per-Spec duplicate detection or cross-Spec collision detection
+// use ScanTasks instead.
+func scanTaskHeadings(root, pattern string) (map[int][]string, error) {
+	claims, err := scanTaskClaims(root, pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	byNumber := map[int][]string{}
+	for _, c := range claims {
+		byNumber[c.Task] = append(byNumber[c.Task], c.Path)
+	}
+	return byNumber, nil
+}
+
+// TaskScanEntry is one Task heading found while scanning the project,
+// tagged with the Spec that owns it
+// (031-canonical-task-identity/data-model.md "TaskScanEntry").
+type TaskScanEntry struct {
+	Spec int
+	Task int
+	Path string
+}
+
+// TaskDuplicate is more than one "## TASK-NNN" heading with the same
+// number inside the *same* Spec's tasks.md — a genuine identity
+// collision (spec FR-004), distinct from TaskCollision below.
+type TaskDuplicate struct {
+	Spec  int
+	Task  int
+	Paths []string // sorted, length > 1
+}
+
+// TaskCollision is a Task number claimed by more than one Spec
+// project-wide — expected, valid state under the per-Spec identity model
+// (spec FR-001, User Story 1), never a duplicate. It is what a bare
+// "TASK-NNN" reference with no Spec context collides against (spec
+// FR-003) and what the migration diagnostic reports (spec FR-008).
+type TaskCollision struct {
+	Task  int
+	Specs []int    // sorted, length > 1
+	Paths []string // one entry per (Spec, first claiming path), aligned with Specs
+}
+
+// TaskScanResult is ScanTasks's result: every Task heading found, plus
+// the two derived views every Task-identity consumer in this project
+// needs (031-canonical-task-identity/research.md Decision 2).
+type TaskScanResult struct {
+	Entries    []TaskScanEntry
+	Duplicates []TaskDuplicate
+	Collisions []TaskCollision
+	// BySpec maps Spec number -> Task number -> claiming paths, for
+	// resolving a Task within a known owning Spec.
+	BySpec map[int]map[int][]string
+	// ByNumber maps Task number -> Spec number -> claiming paths, for
+	// resolving a bare Task reference with no Spec context.
+	ByNumber map[int]map[int][]string
+}
+
+// ScanTasks scans every tasks.md in the project (the same underlying
+// scanTaskClaims pass scanTaskHeadings uses) and returns the per-Spec and
+// cross-Spec views needed to resolve a Task unambiguously and to detect
+// duplicates scoped to the correct Spec
+// (031-canonical-task-identity/data-model.md "TaskScanEntry").
+func ScanTasks(root string, cfg project.Configuration) (TaskScanResult, error) {
+	pattern := filepath.Join(cfg.ProgramsRoot, "*", "features", "*", "specs", "*", "tasks.md")
+	claims, err := scanTaskClaims(root, pattern)
+	if err != nil {
+		return TaskScanResult{}, err
+	}
+
+	result := TaskScanResult{
+		BySpec:   map[int]map[int][]string{},
+		ByNumber: map[int]map[int][]string{},
+	}
+	for _, c := range claims {
+		result.Entries = append(result.Entries, TaskScanEntry(c))
+
+		if result.BySpec[c.Spec] == nil {
+			result.BySpec[c.Spec] = map[int][]string{}
+		}
+		result.BySpec[c.Spec][c.Task] = append(result.BySpec[c.Spec][c.Task], c.Path)
+
+		if result.ByNumber[c.Task] == nil {
+			result.ByNumber[c.Task] = map[int][]string{}
+		}
+		result.ByNumber[c.Task][c.Spec] = append(result.ByNumber[c.Task][c.Spec], c.Path)
+	}
+
+	for specNum, byTask := range result.BySpec {
+		for taskNum, paths := range byTask {
+			if len(paths) < 2 {
+				continue
+			}
+			sorted := append([]string(nil), paths...)
+			sort.Strings(sorted)
+			result.Duplicates = append(result.Duplicates, TaskDuplicate{Spec: specNum, Task: taskNum, Paths: sorted})
+		}
+	}
+	sort.Slice(result.Duplicates, func(i, j int) bool {
+		if result.Duplicates[i].Spec != result.Duplicates[j].Spec {
+			return result.Duplicates[i].Spec < result.Duplicates[j].Spec
+		}
+		return result.Duplicates[i].Task < result.Duplicates[j].Task
+	})
+
+	for taskNum, bySpec := range result.ByNumber {
+		if len(bySpec) < 2 {
+			continue
+		}
+		specs := make([]int, 0, len(bySpec))
+		for s := range bySpec {
+			specs = append(specs, s)
+		}
+		sort.Ints(specs)
+		var paths []string
+		for _, s := range specs {
+			paths = append(paths, bySpec[s]...)
+		}
+		result.Collisions = append(result.Collisions, TaskCollision{Task: taskNum, Specs: specs, Paths: paths})
+	}
+	sort.Slice(result.Collisions, func(i, j int) bool { return result.Collisions[i].Task < result.Collisions[j].Task })
+
+	return result, nil
 }

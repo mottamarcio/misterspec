@@ -792,7 +792,7 @@ The deterministic validator shall detect at least:
 * invalid supersedes references;
 * broken artifact links where deterministically detectable;
 * duplicate requirement markers inside one Spec;
-* duplicate Task IDs;
+* duplicate Task IDs within the same Spec's Tasks artifact (Task numbering is scoped per Spec — the same `TASK-NNN` number legitimately appears in more than one Spec, see 031-canonical-task-identity);
 * Task references to nonexistent requirements;
 * missing Plan where Spec state requires a Plan;
 * missing Tasks where Spec state requires Tasks;

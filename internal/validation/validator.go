@@ -36,17 +36,12 @@ func ValidateProject(root string, cfg project.Configuration) ([]Finding, error) 
 		}
 	}
 
-	taskResult, err := ids.Scan(root, cfg, ids.Task)
+	taskScan, err := ids.ScanTasks(root, cfg)
 	if err != nil {
 		return nil, err
 	}
-	for _, dup := range taskResult.Duplicates {
-		findings = append(findings, Finding{
-			Code:     CodeDuplicateID,
-			Severity: SeverityError,
-			Path:     dup.Paths[0],
-			Message:  fmt.Sprintf("%d Task headings claim the same number %d: %v", len(dup.Paths), dup.ID.Number, dup.Paths),
-		})
+	for _, dup := range taskScan.Duplicates {
+		findings = append(findings, taskDuplicateFinding(dup, cfg))
 	}
 
 	findings = append(findings, checkConstitution(root, cfg)...)
@@ -87,6 +82,23 @@ func checkConstitution(root string, cfg project.Configuration) []Finding {
 	}
 
 	return nil
+}
+
+// taskDuplicateFinding renders one ids.TaskDuplicate (already scoped to
+// a single Spec by ids.ScanTasks) as a Finding naming that Spec
+// explicitly, so the scope is legible without cross-referencing the path
+// (031-canonical-task-identity spec.md FR-004,
+// contracts/task-identity-resolution.md §3). Shared by ValidateProject
+// and ValidateEntity so a duplicate's wording never drifts between the
+// two call sites.
+func taskDuplicateFinding(dup ids.TaskDuplicate, cfg project.Configuration) Finding {
+	spec := ids.EntityID{Type: ids.Spec, Prefix: ids.Spec.Prefix(), Number: dup.Spec, Width: cfg.IDWidth}
+	return Finding{
+		Code:     CodeDuplicateID,
+		Severity: SeverityError,
+		Path:     dup.Paths[0],
+		Message:  fmt.Sprintf("%s: %d Task headings claim the same number %d: %v", spec, len(dup.Paths), dup.Task, dup.Paths),
+	}
 }
 
 func sortedNumbers(paths map[int][]string) []int {
@@ -156,7 +168,25 @@ func ValidateEntity(root string, cfg project.Configuration, rawID string) ([]Fin
 		return nil, err
 	}
 
-	return validateFoundEntity(root, cfg, id.Type, id.Number, scanResult.Paths[id.Number]), nil
+	findings := validateFoundEntity(root, cfg, id.Type, id.Number, scanResult.Paths[id.Number])
+
+	if id.Type == ids.Spec {
+		// A single-Spec validation MUST surface that Spec's own Task
+		// duplicates the same way ValidateProject would (spec FR-011) —
+		// scoped to id.Number only, never another Spec's duplicates.
+		taskScan, err := ids.ScanTasks(root, cfg)
+		if err != nil {
+			return nil, err
+		}
+		for _, dup := range taskScan.Duplicates {
+			if dup.Spec != id.Number {
+				continue
+			}
+			findings = append(findings, taskDuplicateFinding(dup, cfg))
+		}
+	}
+
+	return findings, nil
 }
 
 // validateFoundEntity runs checks against whatever ids.Scan found for

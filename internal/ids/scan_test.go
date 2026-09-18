@@ -206,3 +206,89 @@ func TestScan_TaskHeadingsInsideTasksFiles(t *testing.T) {
 		t.Fatalf("Scan() found %d task IDs, want 2: %+v", len(result.IDs), result.IDs)
 	}
 }
+
+// TestScanTasks_DifferentSpecsSharingANumberAreNotDuplicates covers
+// 031-canonical-task-identity spec.md User Story 1/2: two Specs each
+// legitimately numbering their first task TASK-001 must produce two
+// separate entries and zero Duplicates — only a Collision (research.md
+// Decision 2).
+func TestScanTasks_DifferentSpecsSharingANumberAreNotDuplicates(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 1\n\n- [ ] Complete\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 2\n\n- [ ] Complete\n")
+
+	result, err := ids.ScanTasks(root, cfg)
+	if err != nil {
+		t.Fatalf("ScanTasks() unexpected error: %v", err)
+	}
+	if len(result.Entries) != 2 {
+		t.Fatalf("ScanTasks() Entries = %+v, want 2 entries", result.Entries)
+	}
+	if len(result.Duplicates) != 0 {
+		t.Errorf("ScanTasks() Duplicates = %+v, want none — different Specs sharing a number is not a duplicate", result.Duplicates)
+	}
+	if len(result.Collisions) != 1 {
+		t.Fatalf("ScanTasks() Collisions = %+v, want exactly 1", result.Collisions)
+	}
+	if got := result.Collisions[0].Specs; len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Errorf("ScanTasks() Collisions[0].Specs = %v, want [1 2]", got)
+	}
+}
+
+// TestScanTasks_SameSpecRepeatedHeadingIsADuplicate covers spec.md User
+// Story 2: two "## TASK-001" headings inside the same Spec's tasks.md
+// must be flagged, scoped to that Spec.
+func TestScanTasks_SameSpecRepeatedHeadingIsADuplicate(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-001 — First\n\n- [ ] Complete\n\n## TASK-001 — Also first, oops\n\n- [ ] Complete\n")
+
+	result, err := ids.ScanTasks(root, cfg)
+	if err != nil {
+		t.Fatalf("ScanTasks() unexpected error: %v", err)
+	}
+	if len(result.Duplicates) != 1 {
+		t.Fatalf("ScanTasks() Duplicates = %+v, want exactly 1", result.Duplicates)
+	}
+	dup := result.Duplicates[0]
+	if dup.Spec != 1 || dup.Task != 1 {
+		t.Errorf("ScanTasks() Duplicates[0] = %+v, want Spec=1 Task=1", dup)
+	}
+	if len(dup.Paths) != 2 {
+		t.Errorf("ScanTasks() Duplicates[0].Paths = %v, want 2 entries", dup.Paths)
+	}
+	if len(result.Collisions) != 0 {
+		t.Errorf("ScanTasks() Collisions = %+v, want none for a single-Spec duplicate", result.Collisions)
+	}
+}
+
+// TestScanTasks_UniqueAcrossProjectIsNeitherDuplicateNorCollision covers
+// spec.md FR-009: a Task number claimed by exactly one Spec, project-wide,
+// produces neither a Duplicate nor a Collision.
+func TestScanTasks_UniqueAcrossProjectIsNeitherDuplicateNorCollision(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-001 — Only one\n\n- [ ] Complete\n")
+
+	result, err := ids.ScanTasks(root, cfg)
+	if err != nil {
+		t.Fatalf("ScanTasks() unexpected error: %v", err)
+	}
+	if len(result.Duplicates) != 0 || len(result.Collisions) != 0 {
+		t.Errorf("ScanTasks() Duplicates=%+v Collisions=%+v, want both empty", result.Duplicates, result.Collisions)
+	}
+	if got := result.BySpec[1][1]; len(got) != 1 {
+		t.Errorf("ScanTasks() BySpec[1][1] = %v, want exactly 1 path", got)
+	}
+	if got := result.ByNumber[1][1]; len(got) != 1 {
+		t.Errorf("ScanTasks() ByNumber[1][1] = %v, want exactly 1 path", got)
+	}
+}

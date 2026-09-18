@@ -32,6 +32,7 @@ func newInternalCmd() *cobra.Command {
 		internalcmd.NewBacklinksCmd(),
 		internalcmd.NewContextCmd(),
 		internalcmd.NewCommitsSinceFileCmd(),
+		internalcmd.NewMigrationCheckTasksCmd(),
 	)
 	return cmd
 }

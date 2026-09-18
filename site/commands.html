@@ -68,6 +68,21 @@
       <p><strong>Purpose:</strong> Return deterministic metadata for an artifact.</p>
       <pre><code>misterspec internal inspect SPEC-014
 {"ok":true,"entity":{"id":"SPEC-014","type":"spec","status":"ready","parent":"FEAT-004","depends_on":["SPEC-011"],"supersedes":[]}}</code></pre>
+      <p>
+        A Task number is only unique <em>within</em> its owning Spec —
+        two different Specs may each have their own <code>TASK-001</code>.
+        To name a Task unambiguously from outside its own Spec, use the
+        composite form <code>SPEC-###:TASK-###</code>:
+      </p>
+      <pre><code>misterspec internal inspect SPEC-014:TASK-003
+{"ok":true,"entity":{"id":"TASK-003","type":"tasks","status":"pending","parent":"SPEC-014","depends_on":[],"supersedes":[]}}</code></pre>
+      <p>
+        A bare <code>TASK-###</code> (no Spec given) still resolves when
+        exactly one Spec in the project claims that number. When more
+        than one Spec claims it, the command fails with
+        <code>spec_context_required</code> instead of guessing — retry
+        with the composite form.
+      </p>
 
       <h2 id="internal-parent">internal parent &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return the structural parent.</p>
@@ -106,6 +121,17 @@
       <p><strong>Purpose:</strong> Run structural validation — one entity if an ID is given, the whole project otherwise.</p>
       <pre><code>misterspec internal validate SPEC-014
 {"ok":true,"valid":true,"findings":[]}</code></pre>
+      <p>
+        Duplicate Task IDs are flagged only <em>within</em> the same
+        Spec's Tasks artifact — two different Specs legitimately sharing
+        a <code>TASK-NNN</code> number is not reported as a duplicate.
+      </p>
+
+      <h2 id="internal-migration-check-tasks">internal migration-check-tasks</h2>
+      <p><strong>Purpose:</strong> Read-only diagnostic listing every Task number claimed by more than one Spec project-wide — the cases that would have collided under the old, project-wide Task numbering. Never modifies any artifact.</p>
+      <pre><code>misterspec internal migration-check-tasks
+{"ok":true,"collisions":[{"task_number":1,"specs":["SPEC-001","SPEC-002"],"paths":["ai/.../SPEC-001/tasks.md#TASK-001","ai/.../SPEC-002/tasks.md#TASK-001"]}]}</code></pre>
+      <p>An empty <code>collisions</code> array is the common, healthy outcome — it is not an error.</p>
 
       <h2 id="internal-status">internal status</h2>
       <p><strong>Purpose:</strong> Return a machine-facing structural status summary for the whole project.</p>
@@ -156,6 +182,7 @@
           <tbody class="divide-y divide-slate-200">
             <tr><td class="px-4 py-2"><code>entity_not_found</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">The ID doesn't resolve to any artifact.</td></tr>
             <tr><td class="px-4 py-2"><code>entity_ambiguous</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">The ID resolves to more than one artifact.</td></tr>
+            <tr><td class="px-4 py-2"><code>spec_context_required</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">A bare <code>TASK-###</code> is claimed by more than one Spec — retry as <code>SPEC-###:TASK-###</code>.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_target</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Wrong entity type for this operation.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_argument</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">A CLI-boundary problem (bad flag value, unrecognized type/kind).</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_intent</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --intent</code> value not recognized.</td></tr>
