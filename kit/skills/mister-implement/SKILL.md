@@ -115,12 +115,20 @@ normal coding capabilities.
 
 Required operations:
 
-- `internal resolve SPEC-###` — confirm the Spec exists and locate its
-  canonical file.
-- `internal inspect SPEC-###` — read the Spec's requirements the
-  selected Task serves.
+- `internal prepare SPEC-### [--task TASK-NNN]` — the single deterministic
+  call that now performs resolution, readiness/dependency checking, and
+  Task-scoped context assembly (served requirements' own text, declared
+  scope, verification method, associated Plan sections) in one response;
+  `ready: false` means stop and report the named blockers (Failure
+  Conditions) — never proceed as if the Task were ready. Named-Task mode
+  passes `--task`; all-tasks mode omits it and lets `prepare` select the
+  next ready Task itself (034-task-oriented-context-preparation).
+- `internal resolve SPEC-###` / `internal inspect SPEC-###` — still
+  useful directly when only the Spec's own identity/metadata is needed
+  without a Task in play.
 - `internal context SPEC-### --intent implementation` — request a
-  budgeted Context Pack before broader exploration. If this fails,
+  budgeted Context Pack before broader exploration when `prepare`'s own
+  Task-scoped context (above) is not enough. If this fails,
   proceed using this Skill's own Required Context above instead — it
   is never a Failure Condition.
 - `internal validate SPEC-###` — confirm the project is still
@@ -130,40 +138,36 @@ Required operations:
 
 ## Procedure
 
-1. Run `internal resolve SPEC-###` and `internal inspect SPEC-###`.
-2. Run `internal context SPEC-### --intent implementation` and begin
-   from its returned items. If the request fails, proceed using this
-   Skill's own Required Context above instead.
-3. Read the Spec's Tasks artifact. Branch on whether a Task ID was
-   given:
-   - **Named-task mode** (`SPEC-### TASK-NNN` given): verify `TASK-NNN`
-     exists within this Spec's own Tasks artifact (Failure Conditions
-     if not). If it is already complete, report that and stop (Failure
-     Conditions) unless the user has explicitly confirmed a redo. If
-     its own dependencies are not all complete, stop and report which
-     are outstanding (Failure Conditions). Otherwise select only this
-     Task.
-   - **All-tasks mode** (`SPEC-###` only): select one executable,
-     not-yet-complete Task (its own dependencies already satisfied;
-     already-complete Tasks are skipped, their count tracked for the
-     summary).
-4. Load the context the selected Task's own scope names.
-5. Implement the change directly in the repository.
-6. Verify it by the Task's own stated method (e.g. run the named `go
+1. Run `internal prepare SPEC-###` (all-tasks mode) or
+   `internal prepare SPEC-### --task TASK-NNN` (named-task mode). If the
+   response's `ready` is `false`, stop and report the named `blockers`
+   (Failure Conditions) — this already covers "already complete" (a
+   completed Task is skipped by all-tasks mode's own selection; a
+   completed named Task still resolves, so check its own status before
+   proceeding) and "dependencies not all complete." Otherwise its own
+   `requirements`, `scope`, `verify`, and `plan_sections` fields are
+   this Task's starting context — no separate `resolve`/`inspect`/
+   `context` call is required to obtain them.
+2. If broader exploration beyond `prepare`'s own Task-scoped context is
+   needed, run `internal context SPEC-### --intent implementation` and
+   begin from its returned items. If the request fails, proceed using
+   this Skill's own Required Context instead.
+3. Implement the change directly in the repository.
+4. Verify it by the Task's own stated method (e.g. run the named `go
    test` command); record the evidence.
-7. If verification succeeds, check the Task's completion checkbox and
+5. If verification succeeds, check the Task's completion checkbox and
    record its evidence in the Tasks artifact directly. If verification
    fails, stop here (Failure Conditions) — do not mark it complete and
    do not continue to another Task.
-8. Run `internal validate SPEC-###` to confirm the project's structure
+6. Run `internal validate SPEC-###` to confirm the project's structure
    is still valid.
-9. **In named-task mode**: stop and report completion per the
+7. **In named-task mode**: stop and report completion per the
    Completion Contract below — never proceed to another Task in this
    invocation.
-   **In all-tasks mode**: re-derive the executable set from the Tasks
-   artifact's current state (a Task just completed may unblock
-   others) and repeat from step 3 until no executable, not-yet-complete
-   Task remains, then report completion per the Completion Contract
+   **In all-tasks mode**: repeat from step 1 (`internal prepare` itself
+   re-derives readiness from the Tasks artifact's current state, so a
+   Task just completed may unblock others) until `prepare` reports no
+   Task is ready, then report completion per the Completion Contract
    below.
 
 ## Decision Rules
