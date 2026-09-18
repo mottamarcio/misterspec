@@ -42,5 +42,5 @@ func writeDefaultConfig(targetDir, agentID string) error {
 		return err
 	}
 
-	return installer.WriteAtomicFile(filepath.Join(targetDir, configFilePath), data)
+	return installer.WriteAtomicFile(filepath.Join(targetDir, configFilePath), data, installer.DefaultFileMode)
 }

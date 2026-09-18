@@ -61,7 +61,8 @@ cd misterspec
 go build -o misterspec ./cmd/misterspec
 ./misterspec --help</code></pre>
       <p>
-        <code>--help</code> intentionally shows only <code>init</code> —
+        <code>--help</code> intentionally shows only <code>init</code>,
+        <code>--version</code>, and <code>--update</code> —
         misterspec's own internal, machine-facing command tree is
         hidden from normal use (see the
         <a href="commands.html">Command Reference</a> for the full,
@@ -109,6 +110,19 @@ go build -o misterspec ./cmd/misterspec
         walkthrough</a> next for exactly which command drives each
         stage, from a blank repository to a validated, implemented
         Spec.
+      </p>
+
+      <h2 id="staying-up-to-date"><iconify-icon icon="lucide:refresh-cw" class="align-[-0.15em] mr-1"></iconify-icon>Staying up to date</h2>
+      <pre><code>misterspec --version
+misterspec --update</code></pre>
+      <p>
+        <code>--update</code> checks GitHub for a newer release, asks
+        for confirmation before changing anything, verifies the
+        download against a published SHA-256 checksum, then atomically
+        replaces the binary — and, inside an already-initialized
+        project, reinstalls Skills to match. See the
+        <a href="commands.html#update"><code>--update</code>
+        reference</a> for the full behavior.
       </p>
 
     </div>

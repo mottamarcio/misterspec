@@ -46,6 +46,19 @@
       <p><strong>Flags:</strong> <code>--dir</code> (target directory, default <code>.</code>); <code>--agent &lt;id&gt;</code> (agent to install Skills for — omit for the interactive TUI in a real terminal).</p>
       <pre><code>misterspec init --agent claude-code --dir ./my-project</code></pre>
 
+      <h2 id="version">misterspec --version <span class="text-xs font-normal text-slate-400 ml-2">public</span></h2>
+      <p><strong>Purpose:</strong> Print the running binary's own version. Never touches the network or the filesystem.</p>
+      <pre><code>misterspec --version
+{"ok":true,"version":"v1.2.0"}</code></pre>
+      <p>A build with no embedded version (e.g. <code>go build</code> without <code>-ldflags</code>) reports <code>"development build"</code> instead of a blank or misleading value.</p>
+
+      <h2 id="update">misterspec --update <span class="text-xs font-normal text-slate-400 ml-2">public</span></h2>
+      <p><strong>Purpose:</strong> Check GitHub for a newer release and, once confirmed, replace the running binary and refresh Skills — the one deliberate exception to misterspec's otherwise network-free command surface.</p>
+      <p><strong>Behavior:</strong> reports the current and latest version; if already current, stops there with no download and no prompt. If a newer release exists, it asks for explicit confirmation before changing anything. Once confirmed, it downloads the release asset matching the running OS/architecture, verifies it against the release's own published <code>SHA256SUMS</code> file, and only then atomically replaces the binary — any failure at any step (release check, no matching asset, checksum mismatch, a declined prompt) leaves the installed binary and Skills completely untouched. If the current directory is an already-initialized misterspec project (a <code>.misterspec/install.json</code> is present), it also reinstalls Skills for that project's own recorded agent integration, reusing the exact same install path <code>misterspec init</code> uses.</p>
+      <pre><code>misterspec --update
+{"ok":true,"update":{"current":"v1.1.5-alpha","latest":"v1.2.0","status":"updated","skills_refreshed":true}}</code></pre>
+      <p>Other <code>status</code> values: <code>"up_to_date"</code> (nothing to do) and <code>"declined"</code> (you said no). <code>skills_refreshed</code> is always present — <code>false</code>, not an error, when the current directory isn't an initialized project.</p>
+
       <h2 id="internal-resolve">internal resolve &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Resolve an entity ID to its canonical artifact.</p>
       <pre><code>misterspec internal resolve SPEC-014
@@ -126,6 +139,13 @@
 "diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7},
 "rendered":null}}</code></pre>
 
+      <h2 id="internal-commits-since-file">internal commits-since-file</h2>
+      <p><strong>Purpose:</strong> Return every commit on the current branch since a given file was first added — the real basis <a href="workflow.html"><code>/mister-wrap-up</code></a> uses to synthesize a Spec's own downstream documentation.</p>
+      <p><strong>Flags:</strong> <code>--path &lt;path&gt;</code> (required, repo-relative — the file whose own "added" commit anchors the range).</p>
+      <pre><code>misterspec internal commits-since-file --path specs/014-sqlite-index/plan.md
+{"ok":true,"available":true,"commits":[{"hash":"...","subject":"...","author_date":"2026-08-01"}]}</code></pre>
+      <p><code>available</code> is <code>false</code> (never an error) when the target isn't a Git repository or the file was never committed.</p>
+
       <h2 id="errors">Error codes</h2>
       <p>Every command shares the same error shape and code set:</p>
       <div class="not-prose overflow-x-auto my-6">
@@ -146,6 +166,10 @@
             <tr><td class="px-4 py-2"><code>project_not_initialized</code></td><td class="px-4 py-2">6</td><td class="px-4 py-2">No <code>.misterspec/config.yaml</code> found.</td></tr>
             <tr><td class="px-4 py-2"><code>already_initialized</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>init</code> targeted an already-bootstrapped project.</td></tr>
             <tr><td class="px-4 py-2"><code>unknown_agent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>--agent</code> ID not registered.</td></tr>
+            <tr><td class="px-4 py-2"><code>checksum_mismatch</code></td><td class="px-4 py-2">7</td><td class="px-4 py-2"><code>--update</code>'s downloaded binary didn't match the published checksum — nothing was replaced.</td></tr>
+            <tr><td class="px-4 py-2"><code>release_check_failed</code></td><td class="px-4 py-2">8</td><td class="px-4 py-2"><code>--update</code> couldn't reach or parse the GitHub release check.</td></tr>
+            <tr><td class="px-4 py-2"><code>no_compatible_asset</code></td><td class="px-4 py-2">8</td><td class="px-4 py-2"><code>--update</code> found no release asset for the current OS/architecture.</td></tr>
+            <tr><td class="px-4 py-2"><code>permission_denied</code></td><td class="px-4 py-2">9</td><td class="px-4 py-2"><code>--update</code> lacked permission to replace the installed binary.</td></tr>
             <tr><td class="px-4 py-2"><code>unexpected_failure</code></td><td class="px-4 py-2">1</td><td class="px-4 py-2">Anything else (e.g. an index I/O error).</td></tr>
           </tbody>
         </table>

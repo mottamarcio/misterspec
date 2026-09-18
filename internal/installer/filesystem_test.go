@@ -12,7 +12,7 @@ func TestWriteAtomicFile_SuccessfulWrite(t *testing.T) {
 	target := filepath.Join(dir, "sub", "out.txt")
 	content := []byte("hello, atomic world\n")
 
-	if err := WriteAtomicFile(target, content); err != nil {
+	if err := WriteAtomicFile(target, content, DefaultFileMode); err != nil {
 		t.Fatalf("WriteAtomicFile() unexpected error: %v", err)
 	}
 
@@ -22,6 +22,27 @@ func TestWriteAtomicFile_SuccessfulWrite(t *testing.T) {
 	}
 	if string(got) != string(content) {
 		t.Errorf("content = %q, want %q", got, content)
+	}
+}
+
+func TestWriteAtomicFile_RequestedModeApplied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "binary")
+
+	if err := WriteAtomicFile(target, []byte("bin"), 0o755); err != nil {
+		t.Fatalf("WriteAtomicFile() unexpected error: %v", err)
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat written file: %v", err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Errorf("mode = %v, want %v", info.Mode().Perm(), os.FileMode(0o755))
 	}
 }
 
@@ -41,7 +62,7 @@ func TestWriteAtomicFile_FailurePartwayLeavesNoFile(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(roDir, 0o755) }) // allow t.TempDir() cleanup
 
 	target := filepath.Join(roDir, "out.txt")
-	err := WriteAtomicFile(target, []byte("should never land"))
+	err := WriteAtomicFile(target, []byte("should never land"), DefaultFileMode)
 	if err == nil {
 		t.Fatal("WriteAtomicFile() into a read-only directory: expected an error, got nil")
 	}
