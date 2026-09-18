@@ -130,7 +130,11 @@ misterspec internal context SPEC-014   # transparently rebuilds, same result</co
       already sharing the same Tier — Tier always dominates Score, an
       absolute, never-crossed invariant. <code>ApplyBudget</code> then
       fits the ranked list into a token budget, tier by tier, always
-      preserving mandatory content in full.</p>
+      preserving mandatory content in full. A separate, harder ceiling
+      (<a href="context-engine.html#budget-accuracy">035 · Budget and
+      Estimator Accuracy</a>) is what actually decides whether mandatory
+      content counts as "exceeded" — the budget here only ever shapes
+      optional content.</p>
       <p><strong>Why it exists:</strong> A strong but coincidental
       textual match must never outrank a real dependency, no matter how
       well it happens to match the request's own words — and a budget
@@ -151,11 +155,42 @@ misterspec internal context SPEC-014   # transparently rebuilds, same result</co
       in the <a href="commands.html#internal-context">Command
       Reference</a>.</p>
       <p><strong>Example</strong> — a deliberately tight budget, showing
-      mandatory content always wins:</p>
-      <pre><code>misterspec internal context SPEC-017 --intent planning --budget 300
-{"ok":true,"context":{"budget":300,"budget_exceeded":true,"overage":7,
+      mandatory content always wins (note: <code>budget_exceeded</code>
+      here compares against the hard limit, not <code>--budget</code>
+      itself — see <a href="#budget-accuracy">035</a>):</p>
+      <pre><code>misterspec internal context SPEC-017 --intent planning --budget 300 --hard-limit 300
+{"ok":true,"context":{"schema_version":2,"budget":300,"budget_exceeded":true,"overage":7,
 "items":[/* Constitution + target only — everything else trimmed */],
-"diagnostics":{"reduction_percent":80.0}}}</code></pre>
+"diagnostics":{"reduction_percent":80.0,"estimator":"default","hard_limit":300}}}</code></pre>
+
+      <h2 id="budget-accuracy">035 · Budget and Estimator Accuracy</h2>
+      <p><strong>What it is:</strong> Makes 016's own budget promise
+      actually true. The <code>Estimator</code> that produces every
+      token count is now identified by name in the response
+      (<code>diagnostics.estimator</code>). The single budget number is
+      split into two independent limits: a soft <em>budget</em> (the
+      target for optional content) and a separate, always-finite hard
+      <em>limit</em> (the ceiling above which mandatory content is
+      reported as exceeded) — a small <code>--budget</code> alone can no
+      longer misleadingly flag mandatory content as "exceeded."
+      <code>ApplyBudget</code> also stopped giving up on a whole
+      priority tier the instant one candidate didn't fit: it now keeps
+      trying smaller, later candidates of the same tier
+      (<code>diagnostics.exclusions</code> records what was skipped and
+      why), and an oversized single section can be included as a
+      coherent, un-truncated prefix instead of excluded outright.</p>
+      <p><strong>Why it exists:</strong> The <code>Estimator</code>
+      interface existed in the code since 013 but was never actually
+      used — nothing said which method produced a number. Separately,
+      one budget serving two different jobs (optional-content target
+      and mandatory-content ceiling) meant a small, deliberately narrow
+      <code>--budget</code> for a quick lookup could wrongly read as a
+      critical overage. See it fully documented in the
+      <a href="commands.html#internal-context">Command Reference</a>.</p>
+      <p><strong>Example</strong> — decoupled limits, no false alarm:</p>
+      <pre><code>misterspec internal context SPEC-017 --budget 500 --hard-limit 50000
+{"ok":true,"context":{"schema_version":2,"budget_exceeded":false,"overage":0,
+"diagnostics":{"estimator":"default","hard_limit":50000,"exclusions":[]}}}</code></pre>
 
     </div>
   </main>

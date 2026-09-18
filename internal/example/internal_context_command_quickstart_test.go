@@ -125,9 +125,11 @@ func TestInternalContextCommandQuickstart_EndToEnd(t *testing.T) {
 		t.Errorf("non-numeric-budget error.code = %q, want invalid_argument", decode(t, out5).Error.Code)
 	}
 
-	// 6. A deliberately tiny budget — mandatory content still wins
-	// (quickstart.md §6, 016 FR-006/FR-007).
-	out6, code6 := runContextCmd([]string{"SPEC-014", "--budget", "10", "--dir", root})
+	// 6. A deliberately tiny budget/hard-limit — mandatory content
+	// still wins (quickstart.md §6, 016 FR-006/FR-007; 035-context-
+	// budget-accuracy: budget_exceeded now compares against the hard
+	// limit, so it is set tiny here too).
+	out6, code6 := runContextCmd([]string{"SPEC-014", "--budget", "10", "--hard-limit", "10", "--dir", root})
 	if code6 != 0 {
 		t.Fatalf("tiny-budget exitCode = %d, want 0 (output: %s)", code6, out6)
 	}

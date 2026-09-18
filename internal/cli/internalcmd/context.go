@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mottamarcio/misterspec/internal/artifacts"
 	contextengine "github.com/mottamarcio/misterspec/internal/context"
 	"github.com/mottamarcio/misterspec/internal/context/index"
 	"github.com/mottamarcio/misterspec/internal/project"
@@ -32,8 +33,11 @@ var validContextModes = map[contextOutputMode]bool{
 
 // contextSchemaVersion is the "context" envelope's own contract version
 // (033-context-pack-output-contract research.md Decision 5) — present
-// in every mode, including the unchanged manifest default.
-const contextSchemaVersion = 1
+// in every mode, including the unchanged manifest default. Bumped to 2
+// by 035-context-budget-accuracy: budget_exceeded/overage now compare
+// mandatory content against the new, separate hard limit instead of
+// the soft budget (contracts/budget-and-estimator-contract.md §2).
+const contextSchemaVersion = 2
 
 // NewContextCmd builds "misterspec internal context <id>"
 // (docs/context-engine-implementation.md §21,
@@ -51,7 +55,7 @@ const contextSchemaVersion = 1
 // own shape, requestable by name); --mode=package combined with
 // --render is rejected (research.md Decision 3).
 func NewContextCmd() *cobra.Command {
-	var dir, intent, task, query, budget, mode string
+	var dir, intent, task, query, budget, hardLimit, mode string
 	var render bool
 
 	cmd := &cobra.Command{
@@ -90,6 +94,13 @@ func NewContextCmd() *cobra.Command {
 				}
 				req.Budget = &n
 			}
+			if cmd.Flags().Changed("hard-limit") {
+				n, err := strconv.Atoi(hardLimit)
+				if err != nil {
+					return WriteError(cmd.OutOrStdout(), fmt.Errorf("%w: --hard-limit %q is not a valid integer", ErrInvalidArgument, hardLimit))
+				}
+				req.HardLimit = &n
+			}
 
 			outputMode := contextOutputMode(mode)
 			if outputMode == "" {
@@ -107,7 +118,8 @@ func NewContextCmd() *cobra.Command {
 				return WriteError(cmd.OutOrStdout(), err)
 			}
 			ranked := contextengine.Rank(candidates, req)
-			result := contextengine.ApplyBudget(ranked, req)
+			estimator := artifacts.DefaultEstimator{}
+			result := contextengine.ApplyBudget(ranked, req, estimator)
 
 			var rendered any
 			if render || outputMode == modeMarkdown {
@@ -138,7 +150,10 @@ func NewContextCmd() *cobra.Command {
 						"tokens_selected":       result.Diagnostics.TokensSelected,
 						"tokens_excluded":       result.Diagnostics.TokensExcluded,
 						"reduction_percent":     result.Diagnostics.ReductionPercent,
-						"payload_tokens":        payloadTokens(outputMode, result, rendered),
+						"payload_tokens":        payloadTokens(outputMode, result, rendered, estimator),
+						"estimator":             result.Diagnostics.Estimator,
+						"hard_limit":            result.Diagnostics.HardLimit,
+						"exclusions":            renderExclusions(result.Diagnostics.Exclusions),
 					},
 					"rendered": rendered,
 				},
@@ -151,6 +166,7 @@ func NewContextCmd() *cobra.Command {
 	cmd.Flags().StringVar(&task, "task", "", "current task's own text")
 	cmd.Flags().StringVar(&query, "query", "", "free-text query")
 	cmd.Flags().StringVar(&budget, "budget", "", "token budget as an integer, including negative (default: contextengine.DefaultBudget when omitted)")
+	cmd.Flags().StringVar(&hardLimit, "hard-limit", "", "hard token ceiling above which mandatory content is flagged as exceeded (default: contextengine.DefaultHardLimit when omitted)")
 	cmd.Flags().BoolVar(&render, "render", false, "additionally include a rendered Markdown context pack")
 	cmd.Flags().StringVar(&mode, "mode", "", "output mode: manifest (default), package, or markdown")
 	return cmd
@@ -218,18 +234,33 @@ func renderPackageItems(items []contextengine.PackageItem) []map[string]any {
 	return out
 }
 
+// renderExclusions renders result.Diagnostics.Exclusions as JSON-ready
+// maps, always a non-nil slice (035-context-budget-accuracy contracts
+// §2.2).
+func renderExclusions(exclusions []contextengine.ExclusionRecord) []map[string]any {
+	out := make([]map[string]any, 0, len(exclusions))
+	for _, e := range exclusions {
+		out = append(out, map[string]any{
+			"path":    e.Path,
+			"heading": e.Heading,
+			"reason":  e.Reason,
+		})
+	}
+	return out
+}
+
 // payloadTokens estimates the serialized size of the response actually
 // being returned (research.md Decision 6): package mode measures its
 // own items' content plus metadata overhead; a non-nil rendered string
 // (markdown mode, or the classic --render flag on its own) measures
 // that string; otherwise (manifest, nothing rendered) there is no
 // content beyond what tokens_selected already counts.
-func payloadTokens(mode contextOutputMode, result contextengine.Result, rendered any) int {
+func payloadTokens(mode contextOutputMode, result contextengine.Result, rendered any, estimator artifacts.Estimator) int {
 	if mode == modePackage {
-		return contextengine.PayloadTokens(result.Diagnostics.TokensSelected, contextengine.BuildPackageItems(result.Items), "")
+		return contextengine.PayloadTokens(result.Diagnostics.TokensSelected, contextengine.BuildPackageItems(result.Items), "", estimator)
 	}
 	if s, ok := rendered.(string); ok {
-		return contextengine.PayloadTokens(result.Diagnostics.TokensSelected, nil, s)
+		return contextengine.PayloadTokens(result.Diagnostics.TokensSelected, nil, s, estimator)
 	}
 	return result.Diagnostics.TokensSelected
 }

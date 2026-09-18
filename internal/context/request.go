@@ -39,8 +39,20 @@ type Request struct {
 	// budgeting/research.md #6). nil means "not specified" —
 	// DefaultBudget is used. A non-nil pointer, even to zero or a
 	// negative number, is a real, explicit budget request — never
-	// silently promoted to the default.
+	// silently promoted to the default. This is the "soft limit" —
+	// only ever shapes how much optional content is included; never
+	// used to flag mandatory content as excessive
+	// (035-context-budget-accuracy FR-005).
 	Budget *int
+	// HardLimit optionally overrides DefaultHardLimit — the ceiling
+	// above which mandatory content is reported as exceeded (FR-005,
+	// FR-007). nil means "not specified" — DefaultHardLimit is used,
+	// never treated as "no limit" (FR-006). Independent of Budget: a
+	// HardLimit smaller than the resolved Budget is accepted, not
+	// rejected — it simply means a tight mandatory-content ceiling
+	// alongside a generous optional-content target (data-model.md
+	// Request validation rule).
+	HardLimit *int
 }
 
 // recognizedIntents is the set validateIntent checks Intent against.

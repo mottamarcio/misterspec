@@ -41,3 +41,14 @@ func TestDefaultEstimator_MatchesEstimateTokens(t *testing.T) {
 		t.Errorf("DefaultEstimator{}.Estimate() = %d, want %d (EstimateTokens)", got, want)
 	}
 }
+
+func TestDefaultEstimator_NameIsNonEmptyAndStable(t *testing.T) {
+	var e artifacts.Estimator = artifacts.DefaultEstimator{}
+
+	if e.Name() == "" {
+		t.Fatal("DefaultEstimator{}.Name() is empty, want a non-empty, stable identifier (FR-001)")
+	}
+	if got, want := e.Name(), "default"; got != want {
+		t.Errorf("DefaultEstimator{}.Name() = %q, want %q", got, want)
+	}
+}
