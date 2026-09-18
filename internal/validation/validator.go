@@ -32,7 +32,25 @@ func ValidateProject(root string, cfg project.Configuration) ([]Finding, error) 
 			return nil, err
 		}
 		for _, number := range sortedNumbers(result.Paths) {
-			findings = append(findings, validateFoundEntity(root, cfg, t, number, result.Paths[number])...)
+			paths := result.Paths[number]
+			findings = append(findings, validateFoundEntity(root, cfg, t, number, paths)...)
+
+			if t == ids.Spec && len(paths) > 0 {
+				specID := ids.EntityID{Type: ids.Spec, Prefix: ids.Spec.Prefix(), Number: number, Width: cfg.IDWidth}
+				covFindings, report, err := specCoverageFindings(root, cfg, specID, paths[0])
+				if err != nil {
+					return nil, err
+				}
+				findings = append(findings, covFindings...)
+
+				specPath := paths[0] + "/spec.md"
+				if meta, err := artifacts.ParseMetadata(filepath.Join(root, specPath)); err == nil {
+					gate := computeSpecPhaseGate(specID, meta.Status, report)
+					if gate.Blocked {
+						findings = append(findings, phaseGateFinding(gate, specPath))
+					}
+				}
+			}
 		}
 	}
 
@@ -42,6 +60,14 @@ func ValidateProject(root string, cfg project.Configuration) ([]Finding, error) 
 	}
 	for _, dup := range taskScan.Duplicates {
 		findings = append(findings, taskDuplicateFinding(dup, cfg))
+	}
+
+	graph, specPath, err := projectDependencyGraph(root, cfg)
+	if err != nil {
+		return nil, err
+	}
+	for _, cycle := range detectCycles(graph) {
+		findings = append(findings, dependencyCycleFinding(cycle, cfg, specPath))
 	}
 
 	findings = append(findings, checkConstitution(root, cfg)...)
@@ -183,6 +209,36 @@ func ValidateEntity(root string, cfg project.Configuration, rawID string) ([]Fin
 				continue
 			}
 			findings = append(findings, taskDuplicateFinding(dup, cfg))
+		}
+
+		if paths := scanResult.Paths[id.Number]; len(paths) > 0 {
+			covFindings, report, err := specCoverageFindings(root, cfg, id, paths[0])
+			if err != nil {
+				return nil, err
+			}
+			findings = append(findings, covFindings...)
+
+			specPath := paths[0] + "/spec.md"
+			if meta, err := artifacts.ParseMetadata(filepath.Join(root, specPath)); err == nil {
+				gate := computeSpecPhaseGate(id, meta.Status, report)
+				if gate.Blocked {
+					findings = append(findings, phaseGateFinding(gate, specPath))
+				}
+			}
+		}
+
+		// A cycle is a fact about the project-wide graph, not just this
+		// Spec's own file — check the same full graph checkDependencyList
+		// already resolves against, and report only cycles this Spec
+		// actually participates in (contracts §3).
+		graph, specPath, err := projectDependencyGraph(root, cfg)
+		if err != nil {
+			return nil, err
+		}
+		for _, cycle := range detectCycles(graph) {
+			if intSliceContains(cycle.Path, id.Number) {
+				findings = append(findings, dependencyCycleFinding(cycle, cfg, specPath))
+			}
 		}
 	}
 

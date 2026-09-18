@@ -115,14 +115,22 @@ func TestWikilinkQuickstart_EndToEnd(t *testing.T) {
 		t.Errorf("ambiguousCount = %d, want 0: %+v", ambiguousCount, findings)
 	}
 
-	// 5. An artifact with no links validates exactly as before this
-	// feature existed (quickstart.md §5, US3/SC-003).
+	// 5. An artifact with no links carries no wikilink-related findings
+	// (quickstart.md §5, US3/SC-003) — scoped to wikilink codes
+	// specifically, not overall emptiness: the freshly scaffolded
+	// template's own placeholder "### R1"/"### R2" headings legitimately
+	// trigger 032-requirement-coverage-dependency-validation's own
+	// uncovered_requirement findings (no tasks.md exists yet), which is
+	// an unrelated validation dimension this test does not exercise.
 	clean, err := validation.ValidateEntity(proj.Root, proj.Config, target.ID.String())
 	if err != nil {
 		t.Fatalf("validation.ValidateEntity(%v) unexpected error: %v", target.ID, err)
 	}
-	if len(clean) != 0 {
-		t.Fatalf("ValidateEntity(%v) findings = %v, want empty for a link-free artifact", target.ID, clean)
+	for _, f := range clean {
+		switch f.Code {
+		case validation.CodeBrokenWikilink, validation.CodeInvalidWikilink, validation.CodeAmbiguousWikilink:
+			t.Errorf("ValidateEntity(%v) unexpected wikilink finding: %+v", target.ID, f)
+		}
 	}
 }
 

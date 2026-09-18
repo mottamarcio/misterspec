@@ -793,7 +793,9 @@ The deterministic validator shall detect at least:
 * broken artifact links where deterministically detectable;
 * duplicate requirement markers inside one Spec;
 * duplicate Task IDs within the same Spec's Tasks artifact (Task numbering is scoped per Spec — the same `TASK-NNN` number legitimately appears in more than one Spec, see 031-canonical-task-identity);
-* Task references to nonexistent requirements;
+* Task references to nonexistent requirements or to a requirement of a different Spec;
+* a requirement declared in a Spec with no Task serving it, gated by lifecycle phase (tolerated while `draft`, blocking from `ready` onward — see 032-requirement-coverage-dependency-validation);
+* circular Spec `depends_on` relationships (a dependency cycle, including a Spec depending on itself), reported with the full cycle path;
 * missing Plan where Spec state requires a Plan;
 * missing Tasks where Spec state requires Tasks;
 * missing Validation artifact where required;

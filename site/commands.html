@@ -126,6 +126,20 @@
         Spec's Tasks artifact — two different Specs legitimately sharing
         a <code>TASK-NNN</code> number is not reported as a duplicate.
       </p>
+      <p>
+        Validation also checks a Spec's declared requirements
+        (<code>### R1</code>, <code>### R2</code>, …) against each
+        Task's own <code>Serves: SPEC-###:R#</code> reference: an
+        uncovered requirement, a reference to a nonexistent or
+        cross-Spec requirement, and a Task with no <code>Serves:</code>
+        line at all are all reported. A Spec still in
+        <code>draft</code> is exempt from this coverage check; any
+        later status blocks on incomplete coverage
+        (<code>phase_gate_blocked</code>, emitted alongside the
+        underlying finding it escalates). Separately, every Spec's
+        <code>depends_on</code> graph is checked for cycles — including
+        a Spec depending on itself — reported with the full cycle path.
+      </p>
 
       <h2 id="internal-migration-check-tasks">internal migration-check-tasks</h2>
       <p><strong>Purpose:</strong> Read-only diagnostic listing every Task number claimed by more than one Spec project-wide — the cases that would have collided under the old, project-wide Task numbering. Never modifies any artifact.</p>
