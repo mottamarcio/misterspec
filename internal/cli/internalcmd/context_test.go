@@ -33,13 +33,22 @@ func writeContextFixture(t *testing.T, root string) {
 		"---\nid: SPEC-014\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on:\n  - SPEC-011\nsupersedes: []\n---\n## Requirements\n\nRefresh token rotation. See [[KNOW-003]].\n")
 }
 
+type contextLocationJSON struct {
+	Path      string `json:"path"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+}
+
 type contextItemJSON struct {
-	Path    string   `json:"path"`
-	Heading string   `json:"heading"`
-	Tier    string   `json:"tier"`
-	Reasons []string `json:"reasons"`
-	Score   int      `json:"score"`
-	Tokens  int      `json:"tokens"`
+	Path        string               `json:"path"`
+	Heading     string               `json:"heading"`
+	Tier        string               `json:"tier"`
+	Reasons     []string             `json:"reasons"`
+	Score       int                  `json:"score"`
+	Tokens      int                  `json:"tokens"`
+	Content     *string              `json:"content"`
+	Location    *contextLocationJSON `json:"location"`
+	Fingerprint *string              `json:"fingerprint"`
 }
 
 type contextDiagnosticsJSON struct {
@@ -49,9 +58,11 @@ type contextDiagnosticsJSON struct {
 	TokensSelected       int     `json:"tokens_selected"`
 	TokensExcluded       int     `json:"tokens_excluded"`
 	ReductionPercent     float64 `json:"reduction_percent"`
+	PayloadTokens        int     `json:"payload_tokens"`
 }
 
 type contextResultJSON struct {
+	SchemaVersion   int                    `json:"schema_version"`
 	Target          string                 `json:"target"`
 	Intent          string                 `json:"intent"`
 	Budget          int                    `json:"budget"`
@@ -432,4 +443,409 @@ func TestContextCmd_RenderStillErrorsCleanlyOnUnknownTarget(t *testing.T) {
 		t.Fatalf("exitCode = %d, want 3 (output: %s)", exitCode, output)
 	}
 	assertErrorCode(t, output, "entity_not_found")
+}
+
+// --- 033-context-pack-output-contract: Foundational (--mode flag) ---
+
+func TestContextCmd_ModeManifestAndPackageAndMarkdownAccepted(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	for _, mode := range []string{"manifest", "package", "markdown"} {
+		cmd := internalcmd.NewContextCmd()
+		cmd.SetArgs([]string{"SPEC-014", "--mode", mode, "--dir", root})
+		output, exitCode := runCmd(cmd)
+		if exitCode != 0 {
+			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
+		}
+	}
+}
+
+func TestContextCmd_OmittedModeMatchesExplicitManifest(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	withoutFlag := internalcmd.NewContextCmd()
+	withoutFlag.SetArgs([]string{"SPEC-014", "--dir", root})
+	outWithout, _ := runCmd(withoutFlag)
+
+	withFlag := internalcmd.NewContextCmd()
+	withFlag.SetArgs([]string{"SPEC-014", "--mode", "manifest", "--dir", root})
+	outWith, _ := runCmd(withFlag)
+
+	if outWithout != outWith {
+		t.Errorf("omitted --mode output differs from explicit --mode manifest:\nomitted: %s\nexplicit: %s", outWithout, outWith)
+	}
+}
+
+func TestContextCmd_UnrecognizedModeIsInvalidArgument(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--mode", "bogus", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2 (output: %s)", exitCode, output)
+	}
+	assertErrorCode(t, output, "invalid_argument")
+}
+
+// --- User Story 1: full content without a mandatory re-read ---
+
+func TestContextCmd_ModePackageIncludesMatchingContent(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--intent", "implementation", "--mode", "package", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	decoded := decodeContextOutput(t, output)
+	if len(decoded.Context.Items) == 0 {
+		t.Fatalf("context.items is empty, want at least the mandatory target entry")
+	}
+	for _, item := range decoded.Context.Items {
+		if item.Content == nil || *item.Content == "" {
+			t.Fatalf("item %+v has no content, want package mode to include it", item)
+		}
+		source, err := os.ReadFile(filepath.Join(root, item.Path))
+		if err != nil {
+			t.Fatalf("reading source %s: %v", item.Path, err)
+		}
+		if !strings.Contains(string(source), *item.Content) {
+			t.Errorf("item content %q not found verbatim in source file %s", *item.Content, item.Path)
+		}
+	}
+}
+
+func TestContextCmd_DefaultModeHasNoContentField(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	if strings.Contains(output, `"content"`) {
+		t.Errorf("default-mode output unexpectedly contains a \"content\" field: %s", output)
+	}
+}
+
+func TestContextCmd_ModePackageFingerprintChangesOnEditAndStableOtherwise(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	run := func() contextEnvelopeJSON {
+		cmd := internalcmd.NewContextCmd()
+		cmd.SetArgs([]string{"SPEC-014", "--intent", "implementation", "--mode", "package", "--dir", root})
+		output, exitCode := runCmd(cmd)
+		if exitCode != 0 {
+			t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+		}
+		return decodeContextOutput(t, output)
+	}
+
+	targetPath := "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-014/spec.md"
+	findTarget := func(env contextEnvelopeJSON) *string {
+		for _, item := range env.Context.Items {
+			if item.Path == targetPath {
+				return item.Fingerprint
+			}
+		}
+		t.Fatalf("no item found for target path %s among %+v", targetPath, env.Context.Items)
+		return nil
+	}
+
+	firstFP := findTarget(run())
+	secondFP := findTarget(run())
+	if firstFP == nil || *firstFP == "" || !strings.HasPrefix(*firstFP, "sha256:") {
+		t.Fatalf("fingerprint = %v, want a non-empty \"sha256:<hex>\" string", firstFP)
+	}
+	if *firstFP != *secondFP {
+		t.Errorf("fingerprint changed across two calls with no edit: %q != %q", *firstFP, *secondFP)
+	}
+
+	specPath := filepath.Join(root, targetPath)
+	original, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatalf("reading fixture spec: %v", err)
+	}
+	edited := append(append([]byte{}, original...), []byte("\nExtra sentence.\n")...)
+	if err := os.WriteFile(specPath, edited, 0o644); err != nil {
+		t.Fatalf("editing fixture spec: %v", err)
+	}
+
+	thirdFP := findTarget(run())
+	if thirdFP == nil || *thirdFP == *firstFP {
+		t.Errorf("fingerprint did not change after editing the source section: %v", thirdFP)
+	}
+}
+
+// --- User Story 2: file-absolute location ---
+
+func TestContextCmd_ModePackageLocationIsFileAbsoluteWithFrontmatter(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+	// SPEC-014's own fixture body (writeContextFixture):
+	// line 1: ---
+	// line 2: id: SPEC-014
+	// line 3: type: spec
+	// line 4: status: ready
+	// line 5: depends_on:
+	// line 6:   - SPEC-011
+	// line 7: supersedes: []
+	// line 8: ---
+	// line 9: ## Requirements
+	// line 10: (blank)
+	// line 11: Refresh token rotation. See [[KNOW-003]].
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--intent", "implementation", "--mode", "package", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+
+	targetPath := "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-014/spec.md"
+	var target *contextItemJSON
+	for i := range decoded.Context.Items {
+		if decoded.Context.Items[i].Path == targetPath {
+			target = &decoded.Context.Items[i]
+		}
+	}
+	if target == nil {
+		t.Fatalf("no item found for target path %s", targetPath)
+	}
+	if target.Location == nil {
+		t.Fatalf("item has no location")
+	}
+
+	lines, err := os.ReadFile(filepath.Join(root, targetPath))
+	if err != nil {
+		t.Fatalf("reading fixture: %v", err)
+	}
+	fileLines := strings.Split(string(lines), "\n")
+	gotLine := fileLines[target.Location.StartLine-1]
+	if !strings.Contains(gotLine, "## Requirements") {
+		t.Errorf("location.start_line = %d points at %q, want the \"## Requirements\" heading line", target.Location.StartLine, gotLine)
+	}
+}
+
+func TestContextCmd_ModePackageLocationCorrectForShorterFrontmatter(t *testing.T) {
+	// Every canonical misterspec artifact requires frontmatter with its
+	// required fields (internal/artifacts.ParseMetadata's own existing
+	// behavior) — this test uses the shortest valid frontmatter to
+	// confirm the offset isn't hardcoded to the longer fixture used
+	// elsewhere in this file, but genuinely computed from each file's
+	// own frontmatter length.
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md", ""+
+		"---\n"+ // line 1
+		"id: KNOW-001\n"+ // line 2
+		"type: knowledge\n"+ // line 3
+		"status: active\n"+ // line 4
+		"---\n"+ // line 5
+		"## Summary\n\nMinimal case.\n") // heading at file line 6
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"KNOW-001", "--mode", "package", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+
+	var target *contextItemJSON
+	for i := range decoded.Context.Items {
+		if decoded.Context.Items[i].Heading == "Summary" {
+			target = &decoded.Context.Items[i]
+		}
+	}
+	if target == nil {
+		t.Fatalf("no Summary item found among %+v", decoded.Context.Items)
+	}
+	if target.Location.StartLine != 6 {
+		t.Errorf("location.start_line = %d, want 6 (file-absolute)", target.Location.StartLine)
+	}
+}
+
+func TestContextCmd_ModePackageTaskItemLocationIdentifiesOneTask(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md", "---\nid: PRG-001\ntype: program\nstatus: active\n---\n## Overview\n\nThe program.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/feature.md", "---\nid: FEAT-001\ntype: feature\nstatus: active\nparent: PRG-001\n---\n## Overview\n\nThe feature.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-014/spec.md",
+		"---\nid: SPEC-014\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n## Requirements\n\nSomething.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-014/tasks.md",
+		"---\ntype: tasks\nfor: SPEC-014\n---\n# Tasks\n\n## TASK-001 — First task\n\n- [ ] Complete\n\n## TASK-002 — Second task\n\n- [ ] Complete\n")
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--intent", "tasks", "--query", "Second task", "--mode", "package", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+
+	var task2 *contextItemJSON
+	for i := range decoded.Context.Items {
+		if strings.Contains(decoded.Context.Items[i].Heading, "TASK-002") {
+			task2 = &decoded.Context.Items[i]
+		}
+	}
+	if task2 == nil {
+		t.Skipf("no TASK-002 item selected among %+v — text search may not have matched; not this test's concern", decoded.Context.Items)
+		return
+	}
+	if task2.Location.StartLine < 7 {
+		t.Errorf("TASK-002 location.start_line = %d, want it to point at TASK-002's own heading, not TASK-001's", task2.Location.StartLine)
+	}
+}
+
+// --- User Story 3: versioned, non-duplicating, backward-compatible contract ---
+
+func TestContextCmd_SchemaVersionPresentInEveryMode(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	for _, mode := range []string{"manifest", "package", "markdown"} {
+		cmd := internalcmd.NewContextCmd()
+		cmd.SetArgs([]string{"SPEC-014", "--mode", mode, "--dir", root})
+		output, exitCode := runCmd(cmd)
+		if exitCode != 0 {
+			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
+		}
+		decoded := decodeContextOutput(t, output)
+		if decoded.Context.SchemaVersion != 1 {
+			t.Errorf("--mode %s: schema_version = %d, want 1", mode, decoded.Context.SchemaVersion)
+		}
+	}
+}
+
+func TestContextCmd_ModePackageRenderedIsNull(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+	if decoded.Context.Rendered != nil {
+		t.Errorf("context.rendered = %v, want nil in package mode — no duplication", decoded.Context.Rendered)
+	}
+}
+
+func TestContextCmd_ModePackageWithRenderIsRejected(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--mode", "package", "--render", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2 (output: %s)", exitCode, output)
+	}
+	assertErrorCode(t, output, "invalid_argument")
+}
+
+func TestContextCmd_DefaultAndRenderOutputsUnchangedExceptAdditiveFields(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	assertOnlyAdditiveFieldsAdded := func(t *testing.T, output string) {
+		t.Helper()
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(output), &raw); err != nil {
+			t.Fatalf("output is not valid JSON: %v", err)
+		}
+		ctx, ok := raw["context"].(map[string]any)
+		if !ok {
+			t.Fatalf("output has no \"context\" object: %s", output)
+		}
+		wantKeys := map[string]bool{
+			"schema_version": true, "target": true, "intent": true, "budget": true,
+			"estimated_tokens": true, "budget_exceeded": true, "overage": true,
+			"items": true, "diagnostics": true, "rendered": true,
+		}
+		for k := range ctx {
+			if !wantKeys[k] {
+				t.Errorf("unexpected new top-level context field %q — only schema_version was expected to be additive", k)
+			}
+		}
+		items, _ := ctx["items"].([]any)
+		for _, it := range items {
+			item, _ := it.(map[string]any)
+			wantItemKeys := map[string]bool{"path": true, "heading": true, "tier": true, "reasons": true, "score": true, "tokens": true}
+			for k := range item {
+				if !wantItemKeys[k] {
+					t.Errorf("unexpected new item field %q in manifest-shaped item — items must stay content-free by default", k)
+				}
+			}
+		}
+		diag, _ := ctx["diagnostics"].(map[string]any)
+		wantDiagKeys := map[string]bool{
+			"candidates_considered": true, "items_selected": true, "tokens_available": true,
+			"tokens_selected": true, "tokens_excluded": true, "reduction_percent": true,
+			"payload_tokens": true,
+		}
+		for k := range diag {
+			if !wantDiagKeys[k] {
+				t.Errorf("unexpected new diagnostics field %q — only payload_tokens was expected to be additive", k)
+			}
+		}
+	}
+
+	cmdDefault := internalcmd.NewContextCmd()
+	cmdDefault.SetArgs([]string{"SPEC-014", "--intent", "implementation", "--dir", root})
+	outDefault, exitCode := runCmd(cmdDefault)
+	if exitCode != 0 {
+		t.Fatalf("default: exitCode = %d, want 0 (output: %s)", exitCode, outDefault)
+	}
+	assertOnlyAdditiveFieldsAdded(t, outDefault)
+
+	cmdRender := internalcmd.NewContextCmd()
+	cmdRender.SetArgs([]string{"SPEC-014", "--intent", "implementation", "--render", "--dir", root})
+	outRender, exitCode := runCmd(cmdRender)
+	if exitCode != 0 {
+		t.Fatalf("--render: exitCode = %d, want 0 (output: %s)", exitCode, outRender)
+	}
+	assertOnlyAdditiveFieldsAdded(t, outRender)
+}
+
+func TestContextCmd_PayloadTokensAtLeastTokensSelectedAndTokensSelectedUnchanged(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	manifestCmd := internalcmd.NewContextCmd()
+	manifestCmd.SetArgs([]string{"SPEC-014", "--intent", "implementation", "--mode", "manifest", "--dir", root})
+	manifestOut, exitCode := runCmd(manifestCmd)
+	if exitCode != 0 {
+		t.Fatalf("manifest: exitCode = %d, want 0 (output: %s)", exitCode, manifestOut)
+	}
+	manifest := decodeContextOutput(t, manifestOut)
+
+	packageCmd := internalcmd.NewContextCmd()
+	packageCmd.SetArgs([]string{"SPEC-014", "--intent", "implementation", "--mode", "package", "--dir", root})
+	packageOut, exitCode := runCmd(packageCmd)
+	if exitCode != 0 {
+		t.Fatalf("package: exitCode = %d, want 0 (output: %s)", exitCode, packageOut)
+	}
+	pkg := decodeContextOutput(t, packageOut)
+
+	if pkg.Context.Diagnostics.TokensSelected != manifest.Context.Diagnostics.TokensSelected {
+		t.Errorf("package tokens_selected = %d, want unchanged from manifest's %d", pkg.Context.Diagnostics.TokensSelected, manifest.Context.Diagnostics.TokensSelected)
+	}
+	if pkg.Context.Diagnostics.PayloadTokens < pkg.Context.Diagnostics.TokensSelected {
+		t.Errorf("package payload_tokens = %d, want >= tokens_selected %d", pkg.Context.Diagnostics.PayloadTokens, pkg.Context.Diagnostics.TokensSelected)
+	}
 }

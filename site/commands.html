@@ -170,13 +170,27 @@
         <li><code>--task &lt;text&gt;</code> — the current task's own text.</li>
         <li><code>--query &lt;text&gt;</code> — free-text query.</li>
         <li><code>--budget &lt;int&gt;</code> — token budget, including negative (default: 6000 when omitted). Must be a valid integer, or the command fails with <code>invalid_argument</code>.</li>
-        <li><code>--render</code> — additionally include a rendered Markdown context pack.</li>
+        <li><code>--render</code> — additionally include a rendered Markdown context pack. Unchanged since before <code>--mode</code> existed; cannot be combined with <code>--mode package</code>.</li>
+        <li><code>--mode</code> — <code>manifest</code> (default — metadata only, exactly today's shape), <code>package</code> (every item also carries <code>content</code>, a file-absolute <code>location</code>, and a <code>fingerprint</code>), or <code>markdown</code> (an explicit name for <code>--render</code>'s own shape).</li>
       </ul>
       <pre><code>misterspec internal context SPEC-014 --intent implementation --budget 700
-{"ok":true,"context":{"target":"SPEC-014","intent":"implementation","budget":700,
+{"ok":true,"context":{"schema_version":1,"target":"SPEC-014","intent":"implementation","budget":700,
 "estimated_tokens":589,"budget_exceeded":false,"overage":0,
 "items":[{"path":"ai/.../SPEC-014/spec.md","tier":"mandatory","reasons":["target"],"score":100,"tokens":107}],
-"diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7},
+"diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7,"payload_tokens":589},
+"rendered":null}}</code></pre>
+      <p>
+        <code>schema_version</code> and <code>diagnostics.payload_tokens</code> are new, additive fields — every other field is byte-for-byte unchanged from before <code>--mode</code> existed, and no currently-shipped Skill needs any change to keep working.
+      </p>
+      <p><strong><code>--mode package</code></strong> — every item's own selected text, delivered directly, with a file-absolute location and a content fingerprint, so a caller never has to re-read the source file for content already in the response:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package
+{"ok":true,"context":{"schema_version":1,"target":"SPEC-014", ...
+"items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
+"reasons":["target"],"score":100,"tokens":107,
+"content":"### R1 — First\n\nThe system MUST ...\n",
+"location":{"path":"ai/.../SPEC-014/spec.md","start_line":14,"end_line":18},
+"fingerprint":"sha256:3a7bd3e2360a3d..."}],
+"diagnostics":{"...":"...","payload_tokens":742},
 "rendered":null}}</code></pre>
 
       <h2 id="internal-commits-since-file">internal commits-since-file</h2>

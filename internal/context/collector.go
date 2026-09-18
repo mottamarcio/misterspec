@@ -202,12 +202,21 @@ func connectedCandidates[E any](root string, cfg project.Configuration, entries 
 
 // chunkArtifact reads, structures, and chunks the artifact at
 // root/relPath (011's ReadBody, 013's ParseDocument/Chunks), labeling
-// every resulting Chunk with one Reason{tier, relation}.
+// every resulting Chunk with one Reason{tier, relation}. Every
+// Candidate's StartLine/EndLine is file-absolute, not relative to the
+// post-frontmatter body ParseDocument itself operates on — achieved by
+// adding artifacts.ReadBodyWithOffset's own reported body-start line
+// (minus 1) to each Chunk's body-relative numbers
+// (033-context-pack-output-contract research.md Decision 1 — this was
+// the actual bug behind every Context Pack item's location, not only
+// wikilinks).
 func chunkArtifact(root, relPath string, tier Tier, relation string) ([]Candidate, error) {
-	body, err := artifacts.ReadBody(filepath.Join(root, relPath))
+	body, bodyStartLine, err := artifacts.ReadBodyWithOffset(filepath.Join(root, relPath))
 	if err != nil {
 		return nil, err
 	}
+	offset := bodyStartLine - 1
+
 	doc := artifacts.ParseDocument(body)
 	chunks := artifacts.Chunks(relPath, doc)
 
@@ -217,8 +226,8 @@ func chunkArtifact(root, relPath string, tier Tier, relation string) ([]Candidat
 			Path:      c.Path,
 			Heading:   c.Heading,
 			Content:   c.Content,
-			StartLine: c.StartLine,
-			EndLine:   c.EndLine,
+			StartLine: c.StartLine + offset,
+			EndLine:   c.EndLine + offset,
 			Reasons:   []Reason{{Tier: tier, Relation: relation}},
 		})
 	}
