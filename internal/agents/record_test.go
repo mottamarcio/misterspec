@@ -31,8 +31,8 @@ func TestRecordInstall_WritesExpectedSchema(t *testing.T) {
 	if record.SchemaVersion != 1 {
 		t.Errorf("SchemaVersion = %d, want 1", record.SchemaVersion)
 	}
-	if record.MisterspecVersion != agents.FrameworkVersion {
-		t.Errorf("MisterspecVersion = %q, want %q", record.MisterspecVersion, agents.FrameworkVersion)
+	if record.MisterspecVersion != agents.FrameworkVersion() {
+		t.Errorf("MisterspecVersion = %q, want %q", record.MisterspecVersion, agents.FrameworkVersion())
 	}
 	if record.Agent.ID != "claude-code" || record.Agent.IntegrationPath != ".claude/skills" {
 		t.Errorf("Agent = %+v, unexpected", record.Agent)

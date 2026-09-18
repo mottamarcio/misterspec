@@ -1,6 +1,40 @@
 <!--
 Sync Impact Report
 ===================
+Version change: 1.0.0 → 1.1.0
+Rationale: MINOR — expanding an existing Architecture Constraint's own
+scope (Public command surface), not redefining or removing a principle.
+Per the user's explicit request, adding two new top-level CLI flags
+(`--version`, `--update`) that would otherwise conflict with the
+frozen "misterspec init only" constraint — resolved here via a
+deliberate amendment, not by silently overriding it.
+
+Modified principles: N/A — no Core Principle (I–IX) changed. Only the
+"Architecture Constraints" section's "Public command surface" and
+"Embedded kit" bullets were amended.
+
+Added sections: none (existing bullets expanded in place)
+
+Removed sections: none
+
+Templates requiring updates:
+  - ✅ .specify/templates/plan-template.md — "Constitution Check" gate is
+    generic and derives from this file at plan time; no edit needed.
+  - ✅ .specify/templates/spec-template.md — no constitution-coupled content;
+    no edit needed.
+  - ✅ .specify/templates/tasks-template.md — no constitution-coupled
+    content specific to this amendment; no edit needed.
+  - ✅ No template or command file references "Public command surface" or
+    "misterspec init" directly (grep-confirmed) — nothing else to sync.
+
+Follow-up TODOs: none. The actual `--version`/`--update` feature work is
+deferred to `/speckit-specify` (see Next Actions below) — this amendment
+only clears the constitutional path for it.
+-->
+
+<!--
+Sync Impact Report (1.0.0, superseded)
+===================
 Version change: TEMPLATE (unratified) → 1.0.0
 Rationale: Initial ratification. The file previously held only unfilled
 [PLACEHOLDER] tokens, so this is a MAJOR (first) version, not an amendment.
@@ -207,9 +241,13 @@ The following decisions are frozen for the MVP (see
 reopened without a constitution amendment:
 
 - **Language**: Go. **CLI framework**: Cobra. **TUI framework**: Bubble Tea.
-- **Public command surface**: `misterspec init` only; the internal
-  deterministic API lives under a hidden `misterspec internal …` namespace
-  and MUST NOT be advertised in normal `--help` output.
+- **Public command surface**: `misterspec init`, `misterspec --version`,
+  and `misterspec --update` (amended 1.1.0 — see Sync Impact Report);
+  the internal deterministic API lives under a hidden
+  `misterspec internal …` namespace and MUST NOT be advertised in normal
+  `--help` output. `--version` and `--update` MUST remain simple,
+  self-contained utility flags — they MUST NOT grow into a broader
+  user-facing CLI vocabulary (Principle IV, "Primary product UX" below).
 - **Primary product UX**: agent slash commands, not a large user-facing CLI
   vocabulary.
 - **Artifacts**: stored as Markdown + YAML frontmatter under `ai/`; project
@@ -219,7 +257,10 @@ reopened without a constitution amendment:
   vector store).
 - **Embedded kit**: templates, skills, and integrations are embedded into the
   binary via `go:embed`; `misterspec init` MUST NOT require network access
-  to retrieve standard Skills or templates.
+  to retrieve standard Skills or templates. `misterspec --update` (amended
+  1.1.0) is the sole deliberate exception to this no-network rule — its
+  entire purpose is checking GitHub for a newer release and fetching it;
+  every other command, including `init`, remains network-free.
 - **Canonical lifecycle**: Raw → Knowledge → Constitution → Program →
   Feature → Spec → Plan → Tasks → Implementation → Validation. Skills MUST
   inspect current state rather than assume strict linear progression.
@@ -257,4 +298,4 @@ materially changed, and updated in the same amendment. Use `CLAUDE.md` for
 day-to-day runtime agent guidance; this Constitution remains the durable,
 non-negotiable layer beneath it.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-11 | **Last Amended**: 2026-09-11
+**Version**: 1.1.0 | **Ratified**: 2026-09-11 | **Last Amended**: 2026-09-18
