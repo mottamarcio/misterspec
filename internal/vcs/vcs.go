@@ -40,14 +40,17 @@ func CurrentBranch(root string) (string, error) {
 // unsafeBranchChars matches every run of characters not safe to use
 // verbatim in a Git branch name segment — a deliberately conservative
 // allow-list (letters, digits, hyphen) rather than trying to enumerate
-// every character `git check-ref-format` itself forbids.
+// every character `git check-ref-format` itself forbids. Reused as-is
+// for filename slugs (Slugify, 029-spec-wrap-up-docs) — the safety
+// requirements are identical for both use cases.
 var unsafeBranchChars = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
-// slugifyForBranch turns free-text (an agent-provided slug) into a
-// lowercase, hyphen-separated segment safe to append to a branch name —
-// e.g. "User Auth!!" -> "user-auth". Returns "" for input that reduces
-// to nothing usable, in which case the caller falls back to no slug.
-func slugifyForBranch(s string) string {
+// Slugify turns free-text into a lowercase, hyphen-separated segment
+// safe to use in a Git branch name or a filename — e.g. "User Auth!!"
+// -> "user-auth". Returns "" for input that reduces to nothing usable,
+// in which case the caller falls back to no slug (Constitution
+// Principle VI — one implementation shared by both use cases).
+func Slugify(s string) string {
 	s = unsafeBranchChars.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
 	return strings.ToLower(s)
@@ -60,7 +63,7 @@ func slugifyForBranch(s string) string {
 // the bare "feat/FEAT-007". Pure function, no I/O.
 func BranchName(featureID, slug string) string {
 	base := "feat/" + featureID
-	if clean := slugifyForBranch(slug); clean != "" {
+	if clean := Slugify(slug); clean != "" {
 		return base + "-" + clean
 	}
 	return base
@@ -110,6 +113,85 @@ func EnsureBranch(root, name string) (created bool, err error) {
 	}
 
 	return !exists, nil
+}
+
+// Commit is one entry in the range CommitsSinceFileAdded returns —
+// never persisted, always derived live from Git (Constitution
+// Principle III).
+type Commit struct {
+	Hash       string
+	Subject    string
+	AuthorDate string
+}
+
+// commitLogFormat is the exact "git log --format" string
+// CommitsSinceFileAdded parses, and the separator its own parsing
+// relies on — %x1f is the ASCII unit-separator, a character no commit
+// subject or date could plausibly contain.
+const commitLogFormat = "%H%x1f%s%x1f%as"
+
+// CommitsSinceFileAdded returns every commit on the current branch in
+// root from the one that first added path (inclusive) through HEAD
+// (inclusive), newest first — matching git log's own default order.
+// available is false, with no error, when history cannot be
+// determined at all: root is not a Git repository, or path was never
+// committed (029-spec-wrap-up-docs, research.md's own "bool separate
+// from error" decision, mirroring 022's GitSkippedReason pattern) —
+// this is never a Failure Condition for a caller, only a fact to note.
+func CommitsSinceFileAdded(root, path string) (commits []Commit, available bool, err error) {
+	if !IsRepo(root) {
+		return nil, false, nil
+	}
+
+	// git log lists newest-first; --follow --diff-filter=A finds every
+	// commit that added path (across renames), so the LAST line is the
+	// original "added" commit.
+	added := exec.Command("git", "log", "--diff-filter=A", "--follow", "--format=%H", "--", path)
+	added.Dir = root
+	out, err := added.Output()
+	if err != nil {
+		return nil, false, fmt.Errorf("vcs: git log --diff-filter=A -- %s: %w", path, err)
+	}
+	lines := strings.Fields(strings.TrimSpace(string(out)))
+	if len(lines) == 0 {
+		return nil, false, nil
+	}
+	addedCommit := lines[len(lines)-1]
+
+	// <addedCommit>^..HEAD excludes addedCommit itself unless it has no
+	// parent (the repository's own root commit), in which case Git
+	// already includes it as the range's own start.
+	rangeSpec := addedCommit + "^..HEAD"
+	if !hasParent(root, addedCommit) {
+		rangeSpec = "HEAD"
+	}
+
+	log := exec.Command("git", "log", "--format="+commitLogFormat, rangeSpec)
+	log.Dir = root
+	logOut, err := log.Output()
+	if err != nil {
+		return nil, false, fmt.Errorf("vcs: git log %s: %w", rangeSpec, err)
+	}
+
+	for _, line := range strings.Split(strings.TrimRight(string(logOut), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\x1f", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		commits = append(commits, Commit{Hash: fields[0], Subject: fields[1], AuthorDate: fields[2]})
+	}
+	return commits, true, nil
+}
+
+// hasParent reports whether commit has at least one parent — false
+// only for a repository's own root commit.
+func hasParent(root, commit string) bool {
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", commit+"^")
+	cmd.Dir = root
+	return cmd.Run() == nil
 }
 
 // EnsureFeatureBranch creates-and-checks-out featureID's own branch —

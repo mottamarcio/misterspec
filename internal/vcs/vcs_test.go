@@ -1,7 +1,9 @@
 package vcs
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -215,6 +217,99 @@ func TestEnsureFeatureBranch_ResumesExistingBranchIgnoringNewSlug(t *testing.T) 
 	}
 	if branch != "feat/FEAT-007-user-auth" {
 		t.Errorf("branch = %q, want the already-existing %q", branch, "feat/FEAT-007-user-auth")
+	}
+}
+
+func TestCommitsSinceFileAdded_OrdinaryCaseExcludesCommitsBeforeFileAdded(t *testing.T) {
+	dir := initFixtureRepo(t)
+
+	// A commit before plan.md exists at all.
+	writeFile(t, dir, "unrelated.txt", "first")
+	runGit(t, dir, "add", "unrelated.txt")
+	runGit(t, dir, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "unrelated change")
+
+	// The commit that adds plan.md itself.
+	writeFile(t, dir, "plan.md", "the plan")
+	runGit(t, dir, "add", "plan.md")
+	runGit(t, dir, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "add plan.md")
+
+	// A commit after plan.md was added.
+	writeFile(t, dir, "plan.md", "the plan, revised")
+	runGit(t, dir, "add", "plan.md")
+	runGit(t, dir, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "revise plan.md")
+
+	commits, available, err := CommitsSinceFileAdded(dir, "plan.md")
+	if err != nil {
+		t.Fatalf("CommitsSinceFileAdded() unexpected error: %v", err)
+	}
+	if !available {
+		t.Fatal("available = false, want true")
+	}
+	if len(commits) != 2 {
+		t.Fatalf("commits = %d, want 2 (the add + the revise, never the unrelated commit before it): %+v", len(commits), commits)
+	}
+	for _, c := range commits {
+		if strings.Contains(c.Subject, "unrelated") {
+			t.Errorf("commits includes a commit before plan.md was added: %+v", c)
+		}
+	}
+}
+
+func TestCommitsSinceFileAdded_FileAddedAtRootCommit(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-q")
+	writeFile(t, dir, "plan.md", "the plan")
+	runGit(t, dir, "add", "plan.md")
+	runGit(t, dir, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "root commit adds plan.md")
+
+	commits, available, err := CommitsSinceFileAdded(dir, "plan.md")
+	if err != nil {
+		t.Fatalf("CommitsSinceFileAdded() unexpected error: %v", err)
+	}
+	if !available {
+		t.Fatal("available = false, want true")
+	}
+	if len(commits) != 1 {
+		t.Fatalf("commits = %d, want 1 (the root commit itself): %+v", len(commits), commits)
+	}
+}
+
+func TestCommitsSinceFileAdded_FileNeverCommitted(t *testing.T) {
+	dir := initFixtureRepo(t)
+
+	commits, available, err := CommitsSinceFileAdded(dir, "never-committed.md")
+	if err != nil {
+		t.Fatalf("CommitsSinceFileAdded() unexpected error: %v", err)
+	}
+	if available {
+		t.Error("available = true for a file never committed, want false")
+	}
+	if len(commits) != 0 {
+		t.Errorf("commits = %d, want 0", len(commits))
+	}
+}
+
+func TestCommitsSinceFileAdded_NotARepo(t *testing.T) {
+	dir := t.TempDir()
+
+	commits, available, err := CommitsSinceFileAdded(dir, "plan.md")
+	if err != nil {
+		t.Fatalf("CommitsSinceFileAdded() unexpected error: %v", err)
+	}
+	if available {
+		t.Error("available = true outside a Git repository, want false")
+	}
+	if len(commits) != 0 {
+		t.Errorf("commits = %d, want 0", len(commits))
+	}
+}
+
+// writeFile is a small test-only helper writing a file's content
+// directly, for commits this package's own tests need to construct.
+func writeFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", name, err)
 	}
 }
 
