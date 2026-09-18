@@ -191,7 +191,7 @@ func installOneFS(source fs.FS, sourceDir, targetDir string, r Resource, overwri
 		return Outcome{Resource: r, Status: Failed, Path: destRel, Err: err}
 	}
 
-	if err := WriteAtomicFile(destAbs, content); err != nil {
+	if err := WriteAtomicFile(destAbs, content, DefaultFileMode); err != nil {
 		return Outcome{Resource: r, Status: Failed, Path: destRel, Err: err}
 	}
 

@@ -65,6 +65,18 @@ agent's own installed Skills (`/mister-constitution`, `/mister-specify`,
 misterspec's own deterministic commands run underneath them
 automatically.
 
+## Staying up to date
+
+```sh
+# Check which version is installed:
+misterspec --version
+
+# Check GitHub for a newer release and, if you confirm, install it
+# (verifies a published SHA-256 checksum before replacing anything,
+# and reinstalls Skills for the current project if one is initialized):
+misterspec --update
+```
+
 ## Documentation
 
 The full reference — the project's core concept, every shipped

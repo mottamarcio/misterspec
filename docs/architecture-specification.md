@@ -2690,7 +2690,9 @@ Executable
     misterspec
 
 Public command
-    misterspec init
+    misterspec init, misterspec --version, misterspec --update
+    (--version/--update amended 030-cli-version-update; see
+    .specify/memory/constitution.md's Sync Impact Report, v1.1.0)
 
 Public terminal UX
     bootstrap only

@@ -48,12 +48,21 @@ jobs:
           fi
           echo "name=misterspec-${{ matrix.goos }}-${{ matrix.goarch }}${ext}" >> "$GITHUB_OUTPUT"
 
+      - name: Determine build tag
+        id: buildtag
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
-        run: go build -o "${{ steps.asset.outputs.name }}" ./cmd/misterspec
+        run: go build -ldflags "-X github.com/mottamarcio/misterspec/internal/selfupdate.Version=${{ steps.buildtag.outputs.tag }}" -o "${{ steps.asset.outputs.name }}" ./cmd/misterspec
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -79,6 +88,10 @@ jobs:
           else
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
 
       - name: Attach binaries to release
         uses: softprops/action-gh-release@v2
