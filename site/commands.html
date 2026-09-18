@@ -147,6 +147,35 @@
 {"ok":true,"collisions":[{"task_number":1,"specs":["SPEC-001","SPEC-002"],"paths":["ai/.../SPEC-001/tasks.md#TASK-001","ai/.../SPEC-002/tasks.md#TASK-001"]}]}</code></pre>
       <p>An empty <code>collisions</code> array is the common, healthy outcome — it is not an error.</p>
 
+      <h2 id="internal-prepare">internal prepare SPEC-### [--task TASK-###]</h2>
+      <p><strong>Purpose:</strong> Assemble everything needed to start one Task — identity, readiness, served requirements' own text, declared scope, verification method, and associated Plan sections — in a single, read-only response. No command is ever executed.</p>
+      <p><strong>Flags:</strong> <code>--task &lt;id&gt;</code> (optional — bare <code>TASK-###</code> or composite <code>SPEC-###:TASK-###</code>; omit to auto-select the lowest-numbered Ready Task in the Spec).</p>
+      <pre><code>misterspec internal prepare SPEC-014 --task TASK-003
+{"ok":true,"preparation":{"task":"SPEC-014:TASK-003","heading":"Add refresh-token rotation",
+"ready":true,"blockers":[],
+"requirements":[{"ref":"SPEC-014:R1","content":"### R1 — ...","fingerprint":"sha256:..."}],
+"scope":"internal/auth/refresh.go","verify":"go test ./internal/auth/... -run TestRefreshRotation",
+"plan_sections":[{"heading":"Implementation Sequence","content":"...","fingerprint":"sha256:...","matched_requirements":["SPEC-014:R1"]}]}}</code></pre>
+      <p>
+        A blocked Task keeps <code>ok:true</code> but sets <code>ready:false</code>
+        with named <code>blockers</code>, and exits <code>10</code> — distinct from
+        <code>internal validate</code>'s own <code>4</code>, since "this Task isn't
+        actionable yet" is a different condition than a structural project problem.
+      </p>
+      <p>
+        When no Task is named and none in the Spec is currently ready:
+      </p>
+      <pre><code>misterspec internal prepare SPEC-014
+{"ok":true,"preparation":null,"message":"no Task in SPEC-014 is ready — every Task is either complete or blocked"}</code></pre>
+      <p>
+        Recognizes three new Task-body labels, alongside the existing <code>Serves:</code>:
+        <code>Depends on: TASK-###</code> (or <code>none</code> — absence means the same
+        thing), <code>Scope:</code>, and <code>Verify:</code>. A <code>Depends on:</code>
+        cycle or a reference to a nonexistent/cross-Spec Task is also caught by
+        <code>internal validate</code> as <code>task_dependency_cycle</code> /
+        <code>invalid_task_dependency</code>.
+      </p>
+
       <h2 id="internal-status">internal status</h2>
       <p><strong>Purpose:</strong> Return a machine-facing structural status summary for the whole project.</p>
       <pre><code>misterspec internal status

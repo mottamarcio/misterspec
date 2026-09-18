@@ -107,7 +107,7 @@ func TestParseRequirementRef_Invalid(t *testing.T) {
 func TestParseTaskCoverage_SingleReference(t *testing.T) {
 	cfg := reqTestConfig()
 	body := []byte("- [ ] Complete\n\nServes: SPEC-014:R1\n")
-	got := parseTaskCoverage(taskID(1), body, cfg)
+	got := ParseTaskCoverage(taskID(1), body, cfg)
 	if len(got.References) != 1 || got.References[0] != (RequirementRef{Spec: specID(14), Number: 1}) {
 		t.Fatalf("References = %+v, want [SPEC-014:R1]", got.References)
 	}
@@ -120,7 +120,7 @@ func TestParseTaskCoverage_SingleReference(t *testing.T) {
 func TestParseTaskCoverage_CommaSeparatedList(t *testing.T) {
 	cfg := reqTestConfig()
 	body := []byte("Serves: SPEC-014:R1, SPEC-014:R2\n")
-	got := parseTaskCoverage(taskID(1), body, cfg)
+	got := ParseTaskCoverage(taskID(1), body, cfg)
 	if len(got.References) != 2 {
 		t.Fatalf("References = %+v, want 2 entries", got.References)
 	}
@@ -131,7 +131,7 @@ func TestParseTaskCoverage_CommaSeparatedList(t *testing.T) {
 func TestParseTaskCoverage_RepeatedLinesUnioned(t *testing.T) {
 	cfg := reqTestConfig()
 	body := []byte("Serves: SPEC-014:R1\nServes: SPEC-014:R2\n")
-	got := parseTaskCoverage(taskID(1), body, cfg)
+	got := ParseTaskCoverage(taskID(1), body, cfg)
 	if len(got.References) != 2 {
 		t.Fatalf("References = %+v, want 2 entries from two Serves: lines", got.References)
 	}
@@ -142,7 +142,7 @@ func TestParseTaskCoverage_RepeatedLinesUnioned(t *testing.T) {
 func TestParseTaskCoverage_MalformedEntryCaptured(t *testing.T) {
 	cfg := reqTestConfig()
 	body := []byte("Serves: not-a-valid-ref\n")
-	got := parseTaskCoverage(taskID(1), body, cfg)
+	got := ParseTaskCoverage(taskID(1), body, cfg)
 	if len(got.References) != 0 {
 		t.Errorf("References = %+v, want none for a malformed entry", got.References)
 	}
@@ -155,7 +155,7 @@ func TestParseTaskCoverage_MalformedEntryCaptured(t *testing.T) {
 func TestParseTaskCoverage_NoServesLine(t *testing.T) {
 	cfg := reqTestConfig()
 	body := []byte("- [ ] Complete\n\nNo coverage line here.\n")
-	got := parseTaskCoverage(taskID(1), body, cfg)
+	got := ParseTaskCoverage(taskID(1), body, cfg)
 	if len(got.References) != 0 {
 		t.Errorf("References = %+v, want none", got.References)
 	}

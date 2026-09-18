@@ -75,4 +75,11 @@ const (
 	// requirement — emitted in addition to, never instead of, the
 	// underlying coverage Finding(s) it escalates (FR-011, FR-012).
 	CodePhaseGateBlocked = "phase_gate_blocked"
+	// CodeTaskDependencyCycle marks a cycle in one Spec's Task-to-Task
+	// "Depends on:" graph, including a Task depending on itself
+	// (034-task-oriented-context-preparation FR-008).
+	CodeTaskDependencyCycle = "task_dependency_cycle"
+	// CodeInvalidTaskDependency marks a "Depends on:" entry naming a
+	// nonexistent Task number, or a Task in a different Spec (FR-009).
+	CodeInvalidTaskDependency = "invalid_task_dependency"
 )

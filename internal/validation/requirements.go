@@ -130,11 +130,11 @@ type TaskCoverage struct {
 // SPEC-###:R#" convention).
 var servesLinePattern = regexp.MustCompile(`^Serves:\s*(.+)$`)
 
-// parseTaskCoverage scans body (one Task's own Section.Body) for every
+// ParseTaskCoverage scans body (one Task's own Section.Body) for every
 // "Serves:" line, splitting each on commas and unioning across repeated
 // lines (032/research.md Decision 3). A malformed entry is recorded in
 // MalformedReferences rather than silently dropped.
-func parseTaskCoverage(task ids.EntityID, body []byte, cfg project.Configuration) TaskCoverage {
+func ParseTaskCoverage(task ids.EntityID, body []byte, cfg project.Configuration) TaskCoverage {
 	coverage := TaskCoverage{Task: task}
 
 	for _, line := range strings.Split(string(body), "\n") {
@@ -222,7 +222,7 @@ func specCoverageFindings(root string, cfg project.Configuration, spec ids.Entit
 				continue
 			}
 			task := ids.EntityID{Type: ids.Task, Prefix: ids.Task.Prefix(), Number: n, Width: cfg.IDWidth}
-			taskCoverages = append(taskCoverages, parseTaskCoverage(task, []byte(section.Body), cfg))
+			taskCoverages = append(taskCoverages, ParseTaskCoverage(task, []byte(section.Body), cfg))
 		}
 	case errors.Is(err, artifacts.ErrArtifactNotFound):
 		// No tasks.md yet — every Requirement below is simply uncovered.

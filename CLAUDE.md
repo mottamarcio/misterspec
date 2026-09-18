@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/033-context-pack-output-contract/plan.md
+specs/034-task-oriented-context-preparation/plan.md
 <!-- SPECKIT END -->

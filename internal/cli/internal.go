@@ -33,6 +33,7 @@ func newInternalCmd() *cobra.Command {
 		internalcmd.NewContextCmd(),
 		internalcmd.NewCommitsSinceFileCmd(),
 		internalcmd.NewMigrationCheckTasksCmd(),
+		internalcmd.NewPrepareCmd(),
 	)
 	return cmd
 }
