@@ -87,9 +87,9 @@ func BuildPackageItems(items []ResultItem) []PackageItem {
 // the rendered Markdown's own formatting overhead. contentTokens is the
 // caller's already-computed Diagnostics.TokensSelected, reused rather
 // than recomputed.
-func PayloadTokens(contentTokens int, packageItems []PackageItem, rendered string) int {
+func PayloadTokens(contentTokens int, packageItems []PackageItem, rendered string, estimator artifacts.Estimator) int {
 	if rendered != "" {
-		return artifacts.EstimateTokens(rendered)
+		return estimator.Estimate(rendered)
 	}
 	overhead := 0
 	for _, item := range packageItems {
@@ -97,7 +97,7 @@ func PayloadTokens(contentTokens int, packageItems []PackageItem, rendered strin
 		// item carries beyond its own content: path, heading, reasons,
 		// location, fingerprint — estimated the same way content
 		// itself is, so the unit stays consistent.
-		overhead += artifacts.EstimateTokens(fmt.Sprintf("%s%s%v%d%d%s", item.Path, item.Heading, item.Reasons, item.Location.StartLine, item.Location.EndLine, item.Fingerprint))
+		overhead += estimator.Estimate(fmt.Sprintf("%s%s%v%d%d%s", item.Path, item.Heading, item.Reasons, item.Location.StartLine, item.Location.EndLine, item.Fingerprint))
 	}
 	return contentTokens + overhead
 }

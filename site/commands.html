@@ -198,28 +198,30 @@
         <li><code>--intent</code> — <code>planning</code>, <code>tasks</code>, <code>implementation</code>, <code>validation</code>, or <code>analysis</code>.</li>
         <li><code>--task &lt;text&gt;</code> — the current task's own text.</li>
         <li><code>--query &lt;text&gt;</code> — free-text query.</li>
-        <li><code>--budget &lt;int&gt;</code> — token budget, including negative (default: 6000 when omitted). Must be a valid integer, or the command fails with <code>invalid_argument</code>.</li>
+        <li><code>--budget &lt;int&gt;</code> — the soft limit: the target for how much <em>optional</em> content to include, including negative (default: 6000 when omitted). Must be a valid integer, or the command fails with <code>invalid_argument</code>. Never used to flag mandatory content as excessive — see <code>--hard-limit</code>.</li>
+        <li><code>--hard-limit &lt;int&gt;</code> — the hard limit: the ceiling above which mandatory content is reported as exceeded (default: 12000, twice <code>--budget</code>'s own default, when omitted — never treated as "no limit"). Independent of <code>--budget</code>; a smaller <code>--hard-limit</code> than <code>--budget</code> is accepted, not rejected. Must be a valid integer, or the command fails with <code>invalid_argument</code>.</li>
         <li><code>--render</code> — additionally include a rendered Markdown context pack. Unchanged since before <code>--mode</code> existed; cannot be combined with <code>--mode package</code>.</li>
         <li><code>--mode</code> — <code>manifest</code> (default — metadata only, exactly today's shape), <code>package</code> (every item also carries <code>content</code>, a file-absolute <code>location</code>, and a <code>fingerprint</code>), or <code>markdown</code> (an explicit name for <code>--render</code>'s own shape).</li>
       </ul>
       <pre><code>misterspec internal context SPEC-014 --intent implementation --budget 700
-{"ok":true,"context":{"schema_version":1,"target":"SPEC-014","intent":"implementation","budget":700,
+{"ok":true,"context":{"schema_version":2,"target":"SPEC-014","intent":"implementation","budget":700,
 "estimated_tokens":589,"budget_exceeded":false,"overage":0,
 "items":[{"path":"ai/.../SPEC-014/spec.md","tier":"mandatory","reasons":["target"],"score":100,"tokens":107}],
-"diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7,"payload_tokens":589},
+"diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7,"payload_tokens":589,
+"estimator":"default","hard_limit":12000,"exclusions":[]},
 "rendered":null}}</code></pre>
       <p>
-        <code>schema_version</code> and <code>diagnostics.payload_tokens</code> are new, additive fields — every other field is byte-for-byte unchanged from before <code>--mode</code> existed, and no currently-shipped Skill needs any change to keep working.
+        <code>schema_version</code> is now <code>2</code>: <code>budget_exceeded</code>/<code>overage</code> now compare mandatory content against the new, separate <code>--hard-limit</code> instead of <code>--budget</code> — a deliberate redefinition (previously, a small <code>--budget</code> alone could misleadingly flag mandatory content as "exceeded"). <code>diagnostics.estimator</code> names which token estimator produced every count in the response (always <code>"default"</code> today); <code>diagnostics.hard_limit</code> is the resolved ceiling actually applied; <code>diagnostics.exclusions</code> lists every optional candidate left out and why (<code>did_not_fit_remaining_budget</code> or <code>no_coherent_unit_fit</code>). Every other field is unchanged, and a caller now also gets one further behavior change: a large optional candidate that doesn't fit no longer aborts consideration of the rest of that priority tier — a smaller, later candidate of the same tier may still be included, and an oversized single section may be included as a coherent, un-truncated prefix instead of excluded outright.
       </p>
       <p><strong><code>--mode package</code></strong> — every item's own selected text, delivered directly, with a file-absolute location and a content fingerprint, so a caller never has to re-read the source file for content already in the response:</p>
       <pre><code>misterspec internal context SPEC-014 --mode package
-{"ok":true,"context":{"schema_version":1,"target":"SPEC-014", ...
+{"ok":true,"context":{"schema_version":2,"target":"SPEC-014", ...
 "items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
 "reasons":["target"],"score":100,"tokens":107,
 "content":"### R1 — First\n\nThe system MUST ...\n",
 "location":{"path":"ai/.../SPEC-014/spec.md","start_line":14,"end_line":18},
 "fingerprint":"sha256:3a7bd3e2360a3d..."}],
-"diagnostics":{"...":"...","payload_tokens":742},
+"diagnostics":{"...":"...","payload_tokens":742,"estimator":"default","hard_limit":12000,"exclusions":[]},
 "rendered":null}}</code></pre>
 
       <h2 id="internal-commits-since-file">internal commits-since-file</h2>

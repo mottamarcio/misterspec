@@ -52,13 +52,16 @@ type contextItemJSON struct {
 }
 
 type contextDiagnosticsJSON struct {
-	CandidatesConsidered int     `json:"candidates_considered"`
-	ItemsSelected        int     `json:"items_selected"`
-	TokensAvailable      int     `json:"tokens_available"`
-	TokensSelected       int     `json:"tokens_selected"`
-	TokensExcluded       int     `json:"tokens_excluded"`
-	ReductionPercent     float64 `json:"reduction_percent"`
-	PayloadTokens        int     `json:"payload_tokens"`
+	CandidatesConsidered int                    `json:"candidates_considered"`
+	ItemsSelected        int                    `json:"items_selected"`
+	TokensAvailable      int                    `json:"tokens_available"`
+	TokensSelected       int                    `json:"tokens_selected"`
+	TokensExcluded       int                    `json:"tokens_excluded"`
+	ReductionPercent     float64                `json:"reduction_percent"`
+	PayloadTokens        int                    `json:"payload_tokens"`
+	Estimator            string                 `json:"estimator"`
+	HardLimit            int                    `json:"hard_limit"`
+	Exclusions           []contextExclusionJSON `json:"exclusions"`
 }
 
 type contextResultJSON struct {
@@ -72,6 +75,12 @@ type contextResultJSON struct {
 	Items           []contextItemJSON      `json:"items"`
 	Diagnostics     contextDiagnosticsJSON `json:"diagnostics"`
 	Rendered        *string                `json:"rendered"`
+}
+
+type contextExclusionJSON struct {
+	Path    string `json:"path"`
+	Heading string `json:"heading"`
+	Reason  string `json:"reason"`
 }
 
 type contextEnvelopeJSON struct {
@@ -723,8 +732,53 @@ func TestContextCmd_SchemaVersionPresentInEveryMode(t *testing.T) {
 			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
 		}
 		decoded := decodeContextOutput(t, output)
-		if decoded.Context.SchemaVersion != 1 {
-			t.Errorf("--mode %s: schema_version = %d, want 1", mode, decoded.Context.SchemaVersion)
+		if decoded.Context.SchemaVersion != 2 {
+			t.Errorf("--mode %s: schema_version = %d, want 2", mode, decoded.Context.SchemaVersion)
+		}
+	}
+}
+
+func TestContextCmd_HardLimitFlagParsesAndDefaultsTo12000(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+	if decoded.Context.Diagnostics.HardLimit != 12000 {
+		t.Errorf("diagnostics.hard_limit = %d, want 12000 (omitted --hard-limit must still resolve to a finite default — FR-006)", decoded.Context.Diagnostics.HardLimit)
+	}
+
+	cmd2 := internalcmd.NewContextCmd()
+	cmd2.SetArgs([]string{"SPEC-014", "--hard-limit", "500", "--dir", root})
+	output2, exitCode2 := runCmd(cmd2)
+	if exitCode2 != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode2, output2)
+	}
+	decoded2 := decodeContextOutput(t, output2)
+	if decoded2.Context.Diagnostics.HardLimit != 500 {
+		t.Errorf("diagnostics.hard_limit = %d, want 500 (--hard-limit must be honored)", decoded2.Context.Diagnostics.HardLimit)
+	}
+}
+
+func TestContextCmd_DiagnosticsIdentifiesTheEstimatorInEveryMode(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	for _, mode := range []string{"manifest", "package", "markdown"} {
+		cmd := internalcmd.NewContextCmd()
+		cmd.SetArgs([]string{"SPEC-014", "--mode", mode, "--dir", root})
+		output, exitCode := runCmd(cmd)
+		if exitCode != 0 {
+			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
+		}
+		decoded := decodeContextOutput(t, output)
+		if decoded.Context.Diagnostics.Estimator != "default" {
+			t.Errorf("--mode %s: diagnostics.estimator = %q, want %q (FR-001)", mode, decoded.Context.Diagnostics.Estimator, "default")
 		}
 	}
 }
@@ -797,10 +851,13 @@ func TestContextCmd_DefaultAndRenderOutputsUnchangedExceptAdditiveFields(t *test
 			"candidates_considered": true, "items_selected": true, "tokens_available": true,
 			"tokens_selected": true, "tokens_excluded": true, "reduction_percent": true,
 			"payload_tokens": true,
+			// 035-context-budget-accuracy's own additive diagnostics
+			// fields (contracts/budget-and-estimator-contract.md §2.2):
+			"estimator": true, "hard_limit": true, "exclusions": true,
 		}
 		for k := range diag {
 			if !wantDiagKeys[k] {
-				t.Errorf("unexpected new diagnostics field %q — only payload_tokens was expected to be additive", k)
+				t.Errorf("unexpected new diagnostics field %q — only payload_tokens (033) and estimator/hard_limit/exclusions (035) were expected to be additive", k)
 			}
 		}
 	}
