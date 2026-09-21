@@ -8,6 +8,7 @@ import (
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
 	contextengine "github.com/mottamarcio/misterspec/internal/context"
 	"github.com/mottamarcio/misterspec/internal/context/index"
+	"github.com/mottamarcio/misterspec/internal/eval"
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/project"
 	"github.com/mottamarcio/misterspec/internal/selfupdate"
@@ -51,6 +52,12 @@ func classify(err error) (code string, exitCode int) {
 		return "unsupported_intent", 2
 	case errors.Is(err, index.ErrQuerySyntax):
 		return "query_syntax_error", 2
+	case errors.Is(err, eval.ErrInvalidCase):
+		return "invalid_case", 2
+	case errors.Is(err, eval.ErrIncompatibleRun):
+		return "incompatible_run", 2
+	case errors.Is(err, eval.ErrInvalidRunRecord):
+		return "invalid_argument", 2
 	case errors.Is(err, artifacts.ErrPathOutsideProject):
 		return "path_outside_project", 5
 	case errors.Is(err, bootstrap.ErrAlreadyInitialized):

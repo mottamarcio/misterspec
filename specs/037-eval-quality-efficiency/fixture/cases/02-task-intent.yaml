@@ -1,0 +1,10 @@
+# Exercises task/intent-oriented retrieval (034-task-oriented-context-
+# preparation's request shape) rather than free-text query mode.
+id: task-intent-01
+target: SPEC-101
+task: implement the structural dependency on SPEC-100
+intent: implementation
+dir: ../project
+required:
+  - SPEC-101
+  - SPEC-100

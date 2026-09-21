@@ -1534,6 +1534,19 @@ Tune ranking only from observed failures, not intuition alone.
 
 **Exit criteria:** retrieval is consistently useful enough to bootstrap actual coding work.
 
+**Note (037-eval-quality-efficiency):** the one-off dogfooding exercise
+described above (019-dogfooding-evaluation) has since been superseded
+by a reusable, repeatable evaluation harness — `misterspec internal
+eval-retrieval` (deterministic, CI-runnable, no LLM session required)
+and `misterspec internal eval-compare` (baseline vs. candidate
+comparison, one-dimension-at-a-time). Any future retrieval/ranking
+proposal (e.g. a PROP-06/08/13-style change) should record a baseline
+and compare against it through this harness — see
+`specs/037-eval-quality-efficiency/quickstart.md`,
+`contracts/eval-commands-contract.md`, and
+`docs/eval-task-execution-protocol.md` for the live-agent-session half
+— rather than re-inventing an ad hoc measurement.
+
 ### Phase 10 — Skill Integration
 
 Update Skills incrementally, beginning with the highest-value workflows such as implementation, planning, task creation, and analysis.

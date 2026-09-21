@@ -1,0 +1,14 @@
+# Real budget pressure (spec FR-010): under a very tight budget, only
+# mandatory content (the target itself, Tier 0/1) is guaranteed to
+# survive — SPEC-101's own structural dependency is expected to be
+# trimmed, so it is deliberately NOT listed as required here.
+id: tight-budget-01
+target: SPEC-102
+dir: ../project
+budget: 40
+required:
+  - SPEC-102
+note: >-
+  Deliberately omits SPEC-101/SPEC-100/KNOW-100 from "required" — under
+  this tight a budget they are expected to be trimmed as optional
+  content; only the mandatory target itself is asserted.

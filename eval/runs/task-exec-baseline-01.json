@@ -1,0 +1,22 @@
+{
+  "run_id": "task-exec-baseline-01",
+  "kind": "task_execution",
+  "created_at": "2026-09-21T13:20:00Z",
+  "config": {
+    "repo_revision": "3ccbb06",
+    "model": "claude-sonnet-5",
+    "variant": "default"
+  },
+  "results": [
+    {
+      "task_id": "add-forbidden-case-01",
+      "outcome": "pass",
+      "metrics": {
+        "calls": 4,
+        "extra_reads": 0,
+        "rework": 0,
+        "latency_seconds": 45
+      }
+    }
+  ]
+}
