@@ -104,7 +104,10 @@ Required operations:
 - `internal context SPEC-### --intent tasks` — request a budgeted
   Context Pack before broader exploration. If this fails, proceed
   using this Skill's own Optional Context above instead — it is never
-  a Failure Condition.
+  a Failure Condition. Record the occurrence as
+  `context_fallbacks` in this task's own RunRecord once one exists,
+  rather than silently absorbing the extra read
+  (037-eval-quality-efficiency).
 - `internal create-artifact tasks --for SPEC-###` — scaffold the Tasks
   artifact at its fixed canonical location.
 - `internal validate SPEC-###` — confirm the Spec (now with Tasks) is

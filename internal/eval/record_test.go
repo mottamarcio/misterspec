@@ -70,6 +70,22 @@ func TestMetrics_Validate_AcceptsTokenWithEstimatedFlag(t *testing.T) {
 	}
 }
 
+func TestMetrics_Validate_AcceptsZeroOrPositiveContextFallbacks(t *testing.T) {
+	for _, n := range []int{0, 2} {
+		m := Metrics{ContextFallbacks: n}
+		if err := m.Validate(); err != nil {
+			t.Errorf("Metrics{ContextFallbacks: %d}.Validate() = %v, want nil", n, err)
+		}
+	}
+}
+
+func TestMetrics_Validate_RejectsNegativeContextFallbacks(t *testing.T) {
+	m := Metrics{ContextFallbacks: -1}
+	if err := m.Validate(); !errors.Is(err, ErrInvalidRunRecord) {
+		t.Fatalf("Metrics{ContextFallbacks: -1}.Validate() error = %v, want ErrInvalidRunRecord", err)
+	}
+}
+
 func TestTaskResult_Validate_RejectsUnknownOutcome(t *testing.T) {
 	tr := TaskResult{TaskID: "t1", Outcome: "maybe"}
 	if err := tr.Validate(); !errors.Is(err, ErrInvalidRunRecord) {

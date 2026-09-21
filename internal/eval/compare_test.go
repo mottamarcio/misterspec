@@ -148,6 +148,46 @@ func TestCompare_VarianceDowngradesInconsistentCaseToNeutral(t *testing.T) {
 	}
 }
 
+// TestCompare_ContextFallbacksSurvivesComparison is
+// 039-lean-skills-integration-contracts T032's regression coverage.
+// Investigation while implementing this test found compare.go's
+// per-task diffing (compareTaskResults) only compares TaskResult.Outcome
+// — it has never diffed individual Metrics fields (ExtraReads and
+// Rework are not surfaced by Compare() either, both pre-dating this
+// feature). ContextFallbacks is therefore not "joining an existing
+// per-field Metrics diff path" as originally assumed during planning —
+// no such path exists. This test instead confirms what the feature
+// actually needs (spec FR-008/SC-005): the field round-trips through
+// Compare() without being dropped or causing an error, so two
+// RunRecords with different ContextFallbacks values remain
+// independently inspectable and available for external accounting,
+// consistent with how ExtraReads/Rework already behave today.
+func TestCompare_ContextFallbacksSurvivesComparison(t *testing.T) {
+	baseline := taskRunRecord(t, "b1", KindTaskExecution, nil, []TaskResult{
+		{TaskID: "t1", Outcome: "pass", Metrics: Metrics{ContextFallbacks: 0}},
+	})
+	candidate := taskRunRecord(t, "c1", KindTaskExecution, nil, []TaskResult{
+		{TaskID: "t1", Outcome: "pass", Metrics: Metrics{ContextFallbacks: 2}},
+	})
+
+	if _, err := Compare(baseline, candidate, nil); err != nil {
+		t.Fatalf("Compare() error = %v, want nil (a ContextFallbacks-only difference must not itself be an incompatibility)", err)
+	}
+
+	baseResults, err := baseline.TaskResults()
+	if err != nil {
+		t.Fatalf("baseline.TaskResults() error = %v", err)
+	}
+	candResults, err := candidate.TaskResults()
+	if err != nil {
+		t.Fatalf("candidate.TaskResults() error = %v", err)
+	}
+	if baseResults[0].Metrics.ContextFallbacks != 0 || candResults[0].Metrics.ContextFallbacks != 2 {
+		t.Errorf("ContextFallbacks did not survive RunRecord round-trip: baseline=%d candidate=%d, want 0 and 2",
+			baseResults[0].Metrics.ContextFallbacks, candResults[0].Metrics.ContextFallbacks)
+	}
+}
+
 func TestCompare_TaskExecutionAggregateComputesTokensPerCorrectTask(t *testing.T) {
 	in1, out1 := 1000, 500
 	estT := true

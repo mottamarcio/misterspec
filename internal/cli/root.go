@@ -60,6 +60,18 @@ func defaultConfirmUpdate(current, latest string) bool {
 	return line == "y" || line == "yes"
 }
 
+// NewRootCmd exposes newRootCmd's real *cobra.Command tree (including
+// the hidden "internal" subtree) for read-only introspection by other
+// packages — specifically internal/example's Skill-example-syntax check
+// (039-lean-skills-integration-contracts FR-005), which needs the real
+// command/flag surface rather than a second, hand-maintained copy of
+// it. This is a Go-level export for test/tooling use only, not a new
+// CLI subcommand — the frozen "Public command surface" constraint
+// governs `misterspec --help`'s own output, unaffected by this.
+func NewRootCmd() *cobra.Command {
+	return newRootCmd()
+}
+
 // newRootCmd builds the root *cobra.Command. --help shows "init",
 // "--version", and "--update" (and Cobra's own built-in help/completion)
 // — the "internal" tree is attached but Hidden: true (FR-005, User Story

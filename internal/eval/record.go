@@ -145,18 +145,24 @@ func (t TaskResult) Validate() error {
 // boolean present and explicit (research.md #6) — Validate enforces
 // this structurally.
 type Metrics struct {
-	InputTokens           *int     `json:"input_tokens,omitempty"`
-	InputTokensEstimated  *bool    `json:"input_tokens_estimated,omitempty"`
-	OutputTokens          *int     `json:"output_tokens,omitempty"`
-	OutputTokensEstimated *bool    `json:"output_tokens_estimated,omitempty"`
-	CachedTokens          *int     `json:"cached_tokens,omitempty"`
-	CachedTokensEstimated *bool    `json:"cached_tokens_estimated,omitempty"`
-	Calls                 int      `json:"calls"`
-	ExtraReads            int      `json:"extra_reads"`
-	Rework                int      `json:"rework"`
-	LatencySeconds        float64  `json:"latency_seconds"`
-	Cost                  *float64 `json:"cost,omitempty"`
-	CostEstimated         *bool    `json:"cost_estimated,omitempty"`
+	InputTokens           *int  `json:"input_tokens,omitempty"`
+	InputTokensEstimated  *bool `json:"input_tokens_estimated,omitempty"`
+	OutputTokens          *int  `json:"output_tokens,omitempty"`
+	OutputTokensEstimated *bool `json:"output_tokens_estimated,omitempty"`
+	CachedTokens          *int  `json:"cached_tokens,omitempty"`
+	CachedTokensEstimated *bool `json:"cached_tokens_estimated,omitempty"`
+	Calls                 int   `json:"calls"`
+	ExtraReads            int   `json:"extra_reads"`
+	// ContextFallbacks counts times, during this run, a Context Pack or
+	// prepared context was insufficient and the agent fell back to
+	// further reads (039-lean-skills-integration-contracts FR-008,
+	// data-model.md "Metrics (extended)") — a plain count, like
+	// ExtraReads/Rework, with no *_estimated sibling.
+	ContextFallbacks int      `json:"context_fallbacks"`
+	Rework           int      `json:"rework"`
+	LatencySeconds   float64  `json:"latency_seconds"`
+	Cost             *float64 `json:"cost,omitempty"`
+	CostEstimated    *bool    `json:"cost_estimated,omitempty"`
 }
 
 // Validate enforces the "every present numeric figure has an explicit
@@ -178,6 +184,9 @@ func (m Metrics) Validate() error {
 		if p.set && p.est == nil {
 			return fmt.Errorf("%w: %q is set but %q is not — every present effort figure must explicitly label whether it is estimated", ErrInvalidRunRecord, p.name, p.name+"_estimated")
 		}
+	}
+	if m.ContextFallbacks < 0 {
+		return fmt.Errorf("%w: \"context_fallbacks\" must be >= 0, got %d", ErrInvalidRunRecord, m.ContextFallbacks)
 	}
 	return nil
 }
