@@ -39,16 +39,25 @@ type contextLocationJSON struct {
 	EndLine   int    `json:"end_line"`
 }
 
+type contextScoreComponentsJSON struct {
+	Tier           int `json:"tier"`
+	RelationWeight int `json:"relation_weight"`
+	IntentBonus    int `json:"intent_bonus"`
+	TextRelevance  int `json:"text_relevance"`
+	Total          int `json:"total"`
+}
+
 type contextItemJSON struct {
-	Path        string               `json:"path"`
-	Heading     string               `json:"heading"`
-	Tier        string               `json:"tier"`
-	Reasons     []string             `json:"reasons"`
-	Score       int                  `json:"score"`
-	Tokens      int                  `json:"tokens"`
-	Content     *string              `json:"content"`
-	Location    *contextLocationJSON `json:"location"`
-	Fingerprint *string              `json:"fingerprint"`
+	Path            string                      `json:"path"`
+	Heading         string                      `json:"heading"`
+	Tier            string                      `json:"tier"`
+	Reasons         []string                    `json:"reasons"`
+	Score           int                         `json:"score"`
+	Tokens          int                         `json:"tokens"`
+	Content         *string                     `json:"content"`
+	Location        *contextLocationJSON        `json:"location"`
+	Fingerprint     *string                     `json:"fingerprint"`
+	ScoreComponents *contextScoreComponentsJSON `json:"score_components"`
 }
 
 type contextDiagnosticsJSON struct {
@@ -62,6 +71,7 @@ type contextDiagnosticsJSON struct {
 	Estimator            string                 `json:"estimator"`
 	HardLimit            int                    `json:"hard_limit"`
 	Exclusions           []contextExclusionJSON `json:"exclusions"`
+	RankingVersion       int                    `json:"ranking_version"`
 }
 
 type contextResultJSON struct {
@@ -732,10 +742,118 @@ func TestContextCmd_SchemaVersionPresentInEveryMode(t *testing.T) {
 			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
 		}
 		decoded := decodeContextOutput(t, output)
-		if decoded.Context.SchemaVersion != 2 {
-			t.Errorf("--mode %s: schema_version = %d, want 2", mode, decoded.Context.SchemaVersion)
+		if decoded.Context.SchemaVersion != 3 {
+			t.Errorf("--mode %s: schema_version = %d, want 3", mode, decoded.Context.SchemaVersion)
 		}
 	}
+}
+
+func TestContextCmd_RankingVersionPresentInEveryMode(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	for _, mode := range []string{"manifest", "package", "markdown"} {
+		cmd := internalcmd.NewContextCmd()
+		cmd.SetArgs([]string{"SPEC-014", "--mode", mode, "--dir", root})
+		output, exitCode := runCmd(cmd)
+		if exitCode != 0 {
+			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
+		}
+		decoded := decodeContextOutput(t, output)
+		if decoded.Context.Diagnostics.RankingVersion != 1 {
+			t.Errorf("--mode %s: diagnostics.ranking_version = %d, want 1 (036-text-search-ranking spec FR-009)", mode, decoded.Context.Diagnostics.RankingVersion)
+		}
+	}
+}
+
+func TestContextCmd_DiagnosticScoresOmittedByDefaultPresentWhenRequested(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmdDefault := internalcmd.NewContextCmd()
+	cmdDefault.SetArgs([]string{"SPEC-014", "--query", "rotation", "--dir", root})
+	outDefault, exitCode := runCmd(cmdDefault)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, outDefault)
+	}
+	decodedDefault := decodeContextOutput(t, outDefault)
+	if len(decodedDefault.Context.Items) == 0 {
+		t.Fatalf("context.items is empty")
+	}
+	for _, item := range decodedDefault.Context.Items {
+		if item.ScoreComponents != nil {
+			t.Errorf("item %+v has score_components without --diagnostic-scores, want nil (spec FR-008)", item)
+		}
+	}
+
+	cmdDiag := internalcmd.NewContextCmd()
+	cmdDiag.SetArgs([]string{"SPEC-014", "--query", "rotation", "--diagnostic-scores", "--dir", root})
+	outDiag, exitCode2 := runCmd(cmdDiag)
+	if exitCode2 != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode2, outDiag)
+	}
+	decodedDiag := decodeContextOutput(t, outDiag)
+	if len(decodedDiag.Context.Items) == 0 {
+		t.Fatalf("context.items is empty")
+	}
+	for _, item := range decodedDiag.Context.Items {
+		if item.ScoreComponents == nil {
+			t.Fatalf("item %+v has no score_components with --diagnostic-scores set, want present (contracts §3.2)", item)
+		}
+		sum := item.ScoreComponents.RelationWeight + item.ScoreComponents.IntentBonus + item.ScoreComponents.TextRelevance
+		if item.ScoreComponents.Total != sum {
+			t.Errorf("score_components.total = %d, want %d (sum of relation_weight+intent_bonus+text_relevance)", item.ScoreComponents.Total, sum)
+		}
+		if item.ScoreComponents.Total != item.Score {
+			t.Errorf("score_components.total = %d, item.score = %d, want equal", item.ScoreComponents.Total, item.Score)
+		}
+	}
+}
+
+func TestContextCmd_QueryModeRoutingAndErrors(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	// Default (omitted --query-mode) and explicit "free" both succeed
+	// on ordinary punctuation-bearing text.
+	for _, args := range [][]string{
+		{"SPEC-014", "--query", `"refresh token"`, "--dir", root},
+		{"SPEC-014", "--query", `"refresh token"`, "--query-mode", "free", "--dir", root},
+	} {
+		cmd := internalcmd.NewContextCmd()
+		cmd.SetArgs(args)
+		output, exitCode := runCmd(cmd)
+		if exitCode != 0 {
+			t.Fatalf("args=%v: exitCode = %d, want 0 (output: %s)", args, exitCode, output)
+		}
+	}
+
+	// Explicit "advanced" with valid FTS5 phrase syntax succeeds.
+	cmdAdvanced := internalcmd.NewContextCmd()
+	cmdAdvanced.SetArgs([]string{"SPEC-014", "--query", `"refresh token"`, "--query-mode", "advanced", "--dir", root})
+	outputAdvanced, exitCodeAdvanced := runCmd(cmdAdvanced)
+	if exitCodeAdvanced != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCodeAdvanced, outputAdvanced)
+	}
+
+	// An unrecognized --query-mode value is invalid_argument.
+	cmdInvalid := internalcmd.NewContextCmd()
+	cmdInvalid.SetArgs([]string{"SPEC-014", "--query", "rotation", "--query-mode", "bogus", "--dir", root})
+	outputInvalid, exitCodeInvalid := runCmd(cmdInvalid)
+	if exitCodeInvalid != 2 {
+		t.Fatalf("exitCode = %d, want 2 (output: %s)", exitCodeInvalid, outputInvalid)
+	}
+	assertErrorCode(t, outputInvalid, "invalid_argument")
+
+	// A malformed advanced query returns query_syntax_error, not a
+	// generic failure.
+	cmdMalformed := internalcmd.NewContextCmd()
+	cmdMalformed.SetArgs([]string{"SPEC-014", "--query", `"unbalanced`, "--query-mode", "advanced", "--dir", root})
+	outputMalformed, exitCodeMalformed := runCmd(cmdMalformed)
+	if exitCodeMalformed != 2 {
+		t.Fatalf("exitCode = %d, want 2 (output: %s)", exitCodeMalformed, outputMalformed)
+	}
+	assertErrorCode(t, outputMalformed, "query_syntax_error")
 }
 
 func TestContextCmd_HardLimitFlagParsesAndDefaultsTo12000(t *testing.T) {
@@ -854,10 +972,13 @@ func TestContextCmd_DefaultAndRenderOutputsUnchangedExceptAdditiveFields(t *test
 			// 035-context-budget-accuracy's own additive diagnostics
 			// fields (contracts/budget-and-estimator-contract.md §2.2):
 			"estimator": true, "hard_limit": true, "exclusions": true,
+			// 036-text-search-ranking's own additive diagnostics field
+			// (contracts/search-and-ranking-contract.md §3.1):
+			"ranking_version": true,
 		}
 		for k := range diag {
 			if !wantDiagKeys[k] {
-				t.Errorf("unexpected new diagnostics field %q — only payload_tokens (033) and estimator/hard_limit/exclusions (035) were expected to be additive", k)
+				t.Errorf("unexpected new diagnostics field %q — only payload_tokens (033), estimator/hard_limit/exclusions (035), and ranking_version (036) were expected to be additive", k)
 			}
 		}
 	}

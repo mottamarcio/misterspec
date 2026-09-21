@@ -64,6 +64,12 @@ type Candidate struct {
 	EndLine   int
 	// Reasons is never empty (FR-009).
 	Reasons []Reason
+	// TextRank is the bm25() value index.Search reported for this
+	// candidate (036-text-search-ranking spec FR-005) — meaningful only
+	// when Reasons includes a "text_match" Reason (Tier 4); the zero
+	// value for every other candidate, which scoreCandidate never reads
+	// it for (data-model.md Candidate validation rule).
+	TextRank float64
 }
 
 // CandidateSet is Collect's own output: deduplicated, deterministically
@@ -94,6 +100,15 @@ func mergeAndSort(candidates []Candidate) CandidateSet {
 		key := candidateKey{c.Path, c.StartLine, c.EndLine}
 		if existing, ok := merged[key]; ok {
 			existing.Reasons = append(existing.Reasons, c.Reasons...)
+			// A duplicate discovered later still contributes its own
+			// TextRank whenever it carries a text_match Reason — the
+			// real bm25 signal must never be silently dropped just
+			// because a non-text-match occurrence of the same chunk
+			// happened to be merged first (036-text-search-ranking
+			// data-model.md Candidate validation rule).
+			if reasonsHaveTextMatch(c.Reasons) {
+				existing.TextRank = c.TextRank
+			}
 			continue
 		}
 		cp := c
@@ -149,6 +164,17 @@ func dedupeReasons(reasons []Reason) []Reason {
 		out = append(out, r)
 	}
 	return out
+}
+
+// reasonsHaveTextMatch reports whether reasons includes a "text_match"
+// Reason (036-text-search-ranking).
+func reasonsHaveTextMatch(reasons []Reason) bool {
+	for _, r := range reasons {
+		if r.Relation == "text_match" {
+			return true
+		}
+	}
+	return false
 }
 
 // minTier returns the lowest (highest-priority) Tier among reasons —

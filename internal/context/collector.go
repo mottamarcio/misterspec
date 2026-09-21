@@ -122,7 +122,13 @@ func Collect(root string, cfg project.Configuration, store index.Store, req Requ
 		query = req.Task
 	}
 	if query != "" {
-		results, err := store.Search(query, textSearchLimit)
+		var results []index.SearchResult
+		var err error
+		if req.QueryMode == QueryModeAdvanced {
+			results, err = store.SearchAdvanced(query, textSearchLimit)
+		} else {
+			results, err = store.Search(query, textSearchLimit)
+		}
 		if err != nil {
 			return CandidateSet{}, err
 		}
@@ -133,6 +139,7 @@ func Collect(root string, cfg project.Configuration, store index.Store, req Requ
 				Content:   r.Content,
 				StartLine: r.StartLine,
 				EndLine:   r.EndLine,
+				TextRank:  r.Rank,
 				Reasons:   []Reason{{Tier: TierText, Relation: "text_match"}},
 			})
 		}
