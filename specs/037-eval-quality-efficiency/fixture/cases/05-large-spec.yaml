@@ -1,0 +1,8 @@
+# A larger-than-the-others Spec (spec FR-010: "at least one large
+# specification"), confirming its own mandatory content is returned in
+# full.
+id: large-spec-01
+target: SPEC-103
+dir: ../project
+required:
+  - SPEC-103

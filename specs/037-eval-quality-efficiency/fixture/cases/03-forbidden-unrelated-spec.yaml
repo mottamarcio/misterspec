@@ -1,0 +1,9 @@
+# Over-inclusion check: SPEC-103 has no relation to SPEC-101/SPEC-100
+# and must never appear in a Context Pack requested for SPEC-101.
+id: forbidden-unrelated-01
+target: SPEC-101
+dir: ../project
+required:
+  - SPEC-100
+forbidden:
+  - SPEC-103

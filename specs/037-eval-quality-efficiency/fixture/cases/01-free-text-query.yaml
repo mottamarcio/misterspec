@@ -1,0 +1,10 @@
+# Exercises Tier 4 free-text retrieval (036-text-search-ranking's BM25
+# path) — the query's punctuation deliberately mirrors 036's own
+# regression case (quotes, colon, parentheses, brackets) to confirm
+# free-text mode never fails on ordinary punctuation.
+id: free-text-query-01
+target: SPEC-103
+query: 'retry-policy: "at most once" (idempotent) [budget-marker-100]'
+dir: ../project
+required:
+  - SPEC-100

@@ -1,0 +1,11 @@
+# Added by fixture task-execution scenario add-forbidden-case-01
+# (docs/eval-task-execution-protocol.md) — confirms SPEC-104 (added by
+# that same task) is, like SPEC-103, correctly excluded from a
+# Context Pack requested for the unrelated target SPEC-101.
+id: forbidden-unrelated-02
+target: SPEC-101
+dir: ../project
+required:
+  - SPEC-100
+forbidden:
+  - SPEC-104
