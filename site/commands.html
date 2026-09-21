@@ -202,26 +202,35 @@
         <li><code>--hard-limit &lt;int&gt;</code> — the hard limit: the ceiling above which mandatory content is reported as exceeded (default: 12000, twice <code>--budget</code>'s own default, when omitted — never treated as "no limit"). Independent of <code>--budget</code>; a smaller <code>--hard-limit</code> than <code>--budget</code> is accepted, not rejected. Must be a valid integer, or the command fails with <code>invalid_argument</code>.</li>
         <li><code>--render</code> — additionally include a rendered Markdown context pack. Unchanged since before <code>--mode</code> existed; cannot be combined with <code>--mode package</code>.</li>
         <li><code>--mode</code> — <code>manifest</code> (default — metadata only, exactly today's shape), <code>package</code> (every item also carries <code>content</code>, a file-absolute <code>location</code>, and a <code>fingerprint</code>), or <code>markdown</code> (an explicit name for <code>--render</code>'s own shape).</li>
+        <li><code>--query-mode</code> — <code>free</code> (default — every token in <code>--query</code>/<code>--task</code> is literal text; FTS5 reserved characters/keywords can never cause a syntax error) or <code>advanced</code> (the query is passed to FTS5's own MATCH grammar unmodified — phrase, prefix, boolean, and <code>NEAR</code> syntax honored). Never inferred from the query text — always this explicit flag. An unrecognized value fails with <code>invalid_argument</code>; a malformed <code>advanced</code> expression fails with <code>query_syntax_error</code>.</li>
+        <li><code>--diagnostic-scores</code> — additionally include each item's own <code>score_components</code> breakdown (<code>tier</code>, <code>relation_weight</code>, <code>intent_bonus</code>, <code>text_relevance</code>, <code>total</code>). Omitted by default in every mode.</li>
       </ul>
       <pre><code>misterspec internal context SPEC-014 --intent implementation --budget 700
-{"ok":true,"context":{"schema_version":2,"target":"SPEC-014","intent":"implementation","budget":700,
+{"ok":true,"context":{"schema_version":3,"target":"SPEC-014","intent":"implementation","budget":700,
 "estimated_tokens":589,"budget_exceeded":false,"overage":0,
 "items":[{"path":"ai/.../SPEC-014/spec.md","tier":"mandatory","reasons":["target"],"score":100,"tokens":107}],
 "diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7,"payload_tokens":589,
-"estimator":"default","hard_limit":12000,"exclusions":[]},
+"estimator":"default","hard_limit":12000,"exclusions":[],"ranking_version":1},
 "rendered":null}}</code></pre>
       <p>
-        <code>schema_version</code> is now <code>2</code>: <code>budget_exceeded</code>/<code>overage</code> now compare mandatory content against the new, separate <code>--hard-limit</code> instead of <code>--budget</code> — a deliberate redefinition (previously, a small <code>--budget</code> alone could misleadingly flag mandatory content as "exceeded"). <code>diagnostics.estimator</code> names which token estimator produced every count in the response (always <code>"default"</code> today); <code>diagnostics.hard_limit</code> is the resolved ceiling actually applied; <code>diagnostics.exclusions</code> lists every optional candidate left out and why (<code>did_not_fit_remaining_budget</code> or <code>no_coherent_unit_fit</code>). Every other field is unchanged, and a caller now also gets one further behavior change: a large optional candidate that doesn't fit no longer aborts consideration of the rest of that priority tier — a smaller, later candidate of the same tier may still be included, and an oversized single section may be included as a coherent, un-truncated prefix instead of excluded outright.
+        <code>schema_version</code> is now <code>3</code>: same-tier free-text ordering is now driven by SQLite's own <code>bm25()</code> relevance value instead of a recomputed term-occurrence heuristic, and <code>diagnostics.ranking_version</code> identifies the scoring formula/weight set that produced a response's ordering — bumped only after comparative evaluation evidence supports a change, never silently under the same value. <code>schema_version: 2</code>'s own fields (<code>diagnostics.estimator</code>, <code>diagnostics.hard_limit</code>, <code>diagnostics.exclusions</code>) and behavior are unchanged.
       </p>
+      <p><strong><code>--diagnostic-scores</code></strong> — each item gains a <code>score_components</code> breakdown, in every mode:</p>
+      <pre><code>misterspec internal context SPEC-014 --query "refresh token" --diagnostic-scores
+{"ok":true,"context":{"schema_version":3, ...
+"items":[{"path":"ai/knowledge/KNOW-002.md","tier":"text","reasons":["text_match"],"score":27,"tokens":42,
+"score_components":{"tier":3,"relation_weight":0,"intent_bonus":0,"text_relevance":27,"total":27}}],
+"diagnostics":{"...":"...","ranking_version":1},
+"rendered":null}}</code></pre>
       <p><strong><code>--mode package</code></strong> — every item's own selected text, delivered directly, with a file-absolute location and a content fingerprint, so a caller never has to re-read the source file for content already in the response:</p>
       <pre><code>misterspec internal context SPEC-014 --mode package
-{"ok":true,"context":{"schema_version":2,"target":"SPEC-014", ...
+{"ok":true,"context":{"schema_version":3,"target":"SPEC-014", ...
 "items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
 "reasons":["target"],"score":100,"tokens":107,
 "content":"### R1 — First\n\nThe system MUST ...\n",
 "location":{"path":"ai/.../SPEC-014/spec.md","start_line":14,"end_line":18},
 "fingerprint":"sha256:3a7bd3e2360a3d..."}],
-"diagnostics":{"...":"...","payload_tokens":742,"estimator":"default","hard_limit":12000,"exclusions":[]},
+"diagnostics":{"...":"...","payload_tokens":742,"estimator":"default","hard_limit":12000,"exclusions":[],"ranking_version":1},
 "rendered":null}}</code></pre>
 
       <h2 id="internal-commits-since-file">internal commits-since-file</h2>
@@ -245,6 +254,7 @@
             <tr><td class="px-4 py-2"><code>invalid_target</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Wrong entity type for this operation.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_argument</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">A CLI-boundary problem (bad flag value, unrecognized type/kind).</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_intent</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --intent</code> value not recognized.</td></tr>
+            <tr><td class="px-4 py-2"><code>query_syntax_error</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --query-mode advanced</code> expression is malformed FTS5 syntax.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_parent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The given <code>--parent</code> can't have this child type.</td></tr>
             <tr><td class="px-4 py-2"><code>already_exists</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The target artifact already exists.</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_type</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Unrecognized entity/artifact type or kind.</td></tr>

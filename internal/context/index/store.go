@@ -54,9 +54,17 @@ type Store interface {
 	// walk Sync does, treating every artifact as new (FR-006).
 	Rebuild(root string, cfg project.Configuration) (SyncReport, error)
 
-	// Search runs a full-text query over indexed chunk content,
+	// Search runs a free-text query over indexed chunk content,
 	// returning at most limit results ordered by relevance (FR-003).
+	// query is treated entirely as literal text — never FTS5 query
+	// syntax (036-text-search-ranking spec FR-001, FR-003).
 	Search(query string, limit int) ([]SearchResult, error)
+
+	// SearchAdvanced runs query against FTS5's own MATCH grammar
+	// unmodified — phrase, prefix, boolean, and NEAR syntax are honored
+	// (036-text-search-ranking spec FR-002). A malformed expression
+	// returns an error wrapping ErrQuerySyntax (spec FR-004).
+	SearchAdvanced(query string, limit int) ([]SearchResult, error)
 
 	// Outgoing/Incoming report id's already-indexed relationships in
 	// each direction (FR-008) — consistent with operations.References/

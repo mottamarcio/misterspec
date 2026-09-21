@@ -271,6 +271,40 @@ func TestCollect_QueryMatchingNothingIsNotAnError(t *testing.T) {
 	}
 }
 
+// TestCollect_TextMatchCandidateCarriesBM25TextRank covers
+// 036-text-search-ranking spec FR-005: Tier 4's free-text branch must
+// populate each resulting Candidate's TextRank from the SearchResult's
+// own bm25() Rank, not leave it at the zero value.
+func TestCollect_TextMatchCandidateCarriesBM25TextRank(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nThe target's own content.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-002-y.md",
+		"---\nid: KNOW-002\ntype: knowledge\nstatus: active\n---\n## Summary\n\nRefresh token rotation details.\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001", Query: "rotation"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	found := false
+	for _, c := range set.Candidates {
+		for _, r := range c.Reasons {
+			if r.Tier == TierText && r.Relation == "text_match" {
+				found = true
+				if c.TextRank == 0 {
+					t.Errorf("Candidate %+v has TextRank == 0, want the real bm25() value from SearchResult.Rank", c)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("Candidates = %+v, want a TierText/text_match entry to check TextRank on", set.Candidates)
+	}
+}
+
 // TestCollect_DeduplicatesAcrossStructuralAndTextSignals directly
 // proves spec.md's own User Story 4, Acceptance Scenario 1: the same
 // chunk discovered as both a structural connection and a text match
