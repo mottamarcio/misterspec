@@ -24,7 +24,7 @@
   <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
     <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
 
-      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 011–017</p>
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 011–017, 035–036, 038</p>
       <h1>The Context Engine</h1>
       <p>
         misterspec's own "Second Brain" — a local-first, deterministic
@@ -50,7 +50,13 @@
           <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
           <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">016 Ranking</span>
           <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
-          <span class="px-2.5 py-1.5 rounded bg-slate-900 text-white">017 CLI</span>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">017 CLI</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">035 Budget Accuracy</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">036 BM25 Search</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-slate-900 text-white">038 Provenance</span>
         </div>
       </div>
 
@@ -191,6 +197,23 @@ misterspec internal context SPEC-014   # transparently rebuilds, same result</co
       <pre><code>misterspec internal context SPEC-017 --budget 500 --hard-limit 50000
 {"ok":true,"context":{"schema_version":2,"budget_exceeded":false,"overage":0,
 "diagnostics":{"estimator":"default","hard_limit":50000,"exclusions":[]}}}</code></pre>
+
+      <h2 id="text-search-ranking">036 · Robust Text Search and Measurable Ranking</h2>
+      <p><strong>What it is:</strong> Free-text queries (<code>--query</code>/<code>--task</code>) are now tokenized and escaped before reaching SQLite's FTS5 engine by default — ordinary punctuation can no longer throw a query-syntax error. An explicit <code>--query-mode advanced</code> opts into raw FTS5 grammar (phrase, prefix, boolean, <code>NEAR</code>) for callers who actually want it. Separately, same-tier free-text ordering now uses the real <code>bm25()</code> relevance value SQLite already computes, instead of a recomputed term-occurrence heuristic that was silently discarding it. A new <code>diagnostics.ranking_version</code> field identifies the scoring formula/weight set behind a response's own ordering — bumped only after comparative evaluation evidence supports a change, never silently under the same value.</p>
+      <p><strong>Why it exists:</strong> A query containing a colon, quotes, or parentheses (exactly the kind of text a real requirement or error message contains) could previously fail outright instead of returning results — the tier-first ranking invariant (016) was never at risk, but the tie-break signal within a tier was weaker than the data SQLite already had.</p>
+      <p><strong>Example</strong> — punctuation that used to fail now just works:</p>
+      <pre><code>misterspec internal context SPEC-014 --query 'retry-policy: "at most once" (idempotent)'
+{"ok":true,"context":{"schema_version":3, ...}}</code></pre>
+
+      <h2 id="wikilink-chunk-provenance">038 · Wikilinks with Chunk-Level Provenance</h2>
+      <p><strong>What it is:</strong> Every wikilink-based reference now carries its own provenance through to the Context Pack: which artifact wrote it, which section it falls under, and its own file-absolute line — not just "some artifact references this one." <code>internal references</code>/<code>internal backlinks</code> report <code>source_path</code>/<code>source_section</code>/<code>source_line</code> on every entry (empty/zero for a formal relation, which has no line-level wikilink origin); <code>internal context</code> exposes the same detail per item behind a new opt-in <code>--provenance</code> flag. A still-experimental, off-by-default <code>--prefer-section</code> flag can additionally score a reference written in a Requirements-bearing section above one written elsewhere — gated behind the same evidence-based promotion process as 036's own ranking changes (see <a href="dogfooding.html">Dogfooding &amp; Evaluation</a>) before it can ever become default ordering.</p>
+      <p><strong>Why it exists:</strong> Retrieval already included referenced content — it just couldn't explain <em>why</em> precisely enough to trust or act on. Recording the exact occurrence turns "SPEC-014 references this, somewhere" into "SPEC-014 references this from its own Requirements section, line 42" — a maintainer or agent can judge relevance without opening the source file.</p>
+      <p><strong>Example</strong> — an item's own exact origin:</p>
+      <pre><code>misterspec internal context KNOW-003 --provenance
+{"ok":true,"context":{"schema_version":4,
+"items":[{"path":"ai/.../SPEC-014/spec.md","tier":"semantic","reasons":["backlink"],
+"provenance":[{"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}]}}</code></pre>
+      <p>The underlying local index (<a href="#sqlite-index">014</a>) widened its own <code>links</code> table to store this — a version bump the index's own existing disposable-rebuild mechanism already handles transparently; no manual migration, ever (Constitution Principle III).</p>
 
     </div>
   </main>

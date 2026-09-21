@@ -40,7 +40,9 @@ var validContextModes = map[contextOutputMode]bool{
 // Bumped to 3 by 036-text-search-ranking: same-tier free-text ordering
 // is now BM25-derived, and diagnostics gains ranking_version
 // (contracts/search-and-ranking-contract.md §3).
-const contextSchemaVersion = 3
+// Bumped to 4 by 038-wikilink-chunk-provenance: new opt-in
+// --provenance field (contracts/wikilink-provenance-contract.md §4).
+const contextSchemaVersion = 4
 
 // rankingVersion identifies the scoring formula/weight set that
 // produced a response's ordering (036-text-search-ranking spec FR-009).
@@ -75,7 +77,7 @@ var validQueryModes = map[string]bool{
 
 func NewContextCmd() *cobra.Command {
 	var dir, intent, task, query, budget, hardLimit, mode, queryMode string
-	var render, diagnosticScores bool
+	var render, diagnosticScores, provenance, preferSection bool
 
 	cmd := &cobra.Command{
 		Use:           "context <id>",
@@ -108,10 +110,11 @@ func NewContextCmd() *cobra.Command {
 			}
 
 			req := contextengine.Request{
-				Target: args[0],
-				Task:   task,
-				Intent: contextengine.Intent(intent),
-				Query:  query,
+				Target:        args[0],
+				Task:          task,
+				Intent:        contextengine.Intent(intent),
+				Query:         query,
+				PreferSection: preferSection,
 			}
 			if queryMode == "advanced" {
 				req.QueryMode = contextengine.QueryModeAdvanced
@@ -157,9 +160,9 @@ func NewContextCmd() *cobra.Command {
 
 			var items any
 			if outputMode == modePackage {
-				items = renderPackageItems(contextengine.BuildPackageItems(result.Items), result.Items, diagnosticScores)
+				items = renderPackageItems(contextengine.BuildPackageItems(result.Items), result.Items, diagnosticScores, provenance)
 			} else {
-				items = renderContextItems(result.Items, diagnosticScores)
+				items = renderContextItems(result.Items, diagnosticScores, provenance)
 			}
 
 			return WriteSuccess(cmd.OutOrStdout(), map[string]any{
@@ -201,6 +204,8 @@ func NewContextCmd() *cobra.Command {
 	cmd.Flags().StringVar(&mode, "mode", "", "output mode: manifest (default), package, or markdown")
 	cmd.Flags().BoolVar(&diagnosticScores, "diagnostic-scores", false, "additionally include each item's score_components breakdown")
 	cmd.Flags().StringVar(&queryMode, "query-mode", "", "query interpretation: free (default, literal text) or advanced (native FTS5 syntax)")
+	cmd.Flags().BoolVar(&provenance, "provenance", false, "additionally include each wikilink-derived item's source occurrence (source_path/source_section/source_line)")
+	cmd.Flags().BoolVar(&preferSection, "prefer-section", false, "experimental, off-by-default: score a wikilink-derived reference higher when its occurrence's own section is a recognized requirements-bearing heading — never applied unless explicitly passed (spec FR-006)")
 	return cmd
 }
 
@@ -221,7 +226,11 @@ func resolvedBudget(req contextengine.Request) int {
 // When diagnosticScores is true, each map additionally gains
 // "score_components" (036-text-search-ranking spec FR-008, contracts
 // §3.2); omitted entirely otherwise — never present as a null field.
-func renderContextItems(items []contextengine.ResultItem, diagnosticScores bool) []map[string]any {
+// When provenance is true, each item whose reasons includes "wikilink"
+// additionally gains "provenance" (038-wikilink-chunk-provenance
+// contracts §4); an item with no wikilink-derived reason never gets
+// the key at all, even with provenance requested.
+func renderContextItems(items []contextengine.ResultItem, diagnosticScores, provenance bool) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		reasons := make([]string, 0, len(item.Reasons))
@@ -243,7 +252,39 @@ func renderContextItems(items []contextengine.ResultItem, diagnosticScores bool)
 		if diagnosticScores {
 			m["score_components"] = renderScoreComponents(item.Components)
 		}
+		if provenance {
+			if p := renderProvenance(item.Reasons); len(p) > 0 {
+				m["provenance"] = p
+			}
+		}
 		out = append(out, m)
+	}
+	return out
+}
+
+// renderProvenance renders every wikilink-derived Reason among reasons
+// as a JSON-ready map (source_path/source_section/source_line,
+// contracts §4) — returns nil (never an empty non-nil slice) when
+// reasons has no wikilink-derived entry, so the caller can distinguish
+// "no provenance to report" from "an empty list." A Reason carries real
+// occurrence data whenever SourceSection/SourceLine are populated —
+// true for an outgoing Relation == "wikilink" reason AND for an
+// incoming Relation == "backlink" reason built from a semantic
+// BacklinkEntry (collector.go always labels incoming reasons
+// "backlink", never "wikilink", regardless of the underlying entry —
+// data-model.md "Reason (extended)"); gating on the relation string
+// alone would silently drop every incoming reference's own provenance.
+func renderProvenance(reasons []contextengine.Reason) []map[string]any {
+	var out []map[string]any
+	for _, r := range reasons {
+		if r.SourceSection == "" && r.SourceLine == 0 {
+			continue
+		}
+		out = append(out, map[string]any{
+			"source_path":    r.SourcePath,
+			"source_section": r.SourceSection,
+			"source_line":    r.SourceLine,
+		})
 	}
 	return out
 }
@@ -252,9 +293,9 @@ func renderContextItems(items []contextengine.ResultItem, diagnosticScores bool)
 // field plus content/location/fingerprint (data-model.md
 // "PackageItem", contracts §4). source is the same-order ResultItem
 // slice items was built from (BuildPackageItems preserves order 1:1),
-// used only to look up each item's own score_components when
-// diagnosticScores is true.
-func renderPackageItems(items []contextengine.PackageItem, source []contextengine.ResultItem, diagnosticScores bool) []map[string]any {
+// used only to look up each item's own score_components/provenance
+// when diagnosticScores/provenance is true.
+func renderPackageItems(items []contextengine.PackageItem, source []contextengine.ResultItem, diagnosticScores, provenance bool) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
 	for i, item := range items {
 		m := map[string]any{
@@ -275,20 +316,29 @@ func renderPackageItems(items []contextengine.PackageItem, source []contextengin
 		if diagnosticScores && i < len(source) {
 			m["score_components"] = renderScoreComponents(source[i].Components)
 		}
+		if provenance && i < len(source) {
+			if p := renderProvenance(source[i].Reasons); len(p) > 0 {
+				m["provenance"] = p
+			}
+		}
 		out = append(out, m)
 	}
 	return out
 }
 
 // renderScoreComponents renders one ScoreComponents as a JSON-ready map
-// (contracts §3.2).
+// (contracts §3.2). section_preference (038-wikilink-chunk-provenance
+// contracts §5) is always present, 0 unless --prefer-section was also
+// passed — making the effect visible, not just inferred from
+// reordering.
 func renderScoreComponents(c contextengine.ScoreComponents) map[string]any {
 	return map[string]any{
-		"tier":            c.Tier,
-		"relation_weight": c.RelationWeight,
-		"intent_bonus":    c.IntentBonus,
-		"text_relevance":  c.TextRelevance,
-		"total":           c.Total,
+		"tier":               c.Tier,
+		"relation_weight":    c.RelationWeight,
+		"intent_bonus":       c.IntentBonus,
+		"text_relevance":     c.TextRelevance,
+		"section_preference": c.SectionPreference,
+		"total":              c.Total,
 	}
 }
 

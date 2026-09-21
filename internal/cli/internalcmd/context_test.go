@@ -47,6 +47,12 @@ type contextScoreComponentsJSON struct {
 	Total          int `json:"total"`
 }
 
+type contextProvenanceJSON struct {
+	SourcePath    string `json:"source_path"`
+	SourceSection string `json:"source_section"`
+	SourceLine    int    `json:"source_line"`
+}
+
 type contextItemJSON struct {
 	Path            string                      `json:"path"`
 	Heading         string                      `json:"heading"`
@@ -58,6 +64,7 @@ type contextItemJSON struct {
 	Location        *contextLocationJSON        `json:"location"`
 	Fingerprint     *string                     `json:"fingerprint"`
 	ScoreComponents *contextScoreComponentsJSON `json:"score_components"`
+	Provenance      *[]contextProvenanceJSON    `json:"provenance"`
 }
 
 type contextDiagnosticsJSON struct {
@@ -742,8 +749,8 @@ func TestContextCmd_SchemaVersionPresentInEveryMode(t *testing.T) {
 			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
 		}
 		decoded := decodeContextOutput(t, output)
-		if decoded.Context.SchemaVersion != 3 {
-			t.Errorf("--mode %s: schema_version = %d, want 3", mode, decoded.Context.SchemaVersion)
+		if decoded.Context.SchemaVersion != 4 {
+			t.Errorf("--mode %s: schema_version = %d, want 4 (038-wikilink-chunk-provenance)", mode, decoded.Context.SchemaVersion)
 		}
 	}
 }
@@ -807,6 +814,195 @@ func TestContextCmd_DiagnosticScoresOmittedByDefaultPresentWhenRequested(t *test
 		if item.ScoreComponents.Total != item.Score {
 			t.Errorf("score_components.total = %d, item.score = %d, want equal", item.ScoreComponents.Total, item.Score)
 		}
+	}
+}
+
+func TestContextCmd_ProvenanceOmittedByDefaultPresentWhenRequested(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmdDefault := internalcmd.NewContextCmd()
+	cmdDefault.SetArgs([]string{"SPEC-014", "--dir", root})
+	outDefault, exitCode := runCmd(cmdDefault)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, outDefault)
+	}
+	decodedDefault := decodeContextOutput(t, outDefault)
+	if decodedDefault.Context.SchemaVersion != 4 {
+		t.Errorf("schema_version = %d, want 4 (038-wikilink-chunk-provenance)", decodedDefault.Context.SchemaVersion)
+	}
+	for _, item := range decodedDefault.Context.Items {
+		if item.Provenance != nil {
+			t.Errorf("item %+v has provenance without --provenance, want nil (contract §4)", item)
+		}
+	}
+
+	// SPEC-014 has an outgoing wikilink to KNOW-003, written in its own
+	// "Requirements" section — that surfaces as a "wikilink" reason on
+	// KNOW-003's own item when requesting context for SPEC-014.
+	cmdProv := internalcmd.NewContextCmd()
+	cmdProv.SetArgs([]string{"SPEC-014", "--provenance", "--dir", root})
+	outProv, exitCode2 := runCmd(cmdProv)
+	if exitCode2 != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode2, outProv)
+	}
+	decodedProv := decodeContextOutput(t, outProv)
+	if decodedProv.Context.SchemaVersion != 4 {
+		t.Errorf("--provenance: schema_version = %d, want 4", decodedProv.Context.SchemaVersion)
+	}
+
+	var sawWikilinkItem bool
+	for _, item := range decodedProv.Context.Items {
+		hasWikilinkReason := false
+		for _, r := range item.Reasons {
+			if r == "wikilink" {
+				hasWikilinkReason = true
+			}
+		}
+		if !hasWikilinkReason {
+			if item.Provenance != nil {
+				t.Errorf("item %+v has no wikilink reason but has provenance, want nil (never a stand-in empty array)", item)
+			}
+			continue
+		}
+		sawWikilinkItem = true
+		if item.Provenance == nil || len(*item.Provenance) == 0 {
+			t.Fatalf("item %+v has a wikilink reason but no provenance entries with --provenance set", item)
+		}
+		p := (*item.Provenance)[0]
+		if p.SourcePath != "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-014/spec.md" {
+			t.Errorf("provenance source_path = %q, want SPEC-014's own path", p.SourcePath)
+		}
+		if p.SourceSection != "Requirements" {
+			t.Errorf("provenance source_section = %q, want %q", p.SourceSection, "Requirements")
+		}
+		if p.SourceLine <= 0 {
+			t.Errorf("provenance source_line = %d, want a positive line", p.SourceLine)
+		}
+	}
+	if !sawWikilinkItem {
+		t.Fatalf("no item with a wikilink reason found for SPEC-014; items = %+v", decodedProv.Context.Items)
+	}
+}
+
+// TestContextCmd_ProvenancePresentForIncomingBacklinkReason confirms
+// contract §4's own correction: internal/context/collector.go always
+// labels an incoming reference "backlink", never "wikilink", so
+// --provenance must key off whether real occurrence data is present —
+// not the relation string — or every incoming reference's own
+// provenance would be silently dropped.
+func TestContextCmd_ProvenancePresentForIncomingBacklinkReason(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"KNOW-003", "--provenance", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+
+	var sawBacklinkItem bool
+	for _, item := range decoded.Context.Items {
+		hasBacklinkReason := false
+		for _, r := range item.Reasons {
+			if r == "backlink" {
+				hasBacklinkReason = true
+			}
+		}
+		if !hasBacklinkReason {
+			continue
+		}
+		sawBacklinkItem = true
+		if item.Provenance == nil || len(*item.Provenance) == 0 {
+			t.Fatalf("item %+v has a backlink reason (from a semantic wikilink) but no provenance entries", item)
+		}
+		p := (*item.Provenance)[0]
+		if p.SourceSection != "Requirements" {
+			t.Errorf("provenance source_section = %q, want %q", p.SourceSection, "Requirements")
+		}
+	}
+	if !sawBacklinkItem {
+		t.Fatalf("no item with a backlink reason found for KNOW-003; items = %+v", decoded.Context.Items)
+	}
+}
+
+// TestContextCmd_PreferSectionChangesOrderingOnlyWhenPassed exercises
+// contract §5: SPEC-014 wikilinks KNOW-003 from its own "Requirements"
+// section; requesting context for KNOW-003 surfaces SPEC-014 as a
+// "backlink" item whose SectionPreference bonus (visible via
+// --diagnostic-scores) is 0 by default and non-zero only with
+// --prefer-section — and ordering itself must be byte-identical
+// without the flag, matching quickstart.md §4.
+func TestContextCmd_PreferSectionChangesOrderingOnlyWhenPassed(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+	// A second Spec that also links to KNOW-003, but from an unrelated
+	// section — an otherwise-equivalent Tier/relation sibling to
+	// SPEC-014's own item, so --prefer-section has something to
+	// distinguish.
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-020/spec.md",
+		"---\nid: SPEC-020\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n## Notes\n\nAlso see [[KNOW-003]].\n")
+
+	without := internalcmd.NewContextCmd()
+	without.SetArgs([]string{"KNOW-003", "--dir", root})
+	outWithout, exitCode := runCmd(without)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, outWithout)
+	}
+
+	baseline := internalcmd.NewContextCmd()
+	baseline.SetArgs([]string{"KNOW-003", "--dir", root})
+	outBaseline, exitCode2 := runCmd(baseline)
+	if exitCode2 != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode2, outBaseline)
+	}
+	if outWithout != outBaseline {
+		t.Fatalf("two omitted-flag runs produced different output — ordering must be deterministic:\n%s\nvs\n%s", outWithout, outBaseline)
+	}
+
+	withFlag := internalcmd.NewContextCmd()
+	withFlag.SetArgs([]string{"KNOW-003", "--prefer-section", "--diagnostic-scores", "--dir", root})
+	outWith, exitCode3 := runCmd(withFlag)
+	if exitCode3 != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode3, outWith)
+	}
+	// Decode with a struct that also captures section_preference, since
+	// contextScoreComponentsJSON doesn't declare it.
+	var raw struct {
+		Context struct {
+			Items []struct {
+				Path            string `json:"path"`
+				ScoreComponents *struct {
+					SectionPreference int `json:"section_preference"`
+				} `json:"score_components"`
+			} `json:"items"`
+		} `json:"context"`
+	}
+	if err := json.Unmarshal([]byte(outWith), &raw); err != nil {
+		t.Fatalf("output not valid JSON: %v", err)
+	}
+	var foundPreferred, foundUnrelated bool
+	for _, item := range raw.Context.Items {
+		if item.ScoreComponents == nil {
+			continue
+		}
+		switch item.Path {
+		case "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-014/spec.md":
+			foundPreferred = true
+			if item.ScoreComponents.SectionPreference == 0 {
+				t.Errorf("SPEC-014 (Requirements-sourced) section_preference = 0, want non-zero with --prefer-section")
+			}
+		case "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-020/spec.md":
+			foundUnrelated = true
+			if item.ScoreComponents.SectionPreference != 0 {
+				t.Errorf("SPEC-020 (Notes-sourced) section_preference = %d, want 0", item.ScoreComponents.SectionPreference)
+			}
+		}
+	}
+	if !foundPreferred || !foundUnrelated {
+		t.Fatalf("expected both SPEC-014 and SPEC-020 items with score_components; foundPreferred=%v foundUnrelated=%v", foundPreferred, foundUnrelated)
 	}
 }
 

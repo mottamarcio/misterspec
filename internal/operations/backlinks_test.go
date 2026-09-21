@@ -179,3 +179,54 @@ func TestBacklinks_OutOfScopeTargetIsInvalid(t *testing.T) {
 		t.Fatalf("Backlinks() error = %v, want errors.Is(err, ErrInvalidTarget)", err)
 	}
 }
+
+func TestBacklinks_SemanticEntryHasSourceOccurrence(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupBacklinksProgram(t, root)
+	wantPath := "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md"
+	testutil.WriteFile(t, root, wantPath,
+		"---\nid: SPEC-002\ntype: spec\nstatus: ready\nparent: FEAT-001\n---\n## Requirements\n\nSee [[SPEC-001]].\n")
+
+	result, err := operations.Backlinks(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("Backlinks() unexpected error: %v", err)
+	}
+	if len(result.Semantic) != 1 {
+		t.Fatalf("Semantic = %+v, want 1 entry", result.Semantic)
+	}
+	entry := result.Semantic[0]
+	if entry.SourcePath != wantPath {
+		t.Errorf("SourcePath = %q, want %q", entry.SourcePath, wantPath)
+	}
+	if entry.SourceSection != "Requirements" {
+		t.Errorf("SourceSection = %q, want %q", entry.SourceSection, "Requirements")
+	}
+	if entry.SourceLine <= 0 {
+		t.Errorf("SourceLine = %d, want a positive file-absolute line", entry.SourceLine)
+	}
+}
+
+func TestBacklinks_FormalEntryHasSourcePathButNoSection(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupBacklinksProgram(t, root)
+	wantPath := "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md"
+	testutil.WriteFile(t, root, wantPath,
+		"---\nid: SPEC-002\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on:\n  - SPEC-001\nsupersedes: []\n---\n")
+
+	result, err := operations.Backlinks(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("Backlinks() unexpected error: %v", err)
+	}
+	if len(result.Formal) != 1 {
+		t.Fatalf("Formal = %+v, want 1 entry", result.Formal)
+	}
+	entry := result.Formal[0]
+	if entry.SourcePath != wantPath {
+		t.Errorf("SourcePath = %q, want %q", entry.SourcePath, wantPath)
+	}
+	if entry.SourceSection != "" || entry.SourceLine != 0 {
+		t.Errorf("entry %+v: want SourceSection empty and SourceLine 0 (spec FR-009)", entry)
+	}
+}

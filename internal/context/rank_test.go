@@ -167,6 +167,86 @@ func TestRank_EqualBM25ScoresStillDeterministicByPathThenLine(t *testing.T) {
 	}
 }
 
+func TestRank_PreferSectionFalseIsByteIdenticalToDefault(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Requirements"}},
+		},
+		{
+			Path: "ai/specs/SPEC-002.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Notes"}},
+		},
+	}}
+
+	withoutFlag := Rank(cs, Request{})
+	explicitFalse := Rank(cs, Request{PreferSection: false})
+
+	if withoutFlag[0].Score != explicitFalse[0].Score || withoutFlag[1].Score != explicitFalse[1].Score {
+		t.Fatalf("PreferSection's zero value must be byte-identical to omitting it: %+v vs %+v", withoutFlag, explicitFalse)
+	}
+	for _, sc := range withoutFlag {
+		if sc.Components.SectionPreference != 0 {
+			t.Errorf("SectionPreference = %d, want 0 when PreferSection is false (spec FR-006)", sc.Components.SectionPreference)
+		}
+	}
+}
+
+func TestRank_PreferSectionTrueRanksRequirementsSectionHigher(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-002.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Notes"}},
+		},
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Requirements"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{PreferSection: true})
+
+	if ranked[0].Path != "ai/specs/SPEC-001.md" {
+		t.Fatalf("ranked[0] = %q, want the Requirements-sourced candidate to rank first with PreferSection true: %+v", ranked[0].Path, ranked)
+	}
+	if ranked[0].Components.SectionPreference != sectionPreferenceBonus {
+		t.Errorf("ranked[0].Components.SectionPreference = %d, want %d", ranked[0].Components.SectionPreference, sectionPreferenceBonus)
+	}
+	if ranked[1].Components.SectionPreference != 0 {
+		t.Errorf("ranked[1].Components.SectionPreference = %d, want 0 (unrelated section)", ranked[1].Components.SectionPreference)
+	}
+}
+
+func TestRank_PreferSectionMatchIsCaseInsensitive(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "requirements"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{PreferSection: true})
+
+	if ranked[0].Components.SectionPreference != sectionPreferenceBonus {
+		t.Errorf("SectionPreference = %d, want %d (case-insensitive match)", ranked[0].Components.SectionPreference, sectionPreferenceBonus)
+	}
+}
+
+func TestRank_PreferSectionMatchesFunctionalRequirementsHeading(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Functional Requirements"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{PreferSection: true})
+
+	if ranked[0].Components.SectionPreference != sectionPreferenceBonus {
+		t.Errorf("SectionPreference = %d, want %d", ranked[0].Components.SectionPreference, sectionPreferenceBonus)
+	}
+}
+
 func TestRank_IntentOnlyReordersWithinATier(t *testing.T) {
 	// IntentImplementation prefers "wikilink"/"backlink"/"text_match"
 	// (research.md #4) — a TierSecondHop candidate carrying "wikilink"

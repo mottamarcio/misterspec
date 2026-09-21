@@ -111,6 +111,67 @@ func TestReferencesCmd_InvalidTarget(t *testing.T) {
 	assertErrorCode(t, output, "invalid_target")
 }
 
+func TestReferencesCmd_EntriesIncludeSourceOccurrence(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md", "---\nid: PRG-001\ntype: program\nstatus: active\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-004/feature.md", "---\nid: FEAT-004\ntype: feature\nstatus: active\nparent: PRG-001\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-004/specs/SPEC-011/spec.md", "---\nid: SPEC-011\ntype: spec\nstatus: ready\nparent: FEAT-004\ndepends_on: []\nsupersedes: []\n---\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md", "---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n")
+	specPath := "ai/programs/PRG-001/features/FEAT-004/specs/SPEC-014/spec.md"
+	testutil.WriteFile(t, root, specPath,
+		"---\nid: SPEC-014\ntype: spec\nstatus: ready\nparent: FEAT-004\ndepends_on:\n  - SPEC-011\nsupersedes: []\n---\n## Related Knowledge\n\nSee [[KNOW-003]].\n")
+
+	cmd := internalcmd.NewReferencesCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	var decoded struct {
+		References struct {
+			Formal []struct {
+				Relation      string `json:"relation"`
+				SourcePath    string `json:"source_path"`
+				SourceSection string `json:"source_section"`
+				SourceLine    int    `json:"source_line"`
+			} `json:"formal"`
+			Semantic []struct {
+				Relation      string `json:"relation"`
+				SourcePath    string `json:"source_path"`
+				SourceSection string `json:"source_section"`
+				SourceLine    int    `json:"source_line"`
+			} `json:"semantic"`
+		} `json:"references"`
+	}
+	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
+		t.Fatalf("output is not valid JSON: %v (%s)", err, output)
+	}
+
+	if len(decoded.References.Semantic) != 1 {
+		t.Fatalf("semantic = %+v, want 1 entry", decoded.References.Semantic)
+	}
+	sem := decoded.References.Semantic[0]
+	if sem.SourcePath != specPath {
+		t.Errorf("semantic source_path = %q, want %q", sem.SourcePath, specPath)
+	}
+	if sem.SourceSection != "Related Knowledge" {
+		t.Errorf("semantic source_section = %q, want %q", sem.SourceSection, "Related Knowledge")
+	}
+	if sem.SourceLine <= 0 {
+		t.Errorf("semantic source_line = %d, want a positive line", sem.SourceLine)
+	}
+
+	for _, f := range decoded.References.Formal {
+		if f.SourcePath != specPath {
+			t.Errorf("formal entry %+v: source_path = %q, want %q", f, f.SourcePath, specPath)
+		}
+		if f.SourceSection != "" || f.SourceLine != 0 {
+			t.Errorf("formal entry %+v: want source_section empty and source_line 0", f)
+		}
+	}
+}
+
 func TestReferencesCmd_Ambiguous(t *testing.T) {
 	root := testutil.Project(t)
 	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-004/feature.md", "---\nid: FEAT-004\ntype: feature\nstatus: draft\nparent: PRG-001\n---\n")

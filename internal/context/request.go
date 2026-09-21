@@ -59,6 +59,14 @@ type Request struct {
 	// never FTS5 query syntax. Never inferred from Query/Task's own
 	// content — always this explicit field (research.md #2).
 	QueryMode QueryMode
+	// PreferSection turns on the off-by-default Requirements/active-
+	// task-section preference (038-wikilink-chunk-provenance spec User
+	// Story 2, FR-005/FR-006). The zero value (false) means today's
+	// exact ordering, byte-identical to this field never having
+	// existed — this MUST NOT be flipped to a default of true without a
+	// future Spec recording a comparison through 037-eval-quality-
+	// efficiency's harness (research.md #5).
+	PreferSection bool
 }
 
 // QueryMode names how Request.Query/Task is interpreted at the index

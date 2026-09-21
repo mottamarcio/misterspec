@@ -28,6 +28,17 @@ type ReferenceEntry struct {
 	// "wikilink" (semantic) — never a new fourth kind.
 	Relation string
 	Target   ids.EntityID
+	// SourcePath is the queried (referencing) artifact's own path —
+	// always populated, regardless of Relation, since it is already
+	// known to this function (038-wikilink-chunk-provenance data-
+	// model.md "ReferenceEntry / BacklinkEntry (extended)").
+	SourcePath string
+	// SourceSection/SourceLine are the wikilink occurrence's own
+	// enclosing section/line (artifacts.OccurrenceFor) — populated only
+	// when Relation == "wikilink"; empty/zero for a formal entry, which
+	// has no line-level wikilink origin (spec FR-009).
+	SourceSection string
+	SourceLine    int
 }
 
 // ReferencesResult groups a queried artifact's outgoing relationships,
@@ -55,16 +66,18 @@ func References(root string, cfg project.Configuration, rawID string) (Reference
 		return ReferencesResult{}, fmt.Errorf("%w: %v is not a standalone-referenceable entity type", ErrInvalidTarget, result.Location.ID.Type)
 	}
 
-	formal := formalReferences(result.Metadata)
+	formal := formalReferences(result.Metadata, result.Location.Path)
 
-	body, err := artifacts.ReadBody(filepath.Join(root, result.Location.Path))
+	body, bodyStartLine, err := artifacts.ReadBodyWithOffset(filepath.Join(root, result.Location.Path))
 	if err != nil {
 		return ReferencesResult{}, err
 	}
+	offset := bodyStartLine - 1
 	links, err := artifacts.ExtractWikiLinks(body)
 	if err != nil {
 		return ReferencesResult{}, err
 	}
+	chunks := artifacts.ChunksWithOffset(result.Location.Path, body, offset)
 
 	semantic := make([]ReferenceEntry, 0, len(links))
 	for _, link := range links {
@@ -72,7 +85,15 @@ func References(root string, cfg project.Configuration, rawID string) (Reference
 		if err != nil || len(paths) != 1 {
 			continue
 		}
-		semantic = append(semantic, ReferenceEntry{Relation: "wikilink", Target: id})
+		link.Line += offset
+		occ := artifacts.OccurrenceFor(link, chunks)
+		semantic = append(semantic, ReferenceEntry{
+			Relation:      "wikilink",
+			Target:        id,
+			SourcePath:    result.Location.Path,
+			SourceSection: occ.SourceSection,
+			SourceLine:    occ.SourceLine,
+		})
 	}
 
 	return ReferencesResult{Formal: formal, Semantic: semantic}, nil
@@ -81,17 +102,19 @@ func References(root string, cfg project.Configuration, rawID string) (Reference
 // formalReferences builds meta's outgoing formal relationships in
 // declaration order: parent (if any), then each depends_on entry, then
 // each supersedes entry, in file order — already stable, since YAML
-// list order round-trips through ParseMetadata unchanged.
-func formalReferences(meta artifacts.Metadata) []ReferenceEntry {
+// list order round-trips through ParseMetadata unchanged. sourcePath is
+// the queried artifact's own path, attached to every entry regardless
+// of relation kind (data-model.md: "SourcePath is always populated").
+func formalReferences(meta artifacts.Metadata, sourcePath string) []ReferenceEntry {
 	formal := make([]ReferenceEntry, 0, 1+len(meta.DependsOn)+len(meta.Supersedes))
 	if meta.Parent != nil {
-		formal = append(formal, ReferenceEntry{Relation: "parent", Target: *meta.Parent})
+		formal = append(formal, ReferenceEntry{Relation: "parent", Target: *meta.Parent, SourcePath: sourcePath})
 	}
 	for _, d := range meta.DependsOn {
-		formal = append(formal, ReferenceEntry{Relation: "depends_on", Target: d})
+		formal = append(formal, ReferenceEntry{Relation: "depends_on", Target: d, SourcePath: sourcePath})
 	}
 	for _, s := range meta.Supersedes {
-		formal = append(formal, ReferenceEntry{Relation: "supersedes", Target: s})
+		formal = append(formal, ReferenceEntry{Relation: "supersedes", Target: s, SourcePath: sourcePath})
 	}
 	return formal
 }

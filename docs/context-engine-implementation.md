@@ -302,6 +302,22 @@ Links should represent useful navigation or semantic relationships. Excessive li
 
 The Go binary should parse and validate links, but semantic link creation remains an agent/human responsibility.
 
+### 6.6 Chunk-level provenance (038-wikilink-chunk-provenance)
+
+Beyond §6.2's own `WikiLink{Target, Alias, Line}`, every wikilink-based
+reference now also carries its own enclosing section and file-absolute
+line through `operations.ReferenceEntry`/`BacklinkEntry` into the
+Context Pack response, so a retrieved item can be explained by the
+exact reference occurrence that justified it — not merely "some
+artifact references this one." The `internal context` command exposes
+this as an opt-in `--provenance` field, and a still-experimental,
+off-by-default `--prefer-section` scoring capability can score a
+reference written in a Requirements-bearing section above one written
+elsewhere, gated behind the evaluation harness's own evidence-based
+promotion process (see §30 Phase 9's own note on this) before it can
+ever become default ordering. See `specs/038-wikilink-chunk-
+provenance/` for the full contract.
+
 ---
 
 ## 7. Reference Operations

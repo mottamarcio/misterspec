@@ -246,18 +246,14 @@ func indexOneArtifact(tx *sql.Tx, root string, cfg project.Configuration, relPat
 		return err
 	}
 	offset := bodyStartLine - 1
+	// File-absolute, not body-relative — the same fix
+	// internal/context/collector.go's chunkArtifact applies, needed
+	// here too so a chunk found both directly and via this index's own
+	// text search reports the identical (Path, StartLine, EndLine)
+	// identity and deduplicates correctly (033-context-pack-output-
+	// contract research.md Decision 1).
+	chunks := artifacts.ChunksWithOffset(relPath, body, offset)
 	doc := artifacts.ParseDocument(body)
-	chunks := artifacts.Chunks(relPath, doc)
-	for i := range chunks {
-		// File-absolute, not body-relative — the same fix
-		// internal/context/collector.go's chunkArtifact applies, needed
-		// here too so a chunk found both directly and via this index's
-		// own text search reports the identical (Path, StartLine,
-		// EndLine) identity and deduplicates correctly
-		// (033-context-pack-output-contract research.md Decision 1).
-		chunks[i].StartLine += offset
-		chunks[i].EndLine += offset
-	}
 
 	var artifactID sql.NullString
 	if meta.ID != nil {
@@ -301,23 +297,32 @@ func indexLinks(tx *sql.Tx, root string, cfg project.Configuration, artifactID s
 		return fmt.Errorf("index: computing references for %s: %w", artifactID, err)
 	}
 	for _, r := range refs.Formal {
-		if err := insertLink(tx, r.Relation, artifactID, r.Target.String()); err != nil {
+		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine); err != nil {
 			return err
 		}
 	}
 	for _, r := range refs.Semantic {
-		if err := insertLink(tx, r.Relation, artifactID, r.Target.String()); err != nil {
+		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// insertLink inserts one links row.
-func insertLink(tx *sql.Tx, relation, source, target string) error {
+// insertLink inserts one links row. sourceSection/sourceLine are
+// stored NULL for a formal relation (038-wikilink-chunk-provenance
+// data-model.md "the two new columns are the only nullable ones,
+// reflecting that a formal relationship legitimately has no
+// line-level origin") — an empty sourceSection/zero sourceLine (as
+// ReferenceEntry/BacklinkEntry already report for a formal entry)
+// becomes SQL NULL via sql.NullString/sql.NullInt64's own IsZero-style
+// Valid flag.
+func insertLink(tx *sql.Tx, relation, source, target, sourceSection string, sourceLine int) error {
+	section := sql.NullString{String: sourceSection, Valid: sourceSection != ""}
+	line := sql.NullInt64{Int64: int64(sourceLine), Valid: sourceLine != 0}
 	if _, err := tx.Exec(
-		`INSERT INTO links (source_artifact_id, target_artifact_id, relation) VALUES (?, ?, ?)`,
-		source, target, relation,
+		`INSERT INTO links (source_artifact_id, target_artifact_id, relation, source_section, source_line) VALUES (?, ?, ?, ?, ?)`,
+		source, target, relation, section, line,
 	); err != nil {
 		return fmt.Errorf("index: inserting link row: %w", err)
 	}
