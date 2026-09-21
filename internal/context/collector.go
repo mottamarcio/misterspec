@@ -32,7 +32,7 @@ func Collect(root string, cfg project.Configuration, store index.Store, req Requ
 	var raw []Candidate
 
 	// Tier 0: the project's Constitution, if one exists (FR-003, FR-004).
-	constCandidates, err := chunkArtifact(root, cfg.ConstitutionPath, TierMandatory, "constitution")
+	constCandidates, err := chunkArtifact(root, cfg.ConstitutionPath, Reason{Tier: TierMandatory, Relation: "constitution"})
 	switch {
 	case err == nil:
 		raw = append(raw, constCandidates...)
@@ -43,7 +43,7 @@ func Collect(root string, cfg project.Configuration, store index.Store, req Requ
 	}
 
 	// Tier 1: the target itself (FR-003).
-	targetCandidates, err := chunkArtifact(root, target.Location.Path, TierMandatory, "target")
+	targetCandidates, err := chunkArtifact(root, target.Location.Path, Reason{Tier: TierMandatory, Relation: "target"})
 	if err != nil {
 		return CandidateSet{}, err
 	}
@@ -58,14 +58,14 @@ func Collect(root string, cfg project.Configuration, store index.Store, req Requ
 		return CandidateSet{}, err
 	}
 	structural, err := connectedCandidates(root, cfg, refs.Formal, func(e operations.ReferenceEntry) string { return e.Target.String() },
-		func(e operations.ReferenceEntry) (Tier, string) { return TierStructural, e.Relation })
+		func(e operations.ReferenceEntry) Reason { return referenceEntryReason(TierStructural, e) })
 	if err != nil {
 		return CandidateSet{}, err
 	}
 	raw = append(raw, structural...)
 
 	semantic, err := connectedCandidates(root, cfg, refs.Semantic, func(e operations.ReferenceEntry) string { return e.Target.String() },
-		func(e operations.ReferenceEntry) (Tier, string) { return TierSemantic, e.Relation })
+		func(e operations.ReferenceEntry) Reason { return referenceEntryReason(TierSemantic, e) })
 	if err != nil {
 		return CandidateSet{}, err
 	}
@@ -76,14 +76,14 @@ func Collect(root string, cfg project.Configuration, store index.Store, req Requ
 		return CandidateSet{}, err
 	}
 	incomingFormal, err := connectedCandidates(root, cfg, backlinks.Formal, func(e operations.BacklinkEntry) string { return e.Source.String() },
-		func(e operations.BacklinkEntry) (Tier, string) { return TierSemantic, "backlink" })
+		func(e operations.BacklinkEntry) Reason { return backlinkEntryReason(e) })
 	if err != nil {
 		return CandidateSet{}, err
 	}
 	raw = append(raw, incomingFormal...)
 
 	incomingSemantic, err := connectedCandidates(root, cfg, backlinks.Semantic, func(e operations.BacklinkEntry) string { return e.Source.String() },
-		func(e operations.BacklinkEntry) (Tier, string) { return TierSemantic, "backlink" })
+		func(e operations.BacklinkEntry) Reason { return backlinkEntryReason(e) })
 	if err != nil {
 		return CandidateSet{}, err
 	}
@@ -171,14 +171,14 @@ func secondHopCandidates(root string, cfg project.Configuration, firstHopIDs []s
 			return nil, err
 		}
 		formal, err := connectedCandidates(root, cfg, refs.Formal, func(e operations.ReferenceEntry) string { return e.Target.String() },
-			func(e operations.ReferenceEntry) (Tier, string) { return TierSecondHop, e.Relation })
+			func(e operations.ReferenceEntry) Reason { return referenceEntryReason(TierSecondHop, e) })
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, formal...)
 
 		semantic, err := connectedCandidates(root, cfg, refs.Semantic, func(e operations.ReferenceEntry) string { return e.Target.String() },
-			func(e operations.ReferenceEntry) (Tier, string) { return TierSecondHop, e.Relation })
+			func(e operations.ReferenceEntry) Reason { return referenceEntryReason(TierSecondHop, e) })
 		if err != nil {
 			return nil, err
 		}
@@ -189,16 +189,17 @@ func secondHopCandidates(root string, cfg project.Configuration, firstHopIDs []s
 
 // connectedCandidates resolves and chunks every entry's own referenced
 // artifact (via idOf) directly from the filesystem, labeling every
-// resulting Candidate per reasonOf.
-func connectedCandidates[E any](root string, cfg project.Configuration, entries []E, idOf func(E) string, reasonOf func(E) (Tier, string)) ([]Candidate, error) {
+// resulting Candidate with one Reason built by reasonOf — which already
+// carries any wikilink occurrence data the entry itself has (038-
+// wikilink-chunk-provenance).
+func connectedCandidates[E any](root string, cfg project.Configuration, entries []E, idOf func(E) string, reasonOf func(E) Reason) ([]Candidate, error) {
 	var out []Candidate
 	for _, e := range entries {
 		loc, err := operations.Inspect(root, cfg, idOf(e))
 		if err != nil {
 			return nil, err
 		}
-		tier, relation := reasonOf(e)
-		candidates, err := chunkArtifact(root, loc.Location.Path, tier, relation)
+		candidates, err := chunkArtifact(root, loc.Location.Path, reasonOf(e))
 		if err != nil {
 			return nil, err
 		}
@@ -207,25 +208,56 @@ func connectedCandidates[E any](root string, cfg project.Configuration, entries 
 	return out, nil
 }
 
+// referenceEntryReason builds the Reason for an outgoing
+// operations.ReferenceEntry at tier — Relation and every occurrence
+// field (SourcePath/SourceSection/SourceLine) copied straight from e,
+// which already carries them correctly shaped (empty/zero for a formal
+// entry, populated for a semantic one) — no relation-based branching
+// needed here (data-model.md "Reason (extended)").
+func referenceEntryReason(tier Tier, e operations.ReferenceEntry) Reason {
+	return Reason{
+		Tier:          tier,
+		Relation:      e.Relation,
+		SourcePath:    e.SourcePath,
+		SourceSection: e.SourceSection,
+		SourceLine:    e.SourceLine,
+	}
+}
+
+// backlinkEntryReason builds the Reason for an incoming
+// operations.BacklinkEntry — always TierSemantic/"backlink" (unchanged
+// from this codebase's existing behavior, regardless of whether the
+// underlying entry was itself formal or semantic), with occurrence
+// fields copied straight from e.
+func backlinkEntryReason(e operations.BacklinkEntry) Reason {
+	return Reason{
+		Tier:          TierSemantic,
+		Relation:      "backlink",
+		SourcePath:    e.SourcePath,
+		SourceSection: e.SourceSection,
+		SourceLine:    e.SourceLine,
+	}
+}
+
 // chunkArtifact reads, structures, and chunks the artifact at
-// root/relPath (011's ReadBody, 013's ParseDocument/Chunks), labeling
-// every resulting Chunk with one Reason{tier, relation}. Every
-// Candidate's StartLine/EndLine is file-absolute, not relative to the
-// post-frontmatter body ParseDocument itself operates on — achieved by
-// adding artifacts.ReadBodyWithOffset's own reported body-start line
-// (minus 1) to each Chunk's body-relative numbers
+// root/relPath (011's ReadBody, 013's ParseDocument/Chunks via
+// artifacts.ChunksWithOffset), attaching reason (already fully
+// populated by the caller) to every resulting Chunk. Every Candidate's
+// StartLine/EndLine is file-absolute, not relative to the
+// post-frontmatter body ParseDocument itself operates on —
+// ChunksWithOffset applies artifacts.ReadBodyWithOffset's own reported
+// body-start line (minus 1) to each Chunk's body-relative numbers
 // (033-context-pack-output-contract research.md Decision 1 — this was
 // the actual bug behind every Context Pack item's location, not only
 // wikilinks).
-func chunkArtifact(root, relPath string, tier Tier, relation string) ([]Candidate, error) {
+func chunkArtifact(root, relPath string, reason Reason) ([]Candidate, error) {
 	body, bodyStartLine, err := artifacts.ReadBodyWithOffset(filepath.Join(root, relPath))
 	if err != nil {
 		return nil, err
 	}
 	offset := bodyStartLine - 1
 
-	doc := artifacts.ParseDocument(body)
-	chunks := artifacts.Chunks(relPath, doc)
+	chunks := artifacts.ChunksWithOffset(relPath, body, offset)
 
 	out := make([]Candidate, 0, len(chunks))
 	for _, c := range chunks {
@@ -233,9 +265,9 @@ func chunkArtifact(root, relPath string, tier Tier, relation string) ([]Candidat
 			Path:      c.Path,
 			Heading:   c.Heading,
 			Content:   c.Content,
-			StartLine: c.StartLine + offset,
-			EndLine:   c.EndLine + offset,
-			Reasons:   []Reason{{Tier: tier, Relation: relation}},
+			StartLine: c.StartLine,
+			EndLine:   c.EndLine,
+			Reasons:   []Reason{reason},
 		})
 	}
 	return out, nil

@@ -2,7 +2,9 @@ package contextengine
 
 import (
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/testutil"
@@ -470,6 +472,239 @@ func TestCollect_SecondHopDuplicateOfDirectStaysClassifiedAsDirect(t *testing.T)
 		if r.Tier == TierSecondHop {
 			t.Errorf("reasons = %+v, want no TierSecondHop reason once a direct one exists for the same chunk", reasons)
 		}
+	}
+}
+
+func candidateReasons(set CandidateSet, path string) []Reason {
+	for _, c := range set.Candidates {
+		if c.Path == path {
+			return c.Reasons
+		}
+	}
+	return nil
+}
+
+func TestCollect_WikilinkReasonCarriesSourceOccurrence(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Related Specs\n\nSee [[KNOW-002]].\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-002-y.md",
+		"---\nid: KNOW-002\ntype: knowledge\nstatus: active\n---\n## Summary\n\nUnrelated facts.\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	reasons := candidateReasons(set, "ai/knowledge/KNOW-002-y.md")
+	if len(reasons) == 0 {
+		t.Fatalf("no candidate found for KNOW-002; set = %+v", set.Candidates)
+	}
+	var found bool
+	for _, r := range reasons {
+		if r.Relation != "wikilink" {
+			continue
+		}
+		found = true
+		if r.SourcePath != "ai/knowledge/KNOW-001-x.md" {
+			t.Errorf("SourcePath = %q, want %q", r.SourcePath, "ai/knowledge/KNOW-001-x.md")
+		}
+		if r.SourceSection != "Related Specs" {
+			t.Errorf("SourceSection = %q, want %q", r.SourceSection, "Related Specs")
+		}
+		if r.SourceLine <= 0 {
+			t.Errorf("SourceLine = %d, want a positive file-absolute line", r.SourceLine)
+		}
+	}
+	if !found {
+		t.Fatalf("reasons = %+v, want a wikilink reason", reasons)
+	}
+}
+
+func TestCollect_MandatoryReasonsCarryNoOccurrenceData(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/memory/constitution.md",
+		"---\ntype: constitution\n---\n## Principles\n\nFilesystem is the source of truth.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSome facts.\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	for _, c := range set.Candidates {
+		for _, r := range c.Reasons {
+			if r.Relation != "target" && r.Relation != "constitution" {
+				continue
+			}
+			if r.SourcePath != "" || r.SourceSection != "" || r.SourceLine != 0 {
+				t.Errorf("candidate %+v reason %+v: want SourcePath/SourceSection/SourceLine all empty/zero for %q", c, r, r.Relation)
+			}
+		}
+	}
+}
+
+func TestCollect_FormalDependsOnReasonHasSourcePathButNoSection(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md", "---\nid: PRG-001\ntype: program\nstatus: active\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/feature.md", "---\nid: FEAT-001\ntype: feature\nstatus: active\nparent: PRG-001\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md",
+		"---\nid: SPEC-001\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n## Intent\n\nThe dependency target.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md",
+		"---\nid: SPEC-002\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on:\n  - SPEC-001\nsupersedes: []\n---\n## Intent\n\nDepends on SPEC-001.\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "SPEC-002"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	reasons := candidateReasons(set, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md")
+	var found bool
+	for _, r := range reasons {
+		if r.Relation != "depends_on" {
+			continue
+		}
+		found = true
+		if r.SourcePath != "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md" {
+			t.Errorf("SourcePath = %q, want SPEC-002's own path", r.SourcePath)
+		}
+		if r.SourceSection != "" || r.SourceLine != 0 {
+			t.Errorf("SourceSection/SourceLine = %q/%d, want empty/zero for a formal relation (spec FR-009)", r.SourceSection, r.SourceLine)
+		}
+	}
+	if !found {
+		t.Fatalf("reasons = %+v, want a depends_on reason", reasons)
+	}
+}
+
+// --- User Story 3: retrieval stays bounded and non-redundant ---
+
+func TestCollect_MutualWikilinkCycleCompletesWithoutUnboundedExpansion(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	// KNOW-001 and KNOW-002 wikilink each other — a two-artifact cycle.
+	// This feature's own occurrence-threading (T009/T010) must not
+	// regress the pre-existing 2-hop cap that already makes this safe.
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-a.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-002]].\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-002-b.md",
+		"---\nid: KNOW-002\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-001]].\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error for a mutual wikilink cycle: %v", err)
+	}
+
+	counts := map[string]int{}
+	for _, c := range set.Candidates {
+		counts[c.Path]++
+	}
+	for path, n := range counts {
+		if n != 1 {
+			t.Errorf("candidate %q appears %d times, want exactly 1 (no unbounded/duplicated expansion from the cycle)", path, n)
+		}
+	}
+	if len(counts) == 0 || len(counts) > 4 {
+		t.Errorf("candidate count = %d (%v), want a small, bounded set for a two-artifact cycle", len(counts), counts)
+	}
+}
+
+func TestCollect_HeavilyReferencedHubStaysBounded(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	// 25 artifacts all wikilink the same hub — Collect for the hub must
+	// stay within the existing bounded shape (mandatory + one
+	// TierSemantic backlink Candidate per referencing artifact), never
+	// growing unboundedly via second-hop expansion (research.md #7:
+	// second hop only follows outgoing references, never a backlink's
+	// own further backlinks).
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-hub.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nThe hub.\n")
+	const n = 25
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("KNOW-%03d", i+100)
+		testutil.WriteFile(t, root, fmt.Sprintf("ai/knowledge/%s-x.md", id),
+			fmt.Sprintf("---\nid: %s\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-001]].\n", id))
+	}
+	store := openSyncedStore(t, root, cfg)
+
+	start := time.Now()
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("Collect() unexpected error for a heavily-referenced hub: %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("Collect() took %s for a %d-artifact hub, want it to complete promptly", elapsed, n)
+	}
+
+	counts := map[string]int{}
+	for _, c := range set.Candidates {
+		counts[c.Path]++
+	}
+	for path, count := range counts {
+		if count != 1 {
+			t.Errorf("candidate %q appears %d times, want exactly 1", path, count)
+		}
+	}
+	// The hub itself (mandatory) plus exactly one candidate per
+	// referencing artifact — no runaway multiplication.
+	if len(counts) != n+1 {
+		t.Errorf("candidate count = %d, want exactly %d (hub + %d referencing artifacts, each once)", len(counts), n+1, n)
+	}
+}
+
+func TestCollect_TwoReferencePathsToSameChunkDeduplicateWithOccurrenceDataIntact(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md",
+		"---\nid: PRG-001\ntype: program\nstatus: active\n---\n## Overview\n\nThe program.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/feature.md",
+		"---\nid: FEAT-001\ntype: feature\nstatus: active\nparent: PRG-001\n---\n## Overview\n\nThe feature.\n")
+	// SPEC-001 both depends_on SPEC-002 directly AND wikilinks it from
+	// its own Requirements section — two distinct reference paths to
+	// the identical chunk.
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md",
+		"---\nid: SPEC-001\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on:\n  - SPEC-002\nsupersedes: []\n---\n## Requirements\n\nSee [[SPEC-002]] too.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md",
+		"---\nid: SPEC-002\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n## Intent\n\nThe shared target.\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "SPEC-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	reasons := candidateReasons(set, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md")
+	var count int
+	for _, c := range set.Candidates {
+		if c.Path == "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("SPEC-002's own chunk appears %d times, want exactly 1 (spec FR-007)", count)
+	}
+
+	var hasDependsOn, hasWikilinkWithOccurrence bool
+	for _, r := range reasons {
+		if r.Relation == "depends_on" {
+			hasDependsOn = true
+		}
+		if r.Relation == "wikilink" && r.SourceSection == "Requirements" {
+			hasWikilinkWithOccurrence = true
+		}
+	}
+	if !hasDependsOn || !hasWikilinkWithOccurrence {
+		t.Errorf("reasons = %+v, want both a depends_on reason and a wikilink reason with SourceSection=Requirements — dedup must not drop either reason's own occurrence data", reasons)
 	}
 }
 

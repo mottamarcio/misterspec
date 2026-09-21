@@ -135,15 +135,20 @@
       <ul>
         <li><strong><a href="foundation.html">Core Foundation</a></strong> — deterministic IDs, paths, fingerprints, atomic entity creation, structural validation.</li>
         <li><strong><a href="agents-cli.html">Agent Adapters & CLI</a></strong> — a Cobra-based CLI, an interactive setup TUI, and canonical Skill content for coding agents.</li>
-        <li><strong><a href="context-engine.html">The Context Engine</a></strong> — wikilinks, a reference graph, a disposable local search index, and intent-aware ranked/budgeted retrieval.</li>
+        <li><strong><a href="context-engine.html">The Context Engine</a></strong> — wikilinks with chunk-level provenance, a reference graph, a disposable BM25-ranked local search index, and intent-aware ranked/budgeted retrieval.</li>
         <li><strong><a href="multi-agent-skills.html">Multi-Agent Skill Integration</a></strong> — six supported coding agents, all sharing the same canonical Skills.</li>
-        <li><strong><a href="dogfooding.html">Dogfooding & Evaluation</a></strong> — the Context Engine tested against this project's own real development history.</li>
+        <li><strong><a href="dogfooding.html">Dogfooding & Evaluation</a></strong> — the Context Engine tested against this project's own real development history, now backed by a reusable, CI-runnable evaluation harness.</li>
       </ul>
       <p>
-        Development continued past the MVP milestone — a tenth Skill
-        (<code>mister-wrap-up</code>), and, most recently,
+        Development continued past the MVP milestone —
         <code>misterspec --version</code>/<code>--update</code> for
-        checking and self-updating the installed binary. See the full
+        checking and self-updating the installed binary; robust,
+        punctuation-safe free-text search with real BM25 ranking; a
+        reusable evaluation harness (<code>internal eval-retrieval</code>/
+        <code>internal eval-compare</code>) for gating future retrieval
+        changes on evidence; and chunk-level wikilink provenance,
+        explaining exactly which artifact, section, and line justified
+        including something in a Context Pack. See the full
         <a href="commands.html">Command Reference</a> for the
         project's actual, current command surface.
       </p>

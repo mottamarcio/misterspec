@@ -184,12 +184,25 @@
       <h2 id="internal-references">internal references &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return an artifact's outgoing formal and semantic relationships.</p>
       <pre><code>misterspec internal references SPEC-014
-{"ok":true,"references":{"formal":[{"relation":"depends_on","target":"SPEC-011"}],"semantic":[{"relation":"wikilink","target":"KNOW-003"}]}}</code></pre>
+{"ok":true,"references":{"formal":[{"relation":"depends_on","target":"SPEC-011",
+"source_path":"ai/.../SPEC-014/spec.md","source_section":"","source_line":0}],
+"semantic":[{"relation":"wikilink","target":"KNOW-003",
+"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}}</code></pre>
+      <p>
+        <code>source_path</code> is always populated — the queried
+        artifact's own path, regardless of relation kind.
+        <code>source_section</code>/<code>source_line</code> are
+        populated only for a semantic (<code>wikilink</code>) entry —
+        empty/zero for a formal one, which has no line-level wikilink
+        origin to report (038-wikilink-chunk-provenance).
+      </p>
 
       <h2 id="internal-backlinks">internal backlinks &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return every artifact that formally or semantically references the given artifact.</p>
       <pre><code>misterspec internal backlinks SPEC-011
-{"ok":true,"backlinks":{"formal":[{"relation":"depends_on","source":"SPEC-014"}],"semantic":[]}}</code></pre>
+{"ok":true,"backlinks":{"formal":[{"relation":"depends_on","source":"SPEC-014",
+"source_path":"ai/.../SPEC-014/spec.md","source_section":"","source_line":0}],"semantic":[]}}</code></pre>
+      <p>Same <code>source_path</code>/<code>source_section</code>/<code>source_line</code> fields as <code>internal references</code>, from the referencing (source) artifact's own perspective.</p>
 
       <h2 id="internal-context">internal context &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return a budgeted, ranked context pack for an artifact — the <a href="context-engine.html">Context Engine</a>'s own single entry point.</p>
@@ -203,28 +216,36 @@
         <li><code>--render</code> — additionally include a rendered Markdown context pack. Unchanged since before <code>--mode</code> existed; cannot be combined with <code>--mode package</code>.</li>
         <li><code>--mode</code> — <code>manifest</code> (default — metadata only, exactly today's shape), <code>package</code> (every item also carries <code>content</code>, a file-absolute <code>location</code>, and a <code>fingerprint</code>), or <code>markdown</code> (an explicit name for <code>--render</code>'s own shape).</li>
         <li><code>--query-mode</code> — <code>free</code> (default — every token in <code>--query</code>/<code>--task</code> is literal text; FTS5 reserved characters/keywords can never cause a syntax error) or <code>advanced</code> (the query is passed to FTS5's own MATCH grammar unmodified — phrase, prefix, boolean, and <code>NEAR</code> syntax honored). Never inferred from the query text — always this explicit flag. An unrecognized value fails with <code>invalid_argument</code>; a malformed <code>advanced</code> expression fails with <code>query_syntax_error</code>.</li>
-        <li><code>--diagnostic-scores</code> — additionally include each item's own <code>score_components</code> breakdown (<code>tier</code>, <code>relation_weight</code>, <code>intent_bonus</code>, <code>text_relevance</code>, <code>total</code>). Omitted by default in every mode.</li>
+        <li><code>--diagnostic-scores</code> — additionally include each item's own <code>score_components</code> breakdown (<code>tier</code>, <code>relation_weight</code>, <code>intent_bonus</code>, <code>text_relevance</code>, <code>section_preference</code>, <code>total</code>). Omitted by default in every mode.</li>
+        <li><code>--provenance</code> — additionally include, for every item whose inclusion is backed by real wikilink occurrence data (a <code>wikilink</code> reason, or a <code>backlink</code> reason built from a semantic wikilink), a <code>provenance</code> array naming the exact referencing artifact, section, and line. An item with no such occurrence data (e.g. <code>target</code>, <code>constitution</code>, a formal relation) never gets the key at all — not even an empty array. Omitted by default in every mode.</li>
+        <li><code>--prefer-section</code> — <strong>experimental, off by default.</strong> Scores a wikilink-derived reference higher when its own occurrence's section case-insensitively matches <code>Requirements</code> or <code>Functional Requirements</code>. Omitting this flag leaves ordering byte-identical to this feature never having existed — it exists only so the <a href="dogfooding.html#eval-harness">evaluation harness</a> can record a comparison against default ordering before any future Spec considers promoting it.</li>
       </ul>
       <pre><code>misterspec internal context SPEC-014 --intent implementation --budget 700
-{"ok":true,"context":{"schema_version":3,"target":"SPEC-014","intent":"implementation","budget":700,
+{"ok":true,"context":{"schema_version":4,"target":"SPEC-014","intent":"implementation","budget":700,
 "estimated_tokens":589,"budget_exceeded":false,"overage":0,
 "items":[{"path":"ai/.../SPEC-014/spec.md","tier":"mandatory","reasons":["target"],"score":100,"tokens":107}],
 "diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7,"payload_tokens":589,
 "estimator":"default","hard_limit":12000,"exclusions":[],"ranking_version":1},
 "rendered":null}}</code></pre>
       <p>
-        <code>schema_version</code> is now <code>3</code>: same-tier free-text ordering is now driven by SQLite's own <code>bm25()</code> relevance value instead of a recomputed term-occurrence heuristic, and <code>diagnostics.ranking_version</code> identifies the scoring formula/weight set that produced a response's ordering — bumped only after comparative evaluation evidence supports a change, never silently under the same value. <code>schema_version: 2</code>'s own fields (<code>diagnostics.estimator</code>, <code>diagnostics.hard_limit</code>, <code>diagnostics.exclusions</code>) and behavior are unchanged.
+        <code>schema_version</code> is now <code>4</code> (038-wikilink-chunk-provenance's new opt-in <code>--provenance</code> field). It was bumped to <code>3</code> by 036-text-search-ranking: same-tier free-text ordering is now driven by SQLite's own <code>bm25()</code> relevance value instead of a recomputed term-occurrence heuristic, and <code>diagnostics.ranking_version</code> identifies the scoring formula/weight set that produced a response's ordering — bumped only after comparative evaluation evidence supports a change, never silently under the same value. Earlier fields (<code>diagnostics.estimator</code>, <code>diagnostics.hard_limit</code>, <code>diagnostics.exclusions</code>) and behavior are unchanged.
       </p>
       <p><strong><code>--diagnostic-scores</code></strong> — each item gains a <code>score_components</code> breakdown, in every mode:</p>
       <pre><code>misterspec internal context SPEC-014 --query "refresh token" --diagnostic-scores
-{"ok":true,"context":{"schema_version":3, ...
+{"ok":true,"context":{"schema_version":4, ...
 "items":[{"path":"ai/knowledge/KNOW-002.md","tier":"text","reasons":["text_match"],"score":27,"tokens":42,
-"score_components":{"tier":3,"relation_weight":0,"intent_bonus":0,"text_relevance":27,"total":27}}],
+"score_components":{"tier":3,"relation_weight":0,"intent_bonus":0,"text_relevance":27,"section_preference":0,"total":27}}],
 "diagnostics":{"...":"...","ranking_version":1},
+"rendered":null}}</code></pre>
+      <p><strong><code>--provenance</code></strong> — every wikilink-backed item names exactly where it was referenced from:</p>
+      <pre><code>misterspec internal context KNOW-003 --provenance
+{"ok":true,"context":{"schema_version":4, ...
+"items":[{"path":"ai/.../SPEC-014/spec.md","tier":"semantic","reasons":["backlink"],"score":65,"tokens":11,
+"provenance":[{"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}],
 "rendered":null}}</code></pre>
       <p><strong><code>--mode package</code></strong> — every item's own selected text, delivered directly, with a file-absolute location and a content fingerprint, so a caller never has to re-read the source file for content already in the response:</p>
       <pre><code>misterspec internal context SPEC-014 --mode package
-{"ok":true,"context":{"schema_version":3,"target":"SPEC-014", ...
+{"ok":true,"context":{"schema_version":4,"target":"SPEC-014", ...
 "items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
 "reasons":["target"],"score":100,"tokens":107,
 "content":"### R1 — First\n\nThe system MUST ...\n",
@@ -239,6 +260,31 @@
       <pre><code>misterspec internal commits-since-file --path specs/014-sqlite-index/plan.md
 {"ok":true,"available":true,"commits":[{"hash":"...","subject":"...","author_date":"2026-08-01"}]}</code></pre>
       <p><code>available</code> is <code>false</code> (never an error) when the target isn't a Git repository or the file was never committed.</p>
+
+      <h2 id="internal-eval-retrieval">internal eval-retrieval</h2>
+      <p><strong>Purpose:</strong> Run a fixed, versioned set of deterministic retrieval evaluation cases — entirely offline, no LLM session required, safe to run in CI on every change. Part of the <a href="dogfooding.html#eval-harness">evaluation harness</a> (Spec 037) that supersedes the one-off exercise described in <a href="dogfooding.html">Dogfooding &amp; Evaluation</a>.</p>
+      <p><strong>Flags:</strong> <code>--cases &lt;dir&gt;</code> (required — a directory of case YAML files, each naming a target, required/forbidden content, and the fixture directory to run against); <code>--out &lt;path&gt;</code> (optional — also write the full run record JSON to this path); <code>--variant</code>/<code>--repo-revision</code> (optional config labels recorded on the run, for later comparison).</p>
+      <pre><code>misterspec internal eval-retrieval --cases specs/037-.../fixture/cases
+{"ok":true,"schema_version":1,
+"result":{"run":{"run_id":"retrieval-2026-...","kind":"retrieval",
+"config":{"variant":"default","ranking_version":"1"},
+"results":[{"case_id":"free-text-query-01","passed":true,"missing":[],"unexpected":[],
+"positions":{"SPEC-100":8}}]},
+"summary":{"total":6,"passed":6,"failed":0}}}</code></pre>
+      <p>A failing case is reported inside <code>result</code>, not surfaced as a command failure — the run still succeeds (<code>ok:true</code>); a specific case's <code>missing</code>/<code>unexpected</code> arrays name exactly what didn't match, never only a lowered aggregate score.</p>
+
+      <h2 id="internal-eval-compare">internal eval-compare</h2>
+      <p><strong>Purpose:</strong> Compare a candidate run record against a named, recorded baseline — flagging when more than one configuration dimension changed at once, and surfacing a per-case regression even when an unrelated aggregate metric improves in the same comparison.</p>
+      <p><strong>Flags:</strong> <code>--baseline &lt;name&gt;</code> (required — a baseline recorded under <code>eval/baselines/</code>); <code>--candidate &lt;path&gt;</code> (required — a run record JSON file, e.g. from <code>eval-retrieval --out</code>); <code>--repetitions &lt;dir&gt;</code> (optional — additional same-config run records, used to tell a real change apart from normal run-to-run variance).</p>
+      <pre><code>misterspec internal eval-compare --baseline retrieval-2026-09 --candidate /tmp/candidate.json
+{"ok":true,"schema_version":1,
+"result":{"comparison":{"baseline_name":"retrieval-2026-09","candidate_run_id":"retrieval-2026-...",
+"dimension_diff":[],"changed_cases":[{"id":"free-text-query-01","baseline_outcome":"fail",
+"candidate_outcome":"pass","direction":"improved"}],
+"aggregate":{"success_rate":1.0}}}}</code></pre>
+      <p>
+        A non-empty <code>dimension_diff</code> means the candidate's own config differs from the baseline's in more than the one dimension the comparison was meant to isolate — the comparison still runs, but a caller reading it knows not to trust <code>changed_cases</code> as isolating a single cause. A baseline recorded against an older <code>ranking_version</code>/<code>context_schema_version</code> than the candidate is flagged as stale (<code>result.comparison.stale</code>) rather than silently trusted.
+      </p>
 
       <h2 id="errors">Error codes</h2>
       <p>Every command shares the same error shape and code set:</p>
@@ -255,6 +301,8 @@
             <tr><td class="px-4 py-2"><code>invalid_argument</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">A CLI-boundary problem (bad flag value, unrecognized type/kind).</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_intent</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --intent</code> value not recognized.</td></tr>
             <tr><td class="px-4 py-2"><code>query_syntax_error</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --query-mode advanced</code> expression is malformed FTS5 syntax.</td></tr>
+            <tr><td class="px-4 py-2"><code>invalid_case</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">An <code>eval-retrieval</code> case file failed validation, or referenced an identifier that doesn't resolve.</td></tr>
+            <tr><td class="px-4 py-2"><code>incompatible_run</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>eval-compare</code>'s baseline and candidate run records have different <code>kind</code> (e.g. one <code>retrieval</code>, one <code>task_execution</code>) — refused rather than compared meaninglessly.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_parent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The given <code>--parent</code> can't have this child type.</td></tr>
             <tr><td class="px-4 py-2"><code>already_exists</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The target artifact already exists.</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_type</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Unrecognized entity/artifact type or kind.</td></tr>

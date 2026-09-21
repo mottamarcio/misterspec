@@ -50,13 +50,19 @@ func NewReferencesCmd() *cobra.Command {
 // renderReferenceEntries renders a []operations.ReferenceEntry as JSON-
 // ready maps, always a non-nil slice (empty, never null, when entries is
 // empty) so the JSON array is never null — matching inspect.go's own
-// idStrings convention.
+// idStrings convention. Each entry additionally carries its own
+// source_path/source_section/source_line (038-wikilink-chunk-
+// provenance contracts §3) — always present, empty/zero for a formal
+// relation.
 func renderReferenceEntries(entries []operations.ReferenceEntry) []map[string]any {
 	out := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, map[string]any{
-			"relation": e.Relation,
-			"target":   e.Target.String(),
+			"relation":       e.Relation,
+			"target":         e.Target.String(),
+			"source_path":    e.SourcePath,
+			"source_section": e.SourceSection,
+			"source_line":    e.SourceLine,
 		})
 	}
 	return out

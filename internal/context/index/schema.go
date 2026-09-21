@@ -10,7 +10,9 @@ import (
 // disposable (Constitution Principle III) — a version mismatch (an
 // older schema, or a brand-new empty database whose default version is
 // 0) always means "recreate from scratch," never "migrate in place."
-const schemaVersion = 1
+// Bumped to 2 by 038-wikilink-chunk-provenance: links gains
+// source_section/source_line (data-model.md "links table (widened)").
+const schemaVersion = 2
 
 // schemaStatements creates this package's own schema (data-model.md) —
 // one statement per Exec call, rather than relying on a driver's
@@ -43,7 +45,9 @@ var schemaStatements = []string{
 		id                 INTEGER PRIMARY KEY,
 		source_artifact_id TEXT NOT NULL,
 		target_artifact_id TEXT NOT NULL,
-		relation           TEXT NOT NULL
+		relation           TEXT NOT NULL,
+		source_section     TEXT,
+		source_line        INTEGER
 	)`,
 }
 

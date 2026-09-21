@@ -51,6 +51,20 @@ func (t Tier) String() string {
 type Reason struct {
 	Tier     Tier
 	Relation string
+	// SourcePath is the referencing artifact's own path
+	// (038-wikilink-chunk-provenance data-model.md "Reason (extended)")
+	// — populated for any reference-derived Relation ("parent",
+	// "depends_on", "supersedes", "wikilink", "backlink"); empty for
+	// "constitution"/"target"/"text_match", which have no referencing-
+	// artifact concept at all.
+	SourcePath string
+	// SourceSection/SourceLine are populated only when the underlying
+	// occurrence was itself a wikilink (Relation == "wikilink", or a
+	// "backlink" built from a semantic BacklinkEntry) — empty/zero for
+	// a formal relation, never implying a wikilink occurrence exists
+	// where none does (spec FR-009).
+	SourceSection string
+	SourceLine    int
 }
 
 // Candidate is one piece of collected context. Identified, for

@@ -31,7 +31,7 @@ func Rank(cs CandidateSet, req Request) []ScoredCandidate {
 
 	scored := make([]ScoredCandidate, len(cs.Candidates))
 	for i, c := range cs.Candidates {
-		comp := computeScoreComponents(c, req.Intent, terms)
+		comp := computeScoreComponents(c, req.Intent, terms, req.PreferSection)
 		scored[i] = ScoredCandidate{Candidate: c, Score: comp.Total, Components: comp}
 	}
 
@@ -62,15 +62,37 @@ type ScoreComponents struct {
 	RelationWeight int
 	IntentBonus    int
 	TextRelevance  int
-	Total          int
+	// SectionPreference is the 038-wikilink-chunk-provenance
+	// Requirements/active-task-section bonus (spec User Story 2,
+	// data-model.md "Preference Score") — always 0 unless
+	// Request.PreferSection is true (research.md #5: never applied by
+	// default).
+	SectionPreference int
+	Total             int
 }
 
-// computeScoreComponents computes c's own Score, broken into its three
+// sectionPreferenceBonus is the fixed, additive score contribution a
+// wikilink-derived occurrence in a recognized requirements-bearing
+// section earns when Request.PreferSection is true (contracts §5) —
+// an experimental, evidence-gated value (038-wikilink-chunk-provenance
+// research.md #5), not tuned from observed evaluation results yet.
+const sectionPreferenceBonus = 15
+
+// preferredSections is the fixed, case-insensitive vocabulary
+// sectionPreferenceContribution matches against (contracts §5).
+var preferredSections = map[string]bool{
+	"requirements":            true,
+	"functional requirements": true,
+}
+
+// computeScoreComponents computes c's own Score, broken into its
 // additive contributors: the strongest relationWeight among its own
-// Reasons, an intentWeight bonus, and a text-relevance bonus — all
-// three simple, deterministic signals meaningful only for ordering
-// candidates that already share one Tier (research.md #3).
-func computeScoreComponents(c Candidate, intent Intent, terms []string) ScoreComponents {
+// Reasons, an intentWeight bonus, a text-relevance bonus, and — only
+// when preferSection is true — a sectionPreferenceBonus for a
+// wikilink-derived occurrence in a recognized requirements section —
+// all deterministic signals meaningful only for ordering candidates
+// that already share one Tier (research.md #3).
+func computeScoreComponents(c Candidate, intent Intent, terms []string, preferSection bool) ScoreComponents {
 	best := 0
 	relations := make([]string, 0, len(c.Reasons))
 	for _, r := range c.Reasons {
@@ -81,13 +103,35 @@ func computeScoreComponents(c Candidate, intent Intent, terms []string) ScoreCom
 	}
 	intentBonus := intentWeight(intent, relations)
 	textBonus := textRelevanceContribution(c, relations, terms)
-	return ScoreComponents{
-		Tier:           int(minTier(c.Reasons)),
-		RelationWeight: best,
-		IntentBonus:    intentBonus,
-		TextRelevance:  textBonus,
-		Total:          best + intentBonus + textBonus,
+	sectionBonus := 0
+	if preferSection {
+		sectionBonus = sectionPreferenceContribution(c.Reasons)
 	}
+	return ScoreComponents{
+		Tier:              int(minTier(c.Reasons)),
+		RelationWeight:    best,
+		IntentBonus:       intentBonus,
+		TextRelevance:     textBonus,
+		SectionPreference: sectionBonus,
+		Total:             best + intentBonus + textBonus + sectionBonus,
+	}
+}
+
+// sectionPreferenceContribution reports sectionPreferenceBonus if any
+// of reasons carries occurrence data (SourceSection populated — see
+// internal/cli/internalcmd's own renderProvenance for why this checks
+// occurrence data rather than the relation string) whose SourceSection
+// case-insensitively matches preferredSections; 0 otherwise.
+func sectionPreferenceContribution(reasons []Reason) int {
+	for _, r := range reasons {
+		if r.SourceSection == "" {
+			continue
+		}
+		if preferredSections[strings.ToLower(r.SourceSection)] {
+			return sectionPreferenceBonus
+		}
+	}
+	return 0
 }
 
 // relationWeight approximates docs/context-engine-implementation.md
