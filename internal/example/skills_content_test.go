@@ -83,6 +83,8 @@ func assertSkillConformant(t *testing.T, name string) {
 	assertSectionsPresentInOrder(t, name, content)
 	assertOperationsAllowlisted(t, name, content)
 	assertCompletionContractConcepts(t, name, content)
+	assertExampleSyntax(t, name, content)
+	assertVerificationCapabilities(t, name, content)
 }
 
 func assertFrontmatter(t *testing.T, name, content string) {

@@ -26,7 +26,13 @@ JSON shape `internal/eval` already validates, is the whole mechanism.
    finishes: input/output/cached tokens (if the session surfaces
    them), number of tool/LLM calls, any additional file reads beyond
    what a Context Pack request supplied, any repeated/corrective
-   ("rework") actions you observe, and wall-clock elapsed time.
+   ("rework") actions you observe, wall-clock elapsed time, and any
+   time the agent fell back to reading further because its Context
+   Pack or `internal prepare` response was insufficient (039-lean-
+   skills-integration-contracts spec FR-008) — note each such
+   occurrence as a `context_fallbacks` count, distinct from an
+   ordinary `extra_reads` count not attributable to a Context Engine
+   shortfall.
 
 3. **Run the acceptance test.** Execute the task's own
    `acceptance_test` command exactly as written, in the same `dir`.
@@ -65,6 +71,7 @@ JSON shape `internal/eval` already validates, is the whole mechanism.
            "calls": 14,
            "extra_reads": 1,
            "rework": 0,
+           "context_fallbacks": 0,
            "latency_seconds": 95.4
          }
        }

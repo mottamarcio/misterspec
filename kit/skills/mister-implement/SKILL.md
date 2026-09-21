@@ -130,7 +130,10 @@ Required operations:
   budgeted Context Pack before broader exploration when `prepare`'s own
   Task-scoped context (above) is not enough. If this fails,
   proceed using this Skill's own Required Context above instead — it
-  is never a Failure Condition.
+  is never a Failure Condition. Record the occurrence as
+  `context_fallbacks` in this task's own RunRecord once one exists,
+  rather than silently absorbing the extra read
+  (037-eval-quality-efficiency).
 - `internal validate SPEC-###` — confirm the project is still
   structurally valid after the Task's own changes (this checks
   artifact structure, not the code change's own correctness — that is
