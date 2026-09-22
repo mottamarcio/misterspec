@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mottamarcio/misterspec/internal/artifacts"
 	"github.com/mottamarcio/misterspec/internal/cli/internalcmd"
+	"github.com/mottamarcio/misterspec/internal/evidence"
 	"github.com/mottamarcio/misterspec/internal/testutil"
 )
 
@@ -331,8 +333,15 @@ func TestPrepareCmd_NoTaskReadyReturnsExplicitMessage(t *testing.T) {
 	}
 }
 
-// markTaskComplete flips the given Task's own checkbox to "[x]" in
-// place, simulating the Task having been finished.
+// markTaskComplete flips the given Task's own checkbox to "[x]" and
+// appends a matching, valid Evidence-Result: pass record, simulating
+// the Task having been finished and verified.
+//
+// Correction found during implementation (041-task-evidence-
+// fingerprint): checking the box alone no longer means "complete" —
+// every pre-existing test using this helper to simulate a finished Task
+// now also needs real evidence, or Status stays "pending" under the
+// redefined taskStatus (data-model.md "TaskInfo (extended)").
 func markTaskComplete(t *testing.T, root, relPath, taskHeading string) {
 	t.Helper()
 	path := filepath.Join(root, relPath)
@@ -342,20 +351,77 @@ func markTaskComplete(t *testing.T, root, relPath, taskHeading string) {
 	}
 	lines := strings.Split(string(data), "\n")
 	inTarget := false
+	checkboxLine := -1
+	sectionEnd := len(lines)
 	for i, line := range lines {
 		if strings.HasPrefix(line, "## "+taskHeading) {
 			inTarget = true
 			continue
 		}
 		if inTarget && strings.HasPrefix(line, "## ") {
+			sectionEnd = i
 			break
 		}
-		if inTarget && strings.HasPrefix(line, "- [ ]") {
+		if inTarget && checkboxLine == -1 && strings.HasPrefix(line, "- [ ]") {
 			lines[i] = strings.Replace(line, "- [ ]", "- [x]", 1)
+			checkboxLine = i
+		}
+	}
+	if checkboxLine == -1 {
+		t.Fatalf("markTaskComplete: no unchecked checkbox found under %q", taskHeading)
+	}
+
+	// Fingerprint this Task's own Section.Body exactly as
+	// operations.TaskContentFingerprint/evidence.ContentFingerprint
+	// would, over the real, currently-written file — not a hand-
+	// reconstructed approximation.
+	withCheckboxFlipped := strings.Join(lines, "\n")
+	if err := os.WriteFile(path, []byte(withCheckboxFlipped), 0o644); err != nil {
+		t.Fatalf("markTaskComplete: writing checkbox flip to %s: %v", path, err)
+	}
+	body, err := artifacts.ReadBody(path)
+	if err != nil {
+		t.Fatalf("markTaskComplete: reading body back from %s: %v", path, err)
+	}
+	doc := artifacts.ParseDocument(body)
+	var fp string
+	for _, section := range doc.Sections {
+		if strings.HasPrefix(section.Heading, taskHeading) {
+			fp = evidence.ContentFingerprint([]byte(section.Body))
 			break
 		}
 	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+	if fp == "" {
+		t.Fatalf("markTaskComplete: could not locate %q's own Section to fingerprint", taskHeading)
+	}
+
+	// No leading blank line: the section body already ends with one
+	// before the next "## " heading (or EOF) — an extra blank line
+	// here would itself become part of the re-parsed Section.Body and
+	// (unlike an "Evidence-*:" line) is never stripped before
+	// fingerprinting, so it would make the freshly-computed fingerprint
+	// disagree with fp above (found during implementation: this exact
+	// mismatch made the Task register as Stale instead of Verified).
+	evidenceBlock := []string{
+		"Evidence-Result: pass", "Evidence-Origin: declared", "Evidence-By: test",
+		"Evidence-Fingerprint: " + fp,
+	}
+	final := append([]string{}, lines[:sectionEnd]...)
+	// When the target Task is the file's last section (sectionEnd ==
+	// len(lines)), lines' own final element is strings.Split's trailing
+	// empty-string artifact of the file's single trailing newline, not
+	// a deliberate blank separator line — unlike the real blank line
+	// that precedes an actual next "## " heading. Appending evidenceBlock
+	// after it would introduce an extra blank line the originally-
+	// fingerprinted body never had, disagreeing with fp above (found
+	// during implementation, the same class of bug as the leading-blank
+	// fix on evidenceBlock itself, just at EOF instead of mid-file).
+	if sectionEnd == len(lines) && len(final) > 0 && final[len(final)-1] == "" {
+		final = final[:len(final)-1]
+	}
+	final = append(final, evidenceBlock...)
+	final = append(final, lines[sectionEnd:]...)
+	if err := os.WriteFile(path, []byte(strings.Join(final, "\n")), 0o644); err != nil {
 		t.Fatalf("markTaskComplete: writing %s: %v", path, err)
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
+	"github.com/mottamarcio/misterspec/internal/evidence"
+	"github.com/mottamarcio/misterspec/internal/ids"
 )
 
 // FileFingerprint is a file's algorithm-tagged content digest (FR-012).
@@ -61,4 +63,34 @@ func Fingerprint(root, path string) (FileFingerprint, error) {
 		Algorithm: "sha256",
 		Digest:    hex.EncodeToString(h.Sum(nil)),
 	}, nil
+}
+
+// digestBytes computes data's own SHA-256 digest directly, with no I/O
+// — the core Fingerprint already performed via io.Copy, factored out
+// so TaskContentFingerprint (041-task-evidence-fingerprint) can reuse
+// it without a fake file to stream from (research.md #6).
+func digestBytes(data []byte) FileFingerprint {
+	sum := sha256.Sum256(data)
+	return FileFingerprint{
+		Algorithm: "sha256",
+		Digest:    hex.EncodeToString(sum[:]),
+	}
+}
+
+// TaskContentFingerprint hashes body (a Task's own already-extracted
+// Section.Body) using the same SHA-256 algorithm as Fingerprint, via
+// digestBytes — pure, no I/O, unlike Fingerprint itself
+// (041-task-evidence-fingerprint contracts §2, data-model.md
+// "FileFingerprint (extended)"). task is accepted for API symmetry
+// with the rest of this feature's Task-scoped operations, even though
+// the digest itself only depends on body.
+//
+// body is stripped of any existing "Evidence-*:" lines first
+// (evidence.StripEvidenceLines) — correction found during
+// implementation: without this, a Task's own previously-recorded
+// Evidence-Fingerprint: line would be part of what gets fingerprinted,
+// making Verified unreachable the instant evidence is written (writing
+// the fingerprint would change the very content it describes).
+func TaskContentFingerprint(task ids.EntityID, body []byte) FileFingerprint {
+	return digestBytes(evidence.StripEvidenceLines(body))
 }

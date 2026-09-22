@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
+	"github.com/mottamarcio/misterspec/internal/evidence"
 	"github.com/mottamarcio/misterspec/internal/ids"
+	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/project"
 	"github.com/mottamarcio/misterspec/internal/validation"
 )
@@ -19,7 +21,17 @@ import (
 type TaskInfo struct {
 	Task       ids.EntityID
 	Heading    string
-	Status     string // "pending" or "complete"
+	// Status is "pending" or "complete" — redefined by
+	// 041-task-evidence-fingerprint: "complete" now additionally
+	// requires Evidence == evidence.Verified, not just a checked
+	// checkbox (data-model.md "TaskInfo (extended)"). readiness.go and
+	// selection.go are unaffected by this redefinition — they already
+	// gate on this one string (research.md #1).
+	Status     string
+	// Evidence is this Task's real completeness classification, new in
+	// 041-task-evidence-fingerprint (data-model.md "TaskInfo
+	// (extended)").
+	Evidence   evidence.EvidenceState
 	Coverage   validation.TaskCoverage
 	Dependency validation.TaskDependency
 	Fields     TaskFields
@@ -66,10 +78,13 @@ func ScanSpecTasks(root string, cfg project.Configuration, spec ids.EntityID, sp
 		task := ids.EntityID{Type: ids.Task, Prefix: ids.Task.Prefix(), Number: n, Width: cfg.IDWidth}
 		sectionBody := []byte(section.Body)
 
+		evidenceState := taskEvidenceState(task, sectionBody)
+
 		out = append(out, TaskInfo{
 			Task:       task,
 			Heading:    section.Heading,
-			Status:     taskStatus(section.Body),
+			Status:     taskStatus(section.Body, evidenceState),
+			Evidence:   evidenceState,
 			Coverage:   validation.ParseTaskCoverage(task, sectionBody, cfg),
 			Dependency: validation.ParseTaskDependsOn(task, sectionBody, cfg),
 			Fields:     parseTaskFields(task, sectionBody),
@@ -79,16 +94,28 @@ func ScanSpecTasks(root string, cfg project.Configuration, spec ids.EntityID, sp
 	return out, true, nil
 }
 
-// taskStatus returns "complete" if body's first checkbox line is
-// checked, "pending" otherwise (including when no checkbox line is
-// found — a malformed Task section is never silently treated as done).
-func taskStatus(body string) string {
+// taskEvidenceState computes task's real evidence.EvidenceState from
+// its own already-extracted Section.Body (041-task-evidence-
+// fingerprint data-model.md "TaskInfo (extended)").
+func taskEvidenceState(task ids.EntityID, body []byte) evidence.EvidenceState {
+	fields := evidence.ParseEvidenceFields(task, body)
+	currentFingerprint := operations.TaskContentFingerprint(task, body).String()
+	return evidence.DeriveState(fields, currentFingerprint)
+}
+
+// taskStatus returns "complete" only if body's first checkbox line is
+// checked AND state is evidence.Verified — "pending" otherwise
+// (including when no checkbox line is found, or when the checkbox is
+// checked but the evidence state is Unverified/Stale/Failed). Redefined
+// by 041-task-evidence-fingerprint (data-model.md "TaskInfo
+// (extended)"): a checked checkbox alone is no longer sufficient —
+// this is the single change that makes readiness.go/selection.go
+// evidence-aware with no code changes of their own (research.md #1),
+// since both already gate on Status == "complete".
+func taskStatus(body string, state evidence.EvidenceState) string {
 	for _, line := range strings.Split(body, "\n") {
 		if cb := taskCheckboxPattern.FindStringSubmatch(line); cb != nil {
-			if cb[1] == " " {
-				return "pending"
-			}
-			return "complete"
+			return evidence.TaskStatus(cb[1] != " ", state)
 		}
 	}
 	return "pending"

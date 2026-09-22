@@ -313,6 +313,77 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 }
 
+// TestHeadCommit_ReturnsCurrentShortSHA is 041-task-evidence-fingerprint
+// T002 (Foundational): HeadCommit reports the current commit with
+// available == true inside a real repository with commits.
+func TestHeadCommit_ReturnsCurrentShortSHA(t *testing.T) {
+	dir := initFixtureRepo(t)
+	want := strings.TrimSpace(runGit(t, dir, "rev-parse", "--short", "HEAD"))
+
+	sha, available, err := HeadCommit(dir)
+	if err != nil {
+		t.Fatalf("HeadCommit() unexpected error: %v", err)
+	}
+	if !available {
+		t.Fatal("available = false inside a real repo with commits, want true")
+	}
+	if sha != want {
+		t.Errorf("HeadCommit() sha = %q, want %q", sha, want)
+	}
+}
+
+// TestHeadCommit_NotARepo mirrors CommitsSinceFileAdded's own "bool
+// separate from error" convention (research.md #7).
+func TestHeadCommit_NotARepo(t *testing.T) {
+	dir := t.TempDir()
+
+	sha, available, err := HeadCommit(dir)
+	if err != nil {
+		t.Fatalf("HeadCommit() unexpected error: %v", err)
+	}
+	if available {
+		t.Error("available = true outside a Git repository, want false")
+	}
+	if sha != "" {
+		t.Errorf("sha = %q, want \"\" when not available", sha)
+	}
+}
+
+// TestIsWorkingTreeDirty_CleanRepo is 041-task-evidence-fingerprint T003
+// (Foundational).
+func TestIsWorkingTreeDirty_CleanRepo(t *testing.T) {
+	dir := initFixtureRepo(t)
+
+	dirty, err := IsWorkingTreeDirty(dir)
+	if err != nil {
+		t.Fatalf("IsWorkingTreeDirty() unexpected error: %v", err)
+	}
+	if dirty {
+		t.Error("IsWorkingTreeDirty() = true for a freshly-committed repo with no local changes, want false")
+	}
+}
+
+func TestIsWorkingTreeDirty_UncommittedFile(t *testing.T) {
+	dir := initFixtureRepo(t)
+	writeFile(t, dir, "untracked.txt", "local change")
+
+	dirty, err := IsWorkingTreeDirty(dir)
+	if err != nil {
+		t.Fatalf("IsWorkingTreeDirty() unexpected error: %v", err)
+	}
+	if !dirty {
+		t.Error("IsWorkingTreeDirty() = false after writing an uncommitted file, want true")
+	}
+}
+
+func TestIsWorkingTreeDirty_NotARepo(t *testing.T) {
+	dir := t.TempDir()
+
+	if _, err := IsWorkingTreeDirty(dir); err == nil {
+		t.Error("IsWorkingTreeDirty() error = nil outside a Git repository, want non-nil")
+	}
+}
+
 // runGit is a small test-only helper — production code never has a
 // reason to run arbitrary Git subcommands beyond IsRepo/CurrentBranch/
 // BranchName/EnsureBranch's own fixed set.

@@ -194,6 +194,54 @@ func hasParent(root, commit string) bool {
 	return cmd.Run() == nil
 }
 
+// HeadCommit returns the current commit's short SHA. available is
+// false, with no error, when root is not a Git repository or has no
+// commits yet — mirrors CommitsSinceFileAdded's own "bool separate from
+// error" convention (041-task-evidence-fingerprint research.md #7).
+func HeadCommit(root string) (sha string, available bool, err error) {
+	if !IsRepo(root) {
+		return "", false, nil
+	}
+
+	// "No commits yet" (a brand-new, empty repository) is checked first,
+	// by exit code alone — the same --verify --quiet technique
+	// EnsureBranch already uses below — rather than by matching the
+	// short-SHA command's own stderr text, which varies across Git
+	// versions. Code review finding (041-task-evidence-fingerprint): the
+	// original implementation treated *any* failure of the short-SHA
+	// command as "not available, no error," silently masking a genuine
+	// Git failure (corrupted repo, permission error, git binary issue)
+	// as a normal, empty-repo absence.
+	verify := exec.Command("git", "rev-parse", "--verify", "--quiet", "HEAD")
+	verify.Dir = root
+	if verify.Run() != nil {
+		return "", false, nil
+	}
+
+	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false, err
+	}
+	return strings.TrimSpace(string(out)), true, nil
+}
+
+// IsWorkingTreeDirty reports whether `git status --porcelain` returns
+// any output at all — repository-wide, not scoped to specific paths, a
+// deliberate simplification (041-task-evidence-fingerprint research.md
+// #7): a false "dirty" costs nothing, while a missed "actually dirty"
+// would misrepresent what evidence was captured against.
+func IsWorkingTreeDirty(root string) (bool, error) {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("vcs: git status --porcelain: %w", err)
+	}
+	return strings.TrimSpace(string(out)) != "", nil
+}
+
 // EnsureFeatureBranch creates-and-checks-out featureID's own branch —
 // deriving its name from featureID and, if given, slug — or resumes
 // the branch already dedicated to that Feature ID if one exists

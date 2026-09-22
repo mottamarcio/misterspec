@@ -95,4 +95,18 @@ const (
 	// raised once per artifact scan, independent of whether anything
 	// currently references that anchor.
 	CodeDuplicateAnchor = "duplicate_anchor"
+	// CodeUnverifiedTask marks a checked Task with no Evidence-Result:
+	// line at all — a checkbox alone is never treated as verification
+	// (041-task-evidence-fingerprint data-model.md "Validation Codes",
+	// spec FR-008/FR-009).
+	CodeUnverifiedTask = "unverified_task"
+	// CodeStaleTaskEvidence marks a checked Task whose recorded
+	// Evidence-Fingerprint: no longer matches its own current content
+	// (041-task-evidence-fingerprint data-model.md "Validation Codes",
+	// spec FR-007).
+	CodeStaleTaskEvidence = "stale_task_evidence"
+	// CodeFailedTaskEvidence marks a checked Task whose most recent
+	// Evidence-Result: is "fail" (041-task-evidence-fingerprint
+	// data-model.md "Validation Codes", spec FR-009).
+	CodeFailedTaskEvidence = "failed_task_evidence"
 )

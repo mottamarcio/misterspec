@@ -46,7 +46,7 @@ func classify(err error) (code string, exitCode int) {
 		return "already_exists", 5
 	case errors.Is(err, operations.ErrUnsupportedType):
 		return "unsupported_type", 2
-	case errors.Is(err, operations.ErrInvalidSlug), errors.Is(err, ErrInvalidArgument):
+	case errors.Is(err, operations.ErrInvalidSlug), errors.Is(err, ErrInvalidArgument), errors.Is(err, operations.ErrInvalidEvidenceRequest):
 		return "invalid_argument", 2
 	case errors.Is(err, contextengine.ErrUnsupportedIntent):
 		return "unsupported_intent", 2

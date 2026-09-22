@@ -51,3 +51,38 @@ func TestComputeTaskReadiness_IncompleteDependencyBlocks(t *testing.T) {
 		t.Errorf("Blockers = %+v, want exactly [TASK-002]", got.Blockers)
 	}
 }
+
+// TestComputeTaskReadiness_CheckedButUnverifiedDependencyBlocks is
+// 041-task-evidence-fingerprint T022 (User Story 2): a dependency whose
+// checkbox is checked but whose evidence state is Unverified must still
+// block — computeTaskReadiness itself needs no change at all
+// (research.md #1) since it only ever asks statusOf for "complete" or
+// not; the redefinition living entirely in internal/prepare/scan.go's
+// taskStatus is what makes statusOf answer correctly here.
+func TestComputeTaskReadiness_CheckedButUnverifiedDependencyBlocks(t *testing.T) {
+	deps := []ids.EntityID{taskID(1)}
+	// statusOf simulates scan.go's own redefined taskStatus: checked
+	// but unverified reports "pending", not "complete".
+	statusOf := func(ids.EntityID) string { return "pending" }
+
+	got := computeTaskReadiness(taskID(2), deps, statusOf)
+	if got.Ready {
+		t.Fatal("Ready = true, want false — TASK-001 is checked but unverified")
+	}
+	if len(got.Blockers) != 1 || got.Blockers[0] != taskID(1) {
+		t.Errorf("Blockers = %+v, want exactly [TASK-001]", got.Blockers)
+	}
+}
+
+// TestComputeTaskReadiness_VerifiedDependencyUnblocks is the positive
+// mirror: once statusOf reports "complete" (checked AND Verified), the
+// dependent becomes ready.
+func TestComputeTaskReadiness_VerifiedDependencyUnblocks(t *testing.T) {
+	deps := []ids.EntityID{taskID(1)}
+	statusOf := func(ids.EntityID) string { return "complete" }
+
+	got := computeTaskReadiness(taskID(2), deps, statusOf)
+	if !got.Ready {
+		t.Error("Ready = false, want true — TASK-001 is checked and Verified")
+	}
+}

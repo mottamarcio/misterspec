@@ -1,14 +1,14 @@
 package operations
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
+	"github.com/mottamarcio/misterspec/internal/evidence"
 	"github.com/mottamarcio/misterspec/internal/ids"
 	"github.com/mottamarcio/misterspec/internal/project"
 )
@@ -58,13 +58,29 @@ func Inspect(root string, cfg project.Configuration, rawID string) (InspectResul
 }
 
 var (
-	taskHeadingLinePattern = regexp.MustCompile(`^##\s+(TASK-\d+)\b`)
-	taskCheckboxPattern    = regexp.MustCompile(`^- \[([ xX])\]`)
+	// taskHeadingTokenPattern matches a Task Section's own Heading text
+	// (already stripped of leading "#"s by artifacts.ParseDocument),
+	// e.g. "TASK-003" alone or "TASK-003 — Add session persistence" —
+	// group 1 is always just "TASK-003", the token compared against the
+	// heading fragment a Task's own ResolvedLocation.Path carries
+	// (ids.ScanTasks's own taskHeadingPattern precedent).
+	taskHeadingTokenPattern = regexp.MustCompile(`^(TASK-\d+)\b`)
+	taskCheckboxPattern     = regexp.MustCompile(`^- \[([ xX])\]`)
 )
 
 // inspectTask builds the narrowed Metadata for a Task location
 // ("<tasks.md path>#TASK-NNN"): its own tasks.md's `for:` field becomes
-// Parent, and its own checkbox line becomes Status.
+// Parent, and Status is derived exactly as internal/prepare.
+// ScanSpecTasks already derives it — checked AND evidence.Verified,
+// never the checkbox alone (evidence.TaskStatus). Code review finding
+// (041-task-evidence-fingerprint): this function originally derived
+// Status from the checkbox alone via a raw line scan, contradicting
+// internal/prepare's own, already-corrected definition for the same
+// Task — `internal inspect` and `internal prepare`/`internal validate`
+// could report a different state for the identical Task. Rewritten to
+// use artifacts.ParseDocument (like ScanSpecTasks) so the Task's own
+// full Section.Body is available for evidence parsing and
+// fingerprinting, not just its checkbox line.
 func inspectTask(root string, loc ResolvedLocation) (artifacts.Metadata, error) {
 	filePath, heading, ok := strings.Cut(loc.Path, "#")
 	if !ok {
@@ -76,7 +92,7 @@ func inspectTask(root string, loc ResolvedLocation) (artifacts.Metadata, error) 
 		return artifacts.Metadata{}, err
 	}
 
-	status, err := taskCheckboxStatus(filepath.Join(root, filePath), heading)
+	status, err := taskEvidenceAwareStatus(root, filePath, heading, loc.ID)
 	if err != nil {
 		return artifacts.Metadata{}, err
 	}
@@ -90,39 +106,37 @@ func inspectTask(root string, loc ResolvedLocation) (artifacts.Metadata, error) 
 	}, nil
 }
 
-// taskCheckboxStatus scans path for the heading "## <heading>" and
-// returns "pending" or "complete" based on the first Markdown checkbox
-// line found under it (docs/architecture-specification.md §29's
-// "- [ ] Complete" convention), before the next "## " heading or EOF.
-func taskCheckboxStatus(path, heading string) (string, error) {
-	f, err := os.Open(path)
+// taskEvidenceAwareStatus finds heading's own Section in filePath (the
+// owning tasks.md), then returns evidence.TaskStatus of its checkbox
+// and evidence.DeriveState — the identical definition
+// internal/prepare.ScanSpecTasks uses, so the two never diverge again.
+func taskEvidenceAwareStatus(root, filePath, heading string, task ids.EntityID) (string, error) {
+	body, err := artifacts.ReadBody(filepath.Join(root, filePath))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("%w: %s", artifacts.ErrArtifactNotFound, path)
+		if errors.Is(err, artifacts.ErrArtifactNotFound) {
+			return "", fmt.Errorf("%w: %s", artifacts.ErrArtifactNotFound, filePath)
 		}
 		return "", err
 	}
-	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	inTarget := false
-	for scanner.Scan() {
-		line := scanner.Text()
-		if sub := taskHeadingLinePattern.FindStringSubmatch(line); sub != nil {
-			inTarget = sub[1] == heading
+	doc := artifacts.ParseDocument(body)
+	for _, section := range doc.Sections {
+		sub := taskHeadingTokenPattern.FindStringSubmatch(section.Heading)
+		if sub == nil || sub[1] != heading {
 			continue
 		}
-		if inTarget {
+		sectionBody := []byte(section.Body)
+		checked := false
+		for _, line := range strings.Split(section.Body, "\n") {
 			if cb := taskCheckboxPattern.FindStringSubmatch(line); cb != nil {
-				if cb[1] == " " {
-					return "pending", nil
-				}
-				return "complete", nil
+				checked = cb[1] != " "
+				break
 			}
 		}
+		fields := evidence.ParseEvidenceFields(task, sectionBody)
+		currentFingerprint := TaskContentFingerprint(task, sectionBody).String()
+		state := evidence.DeriveState(fields, currentFingerprint)
+		return evidence.TaskStatus(checked, state), nil
 	}
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-	return "", fmt.Errorf("operations: heading %q not found in %s", heading, path)
+	return "", fmt.Errorf("operations: heading %q not found in %s", heading, filePath)
 }
