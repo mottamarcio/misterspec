@@ -186,6 +186,10 @@ var skillVerificationAllowlist = map[string][]CapabilityClaim{
 	},
 	"mister-implement": {
 		{Claim: "project passes internal validate with zero new findings after a Task", BackingOp: "validate"},
+		// "mark it complete only once that evidence exists" / "the Tasks
+		// artifact's own completion checkbox and evidence for the Task
+		// just completed" (041-task-evidence-fingerprint)
+		{Claim: "Task completion is backed by recorded evidence, not a checkbox alone", BackingOp: "capture-evidence"},
 	},
 	"mister-analyze": {
 		{Claim: "project structure passes internal validate", BackingOp: "validate"},

@@ -34,6 +34,7 @@ func newInternalCmd() *cobra.Command {
 		internalcmd.NewCommitsSinceFileCmd(),
 		internalcmd.NewMigrationCheckTasksCmd(),
 		internalcmd.NewPrepareCmd(),
+		internalcmd.NewCaptureEvidenceCmd(),
 		internalcmd.NewEvalRetrievalCmd(),
 		internalcmd.NewEvalCompareCmd(),
 	)

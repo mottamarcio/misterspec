@@ -134,6 +134,16 @@ Required operations:
   `context_fallbacks` in this task's own RunRecord once one exists,
   rather than silently absorbing the extra read
   (037-eval-quality-efficiency).
+- `internal capture-evidence SPEC-### --task TASK-NNN --origin
+  automated|declared --by <who> [--result pass|fail |
+  --command <cmd> --args <arg> --exec-dir <dir> --timeout <duration>]`
+  — the deterministic call backing this Skill's own "mark it complete
+  only once that evidence exists" requirement: computes the Task's own
+  content fingerprint and current Git revision/working-tree state, and
+  (`--origin automated`) runs exactly the given verification command,
+  returning a `result`/`log` this Skill then records as the Task's own
+  `Evidence-*:` lines (below) — it never writes those lines itself
+  (041-task-evidence-fingerprint).
 - `internal validate SPEC-###` — confirm the project is still
   structurally valid after the Task's own changes (this checks
   artifact structure, not the code change's own correctness — that is
@@ -157,11 +167,23 @@ Required operations:
    this Skill's own Required Context instead.
 3. Implement the change directly in the repository.
 4. Verify it by the Task's own stated method (e.g. run the named `go
-   test` command); record the evidence.
-5. If verification succeeds, check the Task's completion checkbox and
-   record its evidence in the Tasks artifact directly. If verification
-   fails, stop here (Failure Conditions) — do not mark it complete and
-   do not continue to another Task.
+   test` command), then run `internal capture-evidence SPEC-###
+   --task TASK-NNN --origin automated --by <this Skill/tool> --command
+   <the same command> [--args ...]` to record that verification
+   deterministically — never assert a result without this call backing
+   it. When the Task's own method is not a runnable command (e.g. a
+   manual/reviewed check), instead use `--origin declared --result
+   pass|fail` naming who/what performed it.
+5. If the call's own `result` is `pass`, check the Task's completion
+   checkbox and write its returned fields into the Tasks artifact as
+   this Task's own `Evidence-Result:`/`Evidence-Origin:`/`Evidence-By:`/
+   `Evidence-CapturedAt:`/`Evidence-Command:`/`Evidence-GitRevision:`/
+   `Evidence-WorkingTree:`/`Evidence-Fingerprint:`/`Evidence-Log:` lines
+   (only the fields the call actually returned — declared origin omits
+   `Evidence-Command:`/`Evidence-Log:`). If `result` is `fail`, stop
+   here (Failure Conditions) — do not check the box, and still record
+   the failing evidence fields so the failure itself is not silently
+   lost.
 6. Run `internal validate SPEC-###` to confirm the project's structure
    is still valid.
 7. **In named-task mode**: stop and report completion per the

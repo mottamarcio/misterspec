@@ -56,6 +56,12 @@ func ValidateProject(root string, cfg project.Configuration) ([]Finding, error) 
 					return nil, err
 				}
 				findings = append(findings, depFindings...)
+
+				evFindings, err := taskEvidenceFindings(root, cfg, specID, paths[0])
+				if err != nil {
+					return nil, err
+				}
+				findings = append(findings, evFindings...)
 			}
 		}
 	}
@@ -237,6 +243,12 @@ func ValidateEntity(root string, cfg project.Configuration, rawID string) ([]Fin
 				return nil, err
 			}
 			findings = append(findings, depFindings...)
+
+			evFindings, err := taskEvidenceFindings(root, cfg, id, paths[0])
+			if err != nil {
+				return nil, err
+			}
+			findings = append(findings, evFindings...)
 		}
 
 		// A cycle is a fact about the project-wide graph, not just this

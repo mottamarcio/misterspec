@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/040-stable-section-anchors/plan.md
+specs/041-task-evidence-fingerprint/plan.md
 <!-- SPECKIT END -->
