@@ -7,6 +7,7 @@ import (
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
+	"github.com/mottamarcio/misterspec/internal/impact"
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/project"
 	"github.com/mottamarcio/misterspec/internal/validation"
@@ -33,6 +34,8 @@ func TestClassify(t *testing.T) {
 		{"path outside project", artifacts.ErrPathOutsideProject, "path_outside_project", 5},
 		{"already initialized", bootstrap.ErrAlreadyInitialized, "already_initialized", 5},
 		{"unknown agent", bootstrap.ErrUnknownAgent, "unknown_agent", 5},
+		{"revision not found", impact.ErrRevisionNotFound, "revision_not_found", 2},
+		{"not a repository", impact.ErrNotARepository, "not_a_repository", 6},
 		{"unrecognized fallback", errors.New("boom"), "unexpected_failure", 1},
 	}
 

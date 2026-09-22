@@ -176,6 +176,37 @@
         <code>invalid_task_dependency</code>.
       </p>
 
+      <h2 id="internal-capture-evidence">internal capture-evidence SPEC-### --task TASK-###</h2>
+      <p><strong>Purpose:</strong> Compute a Task's own content fingerprint and Git snapshot, optionally run one explicit, fully-specified verification command, and return the result as structured <code>Evidence-*:</code> fields — the framework's answer to "this Task is checked complete" no longer being trusted on its own (a checked box with no evidence still reports <code>"pending"</code> from <a href="#internal-prepare">internal prepare</a> and <code>unverified_task</code> from <a href="#internal-validate">internal validate</a>). Never writes into <code>tasks.md</code> itself — recording the returned fields as the Task's own <code>Evidence-*:</code> body lines stays <code>/mister-implement</code>'s job.</p>
+      <p><strong>Flags:</strong> <code>--task &lt;id&gt;</code> (required — bare <code>TASK-###</code> or composite <code>SPEC-###:TASK-###</code>); <code>--origin automated|declared</code> (required); <code>--by &lt;string&gt;</code> (required — the tool or person capturing this evidence); <code>--result pass|fail</code> (required iff <code>--origin declared</code>; forbidden otherwise — an automated result is derived from the command's own exit code, never asserted); <code>--command &lt;string&gt;</code> (required iff <code>--origin automated</code>; forbidden otherwise — never inferred from prose); <code>--args &lt;string&gt;</code> (repeatable); <code>--exec-dir &lt;path&gt;</code> (default <code>.</code>, relative to the project root — distinct from <code>--dir</code>, which names the *project* directory on every <code>internal</code> command); <code>--timeout &lt;duration&gt;</code> (default <code>2m</code>).</p>
+      <pre><code>misterspec internal capture-evidence SPEC-014 --task TASK-003 \
+  --origin declared --by "reviewer:alice" --result pass
+{"ok":true,"evidence":{"task":"TASK-003","result":"pass","origin":"declared",
+"by":"reviewer:alice","captured_at":"2026-09-22T14:30:00Z",
+"git_revision":"a1b2c3d","working_tree":"clean","input_fingerprint":"sha256:9f2c..."}}</code></pre>
+      <p><strong>Automated origin</strong> — runs the given command, captures its real exit code as <code>result</code>, and writes its full combined output to a new sibling <code>&lt;specDir&gt;/evidence/&lt;Task&gt;-&lt;timestamp&gt;.log</code> (never inlined into the response):</p>
+      <pre><code>misterspec internal capture-evidence SPEC-014 --task TASK-003 \
+  --origin automated --by "go test" \
+  --command go --args test --args ./internal/foo/... \
+  --exec-dir . --timeout 90s
+{"ok":true,"evidence":{"task":"TASK-003","result":"fail","origin":"automated",
+"by":"go test","captured_at":"2026-09-22T14:31:12Z","command":"go test ./internal/foo/...",
+"git_revision":"a1b2c3d","working_tree":"dirty","input_fingerprint":"sha256:9f2c...",
+"log":"ai/.../SPEC-014/evidence/TASK-003-20260922T143112Z.log"}}</code></pre>
+      <p>
+        A command that runs and exits non-zero still returns
+        <code>ok:true</code> with <code>result:"fail"</code> — that is a
+        successful *capture* of a failure, not an operational error.
+        <code>working_tree</code> is <code>"clean"</code> or
+        <code>"dirty"</code>: the SHA alone is never treated as
+        sufficient when the working tree had relevant local changes at
+        capture time. A failed capture (bad <code>--exec-dir</code>,
+        malformed request — <code>--origin declared</code> with
+        <code>--command</code>, or vice versa) returns
+        <code>invalid_argument</code>, never a silently accepted
+        half-populated result.
+      </p>
+
       <h2 id="internal-status">internal status</h2>
       <p><strong>Purpose:</strong> Return a machine-facing structural status summary for the whole project.</p>
       <pre><code>misterspec internal status
@@ -286,6 +317,41 @@
         A non-empty <code>dimension_diff</code> means the candidate's own config differs from the baseline's in more than the one dimension the comparison was meant to isolate — the comparison still runs, but a caller reading it knows not to trust <code>changed_cases</code> as isolating a single cause. A baseline recorded against an older <code>ranking_version</code>/<code>context_schema_version</code> than the candidate is flagged as stale (<code>result.comparison.stale</code>) rather than silently trusted.
       </p>
 
+      <h2 id="internal-analyze-impact">internal analyze-impact</h2>
+      <p><strong>Purpose:</strong> Report every artifact or Task with a known relation to what changed between two Git revisions — a Requirement's text change propagated to the Tasks that <code>Serves:</code> it, a formal <code>depends_on</code>/<code>parent</code>/<code>supersedes</code> backlink, a Task whose own recorded evidence is already stale/failed, or a wikilink-only mention (reported, but never as a certainty of breakage). Read-only — never mutates the filesystem.</p>
+      <p><strong>Flags:</strong> <code>--from &lt;revision&gt;</code> (required); <code>--to &lt;revision&gt;</code> (optional — default: the working tree); <code>--path &lt;path&gt;</code> (optional — scope the diff to one artifact instead of the whole project).</p>
+      <pre><code>misterspec internal analyze-impact --from a1b2c3d
+{"ok":true,"analyze_impact_schema_version":1,
+"change_set":{"from":"a1b2c3d","to":"working-tree",
+"elements":[{"id":"SPEC-014","path":"ai/.../SPEC-014/spec.md","status":"modified","requirement_number":2}],
+"unmapped_code_paths":0},
+"affected_items":[{"id":"SPEC-014:TASK-003","path":"ai/.../SPEC-014/tasks.md#TASK-003",
+"classification":"deterministic_invalidation","severity":"medium",
+"reason":"TASK-003 serves SPEC-014:R2, whose content changed between a1b2c3d and working-tree",
+"paths":[{"hops":[{"relation":"coverage","from":"SPEC-014","to":"SPEC-014:TASK-003",
+"source_path":"ai/.../SPEC-014/tasks.md","source_section":"","source_line":0}]}],
+"reverification_candidate":"SPEC-014:TASK-003"}],
+"no_known_relation_elements":[]}</code></pre>
+      <p>
+        <code>classification</code> is always exactly one of
+        <code>deterministic_invalidation</code> (a formal, coverage, or
+        already-broken-evidence relation) or
+        <code>suggested_review</code> — a wikilink-only mention is
+        <strong>never</strong> promoted to
+        <code>deterministic_invalidation</code>, structurally, not just
+        by convention. A multi-hop dependency chain is reported with
+        its full <code>paths[].hops</code> sequence, not only the
+        nearest hop, and the same item reached by more than one
+        distinct relation keeps every path separately. An element with
+        zero known relations is named explicitly in
+        <code>no_known_relation_elements</code> — its absence from
+        <code>affected_items</code> is never presented as a verified
+        absence of impact. <code>unmapped_code_paths</code> counts
+        changed paths this feature has no Requirement mapping for yet
+        (source code, pending a future architecture-rules Spec) —
+        declared, never silently dropped from the response.
+      </p>
+
       <h2 id="errors">Error codes</h2>
       <p>Every command shares the same error shape and code set:</p>
       <div class="not-prose overflow-x-auto my-6">
@@ -303,11 +369,13 @@
             <tr><td class="px-4 py-2"><code>query_syntax_error</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --query-mode advanced</code> expression is malformed FTS5 syntax.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_case</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">An <code>eval-retrieval</code> case file failed validation, or referenced an identifier that doesn't resolve.</td></tr>
             <tr><td class="px-4 py-2"><code>incompatible_run</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>eval-compare</code>'s baseline and candidate run records have different <code>kind</code> (e.g. one <code>retrieval</code>, one <code>task_execution</code>) — refused rather than compared meaninglessly.</td></tr>
+            <tr><td class="px-4 py-2"><code>revision_not_found</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>analyze-impact</code>'s <code>--from</code> or a non-empty <code>--to</code> doesn't resolve in the project's Git repository.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_parent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The given <code>--parent</code> can't have this child type.</td></tr>
             <tr><td class="px-4 py-2"><code>already_exists</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The target artifact already exists.</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_type</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Unrecognized entity/artifact type or kind.</td></tr>
             <tr><td class="px-4 py-2"><code>path_outside_project</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">A resolved path would escape the project root.</td></tr>
             <tr><td class="px-4 py-2"><code>project_not_initialized</code></td><td class="px-4 py-2">6</td><td class="px-4 py-2">No <code>.misterspec/config.yaml</code> found.</td></tr>
+            <tr><td class="px-4 py-2"><code>not_a_repository</code></td><td class="px-4 py-2">6</td><td class="px-4 py-2"><code>analyze-impact</code> targeted a directory that isn't a Git repository — there's no history to diff.</td></tr>
             <tr><td class="px-4 py-2"><code>already_initialized</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>init</code> targeted an already-bootstrapped project.</td></tr>
             <tr><td class="px-4 py-2"><code>unknown_agent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>--agent</code> ID not registered.</td></tr>
             <tr><td class="px-4 py-2"><code>checksum_mismatch</code></td><td class="px-4 py-2">7</td><td class="px-4 py-2"><code>--update</code>'s downloaded binary didn't match the published checksum — nothing was replaced.</td></tr>
