@@ -199,7 +199,34 @@ func connectedCandidates[E any](root string, cfg project.Configuration, entries 
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := chunkArtifact(root, loc.Location.Path, reasonOf(e))
+		reason := reasonOf(e)
+		// An anchor-qualified wikilink contributes exactly one Candidate
+		// (that Section alone) instead of chunkArtifact's whole-artifact
+		// expansion (040-stable-section-anchors contracts §5) — every
+		// other relation/entry is completely unaffected (spec FR-008).
+		if reason.Relation == "wikilink" && reason.TargetAnchor != "" {
+			candidate, err := chunkArtifactAnchor(root, loc.Location.Path, reason.TargetAnchor, reason)
+			if errors.Is(err, errAnchorNotFound) {
+				// The anchor doesn't exist on the target artifact —
+				// operations.References/Backlinks populate TargetAnchor
+				// straight from the wikilink's own raw text with no
+				// existence check (that is internal/validation's job,
+				// CodeUnknownAnchor), so this is reachable in normal use,
+				// not just theoretically. Retrieval must not fabricate a
+				// contentless, nonzero-scored Candidate for a reference
+				// that resolves to nothing — silently omit it here; the
+				// diagnostic surfaces separately via `internal validate`
+				// (code review finding, corrects the contract's earlier,
+				// wrong "never reached here in practice" assumption).
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, candidate)
+			continue
+		}
+		candidates, err := chunkArtifact(root, loc.Location.Path, reason)
 		if err != nil {
 			return nil, err
 		}
@@ -221,6 +248,7 @@ func referenceEntryReason(tier Tier, e operations.ReferenceEntry) Reason {
 		SourcePath:    e.SourcePath,
 		SourceSection: e.SourceSection,
 		SourceLine:    e.SourceLine,
+		TargetAnchor:  e.TargetAnchor,
 	}
 }
 
@@ -236,6 +264,13 @@ func backlinkEntryReason(e operations.BacklinkEntry) Reason {
 		SourcePath:    e.SourcePath,
 		SourceSection: e.SourceSection,
 		SourceLine:    e.SourceLine,
+		// TargetAnchor is informational only here — it names which
+		// anchor of the current (queried) target the Source artifact
+		// referenced, but this Candidate is chunkArtifact-ing the
+		// Source artifact itself (idOf == e.Source), never the target,
+		// so it intentionally never routes through chunkArtifactAnchor
+		// (contracts §5: only Relation == "wikilink" does).
+		TargetAnchor: e.TargetAnchor,
 	}
 }
 
@@ -271,4 +306,91 @@ func chunkArtifact(root, relPath string, reason Reason) ([]Candidate, error) {
 		})
 	}
 	return out, nil
+}
+
+// chunkArtifactAnchor resolves exactly one Candidate for the Section
+// whose Anchor == anchor within the artifact at relPath (040-stable-
+// section-anchors contracts §5) — never the whole artifact's own
+// chunkArtifact expansion. It walks artifacts.ParseDocument's own
+// Sections directly, not artifacts.Chunks()'s already-filtered output,
+// because Chunks() silently skips a Section whose Body is empty (a
+// heading immediately followed by a subheading); an anchor on such a
+// Section is still valid and must resolve, with empty Content, rather
+// than being treated as not-found (data-model.md "Chunk (extended)").
+// HeadingPath is that Section's ancestor headings' own titles,
+// outermost first, computed from the flat Sections list's own Level
+// nesting — the same information chunkArtifact's callers never needed,
+// since a full-artifact expansion carries every ancestor's own Chunk
+// already. Returns an error only for an I/O failure — anchor-not-found
+// is validation's own concern (internal/validation), never reached here
+// in practice, since collector.go only calls this for a TargetAnchor a
+// prior wikilink-classification step already confirmed exists.
+// errAnchorNotFound is returned by chunkArtifactAnchor when relPath
+// declares no Section with the given anchor. Reachable in normal use —
+// operations.References/Backlinks populate TargetAnchor from the raw
+// wikilink text with no existence check (internal/validation's own
+// separate job, CodeUnknownAnchor) — so callers MUST check for it with
+// errors.Is and omit the reference, never propagate it as a fatal
+// Collect error nor fabricate a placeholder Candidate for it (code
+// review finding; corrects this function's own earlier assumption that
+// the case was unreachable).
+var errAnchorNotFound = errors.New("contextengine: anchor not found in target artifact")
+
+func chunkArtifactAnchor(root, relPath, anchor string, reason Reason) (Candidate, error) {
+	body, bodyStartLine, err := artifacts.ReadBodyWithOffset(filepath.Join(root, relPath))
+	if err != nil {
+		return Candidate{}, err
+	}
+	offset := bodyStartLine - 1
+	doc := artifacts.ParseDocument(body)
+
+	idx := -1
+	for i, s := range doc.Sections {
+		if s.Anchor == anchor {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return Candidate{}, fmt.Errorf("%w: %q in %s", errAnchorNotFound, anchor, relPath)
+	}
+
+	target := doc.Sections[idx]
+	reason.TargetAnchor = anchor
+
+	return Candidate{
+		Path:        relPath,
+		Heading:     target.Heading,
+		Content:     target.Body,
+		StartLine:   target.StartLine + offset,
+		EndLine:     target.EndLine + offset,
+		Reasons:     []Reason{reason},
+		HeadingPath: ancestorHeadingPath(doc.Sections, idx),
+	}, nil
+}
+
+// ancestorHeadingPath returns the titles of every Section preceding
+// sections[idx] (in document order) whose own Level is strictly less
+// than each ancestor found so far — the same "walk backward, track the
+// smallest Level seen" approach any flat, level-tagged outline uses to
+// recover nesting without a tree structure of its own. Outermost
+// ancestor first.
+func ancestorHeadingPath(sections []artifacts.Section, idx int) []string {
+	// Always non-nil, even when empty (a top-level anchored Section has
+	// no ancestors) — callers distinguish "this Candidate came from
+	// chunkArtifactAnchor" from "it didn't" by nil-ness, not length,
+	// since a real, valid HeadingPath can legitimately be empty (found
+	// during implementation: a manual end-to-end walkthrough of
+	// quickstart.md §1, whose own example anchors a top-level heading
+	// with no ancestor, surfaced that gating on len()>0 silently
+	// dropped heading_path/anchor for exactly that case).
+	path := []string{}
+	minLevel := sections[idx].Level
+	for i := idx - 1; i >= 0 && minLevel > 1; i-- {
+		if sections[i].Level > 0 && sections[i].Level < minLevel {
+			path = append([]string{sections[i].Heading}, path...)
+			minLevel = sections[i].Level
+		}
+	}
+	return path
 }

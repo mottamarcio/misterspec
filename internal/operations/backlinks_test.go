@@ -207,6 +207,32 @@ func TestBacklinks_SemanticEntryHasSourceOccurrence(t *testing.T) {
 	}
 }
 
+// TestBacklinks_AnchorQualifiedWikilinkHasTargetAnchor proves spec 040
+// data-model.md "ReferenceEntry / BacklinkEntry (extended)": an
+// anchor-qualified wikilink's BacklinkEntry carries TargetAnchor; a
+// plain wikilink to the same target stays "".
+func TestBacklinks_AnchorQualifiedWikilinkHasTargetAnchor(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupBacklinksProgram(t, root)
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md",
+		"---\nid: SPEC-002\ntype: spec\nstatus: ready\nparent: FEAT-001\n---\nSee [[SPEC-001#retry-policy]] and also [[SPEC-001]].\n")
+
+	result, err := operations.Backlinks(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("Backlinks() unexpected error: %v", err)
+	}
+	if len(result.Semantic) != 2 {
+		t.Fatalf("Semantic = %+v, want 2 entries", result.Semantic)
+	}
+	if result.Semantic[0].TargetAnchor != "retry-policy" {
+		t.Errorf("Semantic[0].TargetAnchor = %q, want %q", result.Semantic[0].TargetAnchor, "retry-policy")
+	}
+	if result.Semantic[1].TargetAnchor != "" {
+		t.Errorf("Semantic[1].TargetAnchor = %q, want \"\" for a plain wikilink", result.Semantic[1].TargetAnchor)
+	}
+}
+
 func TestBacklinks_FormalEntryHasSourcePathButNoSection(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()

@@ -42,7 +42,10 @@ var validContextModes = map[contextOutputMode]bool{
 // (contracts/search-and-ranking-contract.md §3).
 // Bumped to 4 by 038-wikilink-chunk-provenance: new opt-in
 // --provenance field (contracts/wikilink-provenance-contract.md §4).
-const contextSchemaVersion = 4
+// Bumped to 5 by 040-stable-section-anchors: an item produced via an
+// anchor-qualified reference gains heading_path/anchor
+// (contracts/stable-anchors-contract.md §6).
+const contextSchemaVersion = 5
 
 // rankingVersion identifies the scoring formula/weight set that
 // produced a response's ordering (036-text-search-ranking spec FR-009).
@@ -257,9 +260,40 @@ func renderContextItems(items []contextengine.ResultItem, diagnosticScores, prov
 				m["provenance"] = p
 			}
 		}
+		// heading_path/anchor appear together, gated on HeadingPath
+		// being non-nil (never on its length, and never on a
+		// Reason.TargetAnchor in isolation): a top-level anchored
+		// Section legitimately has an empty-but-real HeadingPath
+		// ([]string{}, non-nil — collector.go's ancestorHeadingPath), so
+		// length can't distinguish "no ancestors" from "not anchor-
+		// derived at all." A "backlink" Reason can also carry a
+		// non-empty TargetAnchor purely as informational metadata about
+		// what the referencing artifact pointed at, without this
+		// Candidate itself being the anchor-scoped Section
+		// (collector.go's backlinkEntryReason) — only a Candidate
+		// chunkArtifactAnchor actually produced has a non-nil
+		// HeadingPath (data-model.md's own validation rule).
+		if item.HeadingPath != nil {
+			m["heading_path"] = item.HeadingPath
+			m["anchor"] = anchorFor(item.Reasons)
+		}
 		out = append(out, m)
 	}
 	return out
+}
+
+// anchorFor returns the first non-empty TargetAnchor among reasons —
+// a Candidate produced by chunkArtifactAnchor carries exactly one
+// Reason, always with TargetAnchor set (040-stable-section-anchors
+// contracts §6), so this is only ever called once that precondition
+// already holds.
+func anchorFor(reasons []contextengine.Reason) string {
+	for _, r := range reasons {
+		if r.TargetAnchor != "" {
+			return r.TargetAnchor
+		}
+	}
+	return ""
 }
 
 // renderProvenance renders every wikilink-derived Reason among reasons
@@ -320,6 +354,10 @@ func renderPackageItems(items []contextengine.PackageItem, source []contextengin
 			if p := renderProvenance(source[i].Reasons); len(p) > 0 {
 				m["provenance"] = p
 			}
+		}
+		if i < len(source) && source[i].HeadingPath != nil {
+			m["heading_path"] = source[i].HeadingPath
+			m["anchor"] = anchorFor(source[i].Reasons)
 		}
 		out = append(out, m)
 	}

@@ -39,6 +39,11 @@ type BacklinkEntry struct {
 	// FR-009).
 	SourceSection string
 	SourceLine    int
+	// TargetAnchor is the anchor named by the underlying wikilink, if
+	// any (040-stable-section-anchors data-model.md "ReferenceEntry /
+	// BacklinkEntry (extended)") — same population rule as
+	// ReferenceEntry.TargetAnchor.
+	TargetAnchor string
 }
 
 // BacklinksResult groups a queried artifact's incoming relationships,
@@ -122,6 +127,7 @@ func Backlinks(root string, cfg project.Configuration, rawID string) (BacklinksR
 						SourcePath:    filePath,
 						SourceSection: occ.SourceSection,
 						SourceLine:    occ.SourceLine,
+						TargetAnchor:  link.Anchor,
 					})
 				}
 			}

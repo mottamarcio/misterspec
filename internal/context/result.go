@@ -65,6 +65,12 @@ type Reason struct {
 	// where none does (spec FR-009).
 	SourceSection string
 	SourceLine    int
+	// TargetAnchor is the anchor named by the underlying wikilink
+	// occurrence, if any (040-stable-section-anchors data-model.md
+	// "Candidate / Reason (extended)") — copied from the driving
+	// operations.ReferenceEntry/BacklinkEntry.TargetAnchor; "" for a
+	// formal relation or a non-anchor semantic one.
+	TargetAnchor string
 }
 
 // Candidate is one piece of collected context. Identified, for
@@ -84,6 +90,14 @@ type Candidate struct {
 	// value for every other candidate, which scoreCandidate never reads
 	// it for (data-model.md Candidate validation rule).
 	TextRank float64
+	// HeadingPath is the ordered ancestor heading titles (outermost
+	// first) of this Candidate's own Section, populated only when this
+	// Candidate came from an anchor-qualified reference
+	// (chunkArtifactAnchor, 040-stable-section-anchors data-model.md
+	// "Candidate / Reason (extended)") — nil for every other Candidate,
+	// including one for the exact same Section reached without an
+	// anchor.
+	HeadingPath []string
 }
 
 // CandidateSet is Collect's own output: deduplicated, deterministically
@@ -122,6 +136,19 @@ func mergeAndSort(candidates []Candidate) CandidateSet {
 			// data-model.md Candidate validation rule).
 			if reasonsHaveTextMatch(c.Reasons) {
 				existing.TextRank = c.TextRank
+			}
+			// A duplicate discovered later still contributes its own
+			// HeadingPath whenever the first-merged occurrence didn't
+			// have one — an anchor-qualified reference to the same
+			// Section a non-anchor reference already surfaced must not
+			// silently lose its breadcrumb just because the non-anchor
+			// occurrence happened to merge first (040-stable-section-
+			// anchors data-model.md "Candidate / Reason (extended)":
+			// found during implementation, not originally called out by
+			// the design docs — the two references legitimately
+			// resolve to the identical (Path, StartLine, EndLine) key).
+			if existing.HeadingPath == nil && c.HeadingPath != nil {
+				existing.HeadingPath = c.HeadingPath
 			}
 			continue
 		}

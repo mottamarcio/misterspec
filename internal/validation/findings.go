@@ -82,4 +82,17 @@ const (
 	// CodeInvalidTaskDependency marks a "Depends on:" entry naming a
 	// nonexistent Task number, or a Task in a different Spec (FR-009).
 	CodeInvalidTaskDependency = "invalid_task_dependency"
+	// CodeUnknownAnchor marks a wikilink whose Anchor is non-empty and
+	// whose Target resolves to exactly one existing artifact, but that
+	// artifact declares no Section with a matching Anchor
+	// (040-stable-section-anchors data-model.md "Validation Codes") —
+	// distinct from CodeBrokenWikilink, which means the target artifact
+	// itself does not exist (spec FR-009).
+	CodeUnknownAnchor = "unknown_anchor"
+	// CodeDuplicateAnchor marks two or more Sections within the same
+	// artifact declaring the same non-empty explicit anchor
+	// (040-stable-section-anchors data-model.md "Validation Codes") —
+	// raised once per artifact scan, independent of whether anything
+	// currently references that anchor.
+	CodeDuplicateAnchor = "duplicate_anchor"
 )

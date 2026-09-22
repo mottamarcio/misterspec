@@ -53,7 +53,8 @@ func NewReferencesCmd() *cobra.Command {
 // idStrings convention. Each entry additionally carries its own
 // source_path/source_section/source_line (038-wikilink-chunk-
 // provenance contracts §3) — always present, empty/zero for a formal
-// relation.
+// relation. target_anchor (040-stable-section-anchors contracts §4) —
+// always present, empty for a formal or non-anchor semantic entry.
 func renderReferenceEntries(entries []operations.ReferenceEntry) []map[string]any {
 	out := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
@@ -63,6 +64,7 @@ func renderReferenceEntries(entries []operations.ReferenceEntry) []map[string]an
 			"source_path":    e.SourcePath,
 			"source_section": e.SourceSection,
 			"source_line":    e.SourceLine,
+			"target_anchor":  e.TargetAnchor,
 		})
 	}
 	return out

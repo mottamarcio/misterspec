@@ -185,3 +185,43 @@ func TestReferencesCmd_Ambiguous(t *testing.T) {
 	}
 	assertErrorCode(t, output, "entity_ambiguous")
 }
+
+// TestReferencesCmd_TargetAnchorPresentForAnchorQualifiedWikilink
+// proves spec 040 contracts §4: an anchor-qualified wikilink's
+// target_anchor is populated in the JSON output; a plain wikilink's
+// stays empty.
+func TestReferencesCmd_TargetAnchorPresentForAnchorQualifiedWikilink(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md", "---\nid: PRG-001\ntype: program\nstatus: active\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-004/feature.md", "---\nid: FEAT-004\ntype: feature\nstatus: active\nparent: PRG-001\n---\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md", "---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-004/specs/SPEC-014/spec.md",
+		"---\nid: SPEC-014\ntype: spec\nstatus: ready\nparent: FEAT-004\n---\nSee [[KNOW-003#retry-policy]] and [[KNOW-003]].\n")
+
+	cmd := internalcmd.NewReferencesCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	var decoded struct {
+		References struct {
+			Semantic []struct {
+				TargetAnchor string `json:"target_anchor"`
+			} `json:"semantic"`
+		} `json:"references"`
+	}
+	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
+		t.Fatalf("output is not valid JSON: %v (%s)", err, output)
+	}
+	if len(decoded.References.Semantic) != 2 {
+		t.Fatalf("semantic = %+v, want 2 entries", decoded.References.Semantic)
+	}
+	if decoded.References.Semantic[0].TargetAnchor != "retry-policy" {
+		t.Errorf("semantic[0].target_anchor = %q, want %q", decoded.References.Semantic[0].TargetAnchor, "retry-policy")
+	}
+	if decoded.References.Semantic[1].TargetAnchor != "" {
+		t.Errorf("semantic[1].target_anchor = %q, want \"\" for a plain wikilink", decoded.References.Semantic[1].TargetAnchor)
+	}
+}
