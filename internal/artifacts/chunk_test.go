@@ -76,6 +76,42 @@ func TestChunks_PreservesWikilinkSyntaxVerbatim(t *testing.T) {
 	}
 }
 
+// TestChunks_AnchorPropagatesFromSection proves spec 040 data-model.md
+// "Chunk (extended)": a Section's own Anchor is copied verbatim into
+// its Chunk.
+func TestChunks_AnchorPropagatesFromSection(t *testing.T) {
+	body := "## Retry Policy {#retry-policy}\nBackoff details.\n"
+	doc := artifacts.ParseDocument([]byte(body))
+
+	chunks := artifacts.Chunks("ai/x/spec.md", doc)
+
+	if len(chunks) != 1 {
+		t.Fatalf("len(chunks) = %d, want 1", len(chunks))
+	}
+	if chunks[0].Anchor != "retry-policy" {
+		t.Errorf("chunks[0].Anchor = %q, want %q", chunks[0].Anchor, "retry-policy")
+	}
+}
+
+// TestChunks_EmptyBodySectionWithAnchorStillProducesNoChunk pins down
+// spec 040 data-model.md's explicit note: Chunks() still skips a
+// Section whose Body is empty, even when that Section declares an
+// Anchor — chunkArtifactAnchor (internal/context/collector.go), not
+// Chunks(), is responsible for resolving such an anchor.
+func TestChunks_EmptyBodySectionWithAnchorStillProducesNoChunk(t *testing.T) {
+	body := "## Networking Policies {#networking}\n### Client Retry Policy {#retry-policy}\nBackoff details.\n"
+	doc := artifacts.ParseDocument([]byte(body))
+
+	chunks := artifacts.Chunks("ai/x/spec.md", doc)
+
+	if len(chunks) != 1 {
+		t.Fatalf("len(chunks) = %d, want 1 (Networking Policies' own empty section produces none): %+v", len(chunks), chunks)
+	}
+	if chunks[0].Anchor != "retry-policy" {
+		t.Errorf("chunks[0].Anchor = %q, want %q", chunks[0].Anchor, "retry-policy")
+	}
+}
+
 func TestChunks_Deterministic(t *testing.T) {
 	body := "## A\ntext a\n## B\ntext b\n"
 	doc := artifacts.ParseDocument([]byte(body))

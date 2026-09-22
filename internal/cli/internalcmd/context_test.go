@@ -65,6 +65,8 @@ type contextItemJSON struct {
 	Fingerprint     *string                     `json:"fingerprint"`
 	ScoreComponents *contextScoreComponentsJSON `json:"score_components"`
 	Provenance      *[]contextProvenanceJSON    `json:"provenance"`
+	HeadingPath     *[]string                   `json:"heading_path"`
+	Anchor          *string                     `json:"anchor"`
 }
 
 type contextDiagnosticsJSON struct {
@@ -749,8 +751,8 @@ func TestContextCmd_SchemaVersionPresentInEveryMode(t *testing.T) {
 			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
 		}
 		decoded := decodeContextOutput(t, output)
-		if decoded.Context.SchemaVersion != 4 {
-			t.Errorf("--mode %s: schema_version = %d, want 4 (038-wikilink-chunk-provenance)", mode, decoded.Context.SchemaVersion)
+		if decoded.Context.SchemaVersion != 5 {
+			t.Errorf("--mode %s: schema_version = %d, want 5 (040-stable-section-anchors)", mode, decoded.Context.SchemaVersion)
 		}
 	}
 }
@@ -828,8 +830,8 @@ func TestContextCmd_ProvenanceOmittedByDefaultPresentWhenRequested(t *testing.T)
 		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, outDefault)
 	}
 	decodedDefault := decodeContextOutput(t, outDefault)
-	if decodedDefault.Context.SchemaVersion != 4 {
-		t.Errorf("schema_version = %d, want 4 (038-wikilink-chunk-provenance)", decodedDefault.Context.SchemaVersion)
+	if decodedDefault.Context.SchemaVersion != 5 {
+		t.Errorf("schema_version = %d, want 5 (040-stable-section-anchors)", decodedDefault.Context.SchemaVersion)
 	}
 	for _, item := range decodedDefault.Context.Items {
 		if item.Provenance != nil {
@@ -847,8 +849,8 @@ func TestContextCmd_ProvenanceOmittedByDefaultPresentWhenRequested(t *testing.T)
 		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode2, outProv)
 	}
 	decodedProv := decodeContextOutput(t, outProv)
-	if decodedProv.Context.SchemaVersion != 4 {
-		t.Errorf("--provenance: schema_version = %d, want 4", decodedProv.Context.SchemaVersion)
+	if decodedProv.Context.SchemaVersion != 5 {
+		t.Errorf("--provenance: schema_version = %d, want 5", decodedProv.Context.SchemaVersion)
 	}
 
 	var sawWikilinkItem bool
@@ -1221,5 +1223,117 @@ func TestContextCmd_PayloadTokensAtLeastTokensSelectedAndTokensSelectedUnchanged
 	}
 	if pkg.Context.Diagnostics.PayloadTokens < pkg.Context.Diagnostics.TokensSelected {
 		t.Errorf("package payload_tokens = %d, want >= tokens_selected %d", pkg.Context.Diagnostics.PayloadTokens, pkg.Context.Diagnostics.TokensSelected)
+	}
+}
+
+// TestContextCmd_AnchorQualifiedItemCarriesHeadingPathAndAnchor proves
+// spec 040 contracts §6: an item produced via an anchor-qualified
+// reference gains heading_path/anchor; an item reached without an
+// anchor omits both keys entirely (absent, not empty-valued — 038's
+// own "no provenance field at all" convention, applied here too).
+func TestContextCmd_AnchorQualifiedItemCarriesHeadingPathAndAnchor(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Networking Policies\n\nGeneral networking notes.\n\n"+
+			"### Client Retry Policy {#retry-policy}\n\nBackoff details.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003#retry-policy]].\n")
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"KNOW-001", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+	if decoded.Context.SchemaVersion != 5 {
+		t.Errorf("schema_version = %d, want 5", decoded.Context.SchemaVersion)
+	}
+
+	var sawAnchored bool
+	for _, item := range decoded.Context.Items {
+		if item.Path != "ai/knowledge/KNOW-003-x.md" {
+			if item.HeadingPath != nil || item.Anchor != nil {
+				t.Errorf("item %+v has heading_path/anchor but came from no anchor-qualified reference, want both absent", item)
+			}
+			continue
+		}
+		sawAnchored = true
+		if item.HeadingPath == nil || len(*item.HeadingPath) != 1 || (*item.HeadingPath)[0] != "Networking Policies" {
+			t.Errorf("item %+v: heading_path = %+v, want [\"Networking Policies\"]", item, item.HeadingPath)
+		}
+		if item.Anchor == nil || *item.Anchor != "retry-policy" {
+			t.Errorf("item %+v: anchor = %+v, want %q", item, item.Anchor, "retry-policy")
+		}
+	}
+	if !sawAnchored {
+		t.Fatalf("no item found for KNOW-003; items = %+v", decoded.Context.Items)
+	}
+}
+
+// TestContextCmd_TopLevelAnchorWithNoAncestorsStillCarriesAnchor proves
+// a real bug found via manual end-to-end walkthrough (quickstart.md
+// §1's own example): an anchor declared on a top-level heading with no
+// ancestor Sections still gets heading_path (empty, but present as
+// "[]", never absent) and anchor — gating on HeadingPath's *length*
+// instead of its nil-ness previously dropped both keys entirely for
+// exactly this case, since an empty-but-real HeadingPath and "not
+// anchor-derived at all" were indistinguishable by length alone.
+func TestContextCmd_TopLevelAnchorWithNoAncestorsStillCarriesAnchor(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Client Retry Policy {#retry-policy}\n\nRetry with exponential backoff.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003#retry-policy]].\n")
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"KNOW-001", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+
+	var found bool
+	for _, item := range decoded.Context.Items {
+		if item.Path != "ai/knowledge/KNOW-003-x.md" {
+			continue
+		}
+		found = true
+		if item.HeadingPath == nil {
+			t.Errorf("item %+v: heading_path is absent, want present (empty array) for a top-level anchored Section", item)
+		} else if len(*item.HeadingPath) != 0 {
+			t.Errorf("item %+v: heading_path = %+v, want empty (no ancestors)", item, *item.HeadingPath)
+		}
+		if item.Anchor == nil || *item.Anchor != "retry-policy" {
+			t.Errorf("item %+v: anchor = %+v, want %q", item, item.Anchor, "retry-policy")
+		}
+	}
+	if !found {
+		t.Fatalf("no item found for KNOW-003; items = %+v", decoded.Context.Items)
+	}
+}
+
+// TestContextCmd_NonAnchorResponseHasNoHeadingPathOrAnchor proves spec
+// 040 FR-008: a response built entirely from non-anchor references
+// never carries heading_path/anchor on any item.
+func TestContextCmd_NonAnchorResponseHasNoHeadingPathOrAnchor(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+	decoded := decodeContextOutput(t, output)
+
+	for _, item := range decoded.Context.Items {
+		if item.HeadingPath != nil || item.Anchor != nil {
+			t.Errorf("item %+v has heading_path/anchor with no anchor-qualified reference involved, want both absent", item)
+		}
 	}
 }

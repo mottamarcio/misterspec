@@ -39,6 +39,12 @@ type ReferenceEntry struct {
 	// has no line-level wikilink origin (spec FR-009).
 	SourceSection string
 	SourceLine    int
+	// TargetAnchor is the anchor named by the underlying wikilink, if
+	// any (040-stable-section-anchors data-model.md "ReferenceEntry /
+	// BacklinkEntry (extended)") — populated only when Relation ==
+	// "wikilink" and the originating WikiLink.Anchor is non-empty; ""
+	// for a formal entry or a non-anchor semantic entry.
+	TargetAnchor string
 }
 
 // ReferencesResult groups a queried artifact's outgoing relationships,
@@ -93,6 +99,7 @@ func References(root string, cfg project.Configuration, rawID string) (Reference
 			SourcePath:    result.Location.Path,
 			SourceSection: occ.SourceSection,
 			SourceLine:    occ.SourceLine,
+			TargetAnchor:  link.Anchor,
 		})
 	}
 

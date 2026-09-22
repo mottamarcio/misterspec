@@ -297,32 +297,33 @@ func indexLinks(tx *sql.Tx, root string, cfg project.Configuration, artifactID s
 		return fmt.Errorf("index: computing references for %s: %w", artifactID, err)
 	}
 	for _, r := range refs.Formal {
-		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine); err != nil {
+		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine, r.TargetAnchor); err != nil {
 			return err
 		}
 	}
 	for _, r := range refs.Semantic {
-		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine); err != nil {
+		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine, r.TargetAnchor); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// insertLink inserts one links row. sourceSection/sourceLine are
-// stored NULL for a formal relation (038-wikilink-chunk-provenance
-// data-model.md "the two new columns are the only nullable ones,
-// reflecting that a formal relationship legitimately has no
-// line-level origin") — an empty sourceSection/zero sourceLine (as
-// ReferenceEntry/BacklinkEntry already report for a formal entry)
-// becomes SQL NULL via sql.NullString/sql.NullInt64's own IsZero-style
-// Valid flag.
-func insertLink(tx *sql.Tx, relation, source, target, sourceSection string, sourceLine int) error {
+// insertLink inserts one links row. sourceSection/sourceLine/
+// targetAnchor are stored NULL for a formal relation, or for a
+// semantic one with no anchor (038-wikilink-chunk-provenance data-
+// model.md; 040-stable-section-anchors data-model.md "Index Schema
+// (extended)") — an empty sourceSection/zero sourceLine/empty
+// targetAnchor (as ReferenceEntry/BacklinkEntry already report) becomes
+// SQL NULL via sql.NullString/sql.NullInt64's own IsZero-style Valid
+// flag.
+func insertLink(tx *sql.Tx, relation, source, target, sourceSection string, sourceLine int, targetAnchor string) error {
 	section := sql.NullString{String: sourceSection, Valid: sourceSection != ""}
 	line := sql.NullInt64{Int64: int64(sourceLine), Valid: sourceLine != 0}
+	anchor := sql.NullString{String: targetAnchor, Valid: targetAnchor != ""}
 	if _, err := tx.Exec(
-		`INSERT INTO links (source_artifact_id, target_artifact_id, relation, source_section, source_line) VALUES (?, ?, ?, ?, ?)`,
-		source, target, relation, section, line,
+		`INSERT INTO links (source_artifact_id, target_artifact_id, relation, source_section, source_line, target_anchor) VALUES (?, ?, ?, ?, ?, ?)`,
+		source, target, relation, section, line, anchor,
 	); err != nil {
 		return fmt.Errorf("index: inserting link row: %w", err)
 	}
@@ -333,9 +334,10 @@ func insertLink(tx *sql.Tx, relation, source, target, sourceSection string, sour
 // chunks_fts row (research.md #8 — explicit Go-driven synchronization,
 // no SQL triggers).
 func insertChunk(tx *sql.Tx, documentID int64, c artifacts.Chunk) error {
+	anchor := sql.NullString{String: c.Anchor, Valid: c.Anchor != ""}
 	res, err := tx.Exec(
-		`INSERT INTO chunks (document_id, heading, content, start_line, end_line, token_estimate) VALUES (?, ?, ?, ?, ?, ?)`,
-		documentID, c.Heading, c.Content, c.StartLine, c.EndLine, artifacts.EstimateTokens(c.Content),
+		`INSERT INTO chunks (document_id, heading, anchor, content, start_line, end_line, token_estimate) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		documentID, c.Heading, anchor, c.Content, c.StartLine, c.EndLine, artifacts.EstimateTokens(c.Content),
 	)
 	if err != nil {
 		return fmt.Errorf("index: inserting chunk row: %w", err)

@@ -136,6 +136,71 @@ func TestEnsureSchema_RecreatesFromPreProvenanceSchemaVersion1(t *testing.T) {
 	}
 }
 
+// TestEnsureSchema_ChunksAndLinksHaveAnchorColumns proves spec 040
+// data-model.md "Index Schema (extended)": chunks.anchor and
+// links.target_anchor exist and accept both a real value and NULL.
+func TestEnsureSchema_ChunksAndLinksHaveAnchorColumns(t *testing.T) {
+	db := openRawDB(t)
+
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("ensureSchema() unexpected error: %v", err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO documents (path, artifact_type, fingerprint, indexed_at) VALUES ('x', 'knowledge', 'sha256:x', 0)`); err != nil {
+		t.Fatalf("seeding a document row: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO chunks (document_id, heading, anchor, content, start_line, end_line, token_estimate) VALUES (1, 'Retry Policy', 'retry-policy', 'body', 1, 2, 3)`); err != nil {
+		t.Fatalf("chunks table does not accept an anchor value: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO chunks (document_id, heading, anchor, content, start_line, end_line, token_estimate) VALUES (1, 'No Anchor', NULL, 'body', 4, 5, 3)`); err != nil {
+		t.Errorf("chunks table does not accept NULL anchor: %v", err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO links (source_artifact_id, target_artifact_id, relation, target_anchor) VALUES ('SPEC-001', 'KNOW-003', 'wikilink', 'retry-policy')`); err != nil {
+		t.Fatalf("links table does not accept a target_anchor value: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO links (source_artifact_id, target_artifact_id, relation, target_anchor) VALUES ('SPEC-001', 'FEAT-001', 'parent', NULL)`); err != nil {
+		t.Errorf("links table does not accept NULL target_anchor: %v", err)
+	}
+}
+
+// TestEnsureSchema_RecreatesFromPreAnchorSchemaVersion2 proves spec 040
+// research.md #5: a database built under schemaVersion 2 (038's own
+// shape, no anchor columns) is detected as stale and transparently
+// rebuilt under schemaVersion 3 — no manual migration.
+func TestEnsureSchema_RecreatesFromPreAnchorSchemaVersion2(t *testing.T) {
+	db := openRawDB(t)
+
+	if _, err := db.Exec(`CREATE TABLE links (
+		id                 INTEGER PRIMARY KEY,
+		source_artifact_id TEXT NOT NULL,
+		target_artifact_id TEXT NOT NULL,
+		relation           TEXT NOT NULL,
+		source_section     TEXT,
+		source_line        INTEGER
+	)`); err != nil {
+		t.Fatalf("seeding pre-anchor links table: %v", err)
+	}
+	if _, err := db.Exec("PRAGMA user_version = 2"); err != nil {
+		t.Fatalf("seeding stale user_version: %v", err)
+	}
+
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("ensureSchema() unexpected error: %v", err)
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO links (source_artifact_id, target_artifact_id, relation, target_anchor) VALUES ('SPEC-001', 'KNOW-003', 'wikilink', 'retry-policy')`,
+	); err != nil {
+		t.Errorf("schema was not transparently rebuilt from version 2: %v", err)
+	}
+	var version int
+	db.QueryRow("PRAGMA user_version").Scan(&version)
+	if version != schemaVersion {
+		t.Errorf("user_version after rebuild = %d, want %d", version, schemaVersion)
+	}
+}
+
 func TestEnsureSchema_IdempotentWhenVersionMatches(t *testing.T) {
 	db := openRawDB(t)
 

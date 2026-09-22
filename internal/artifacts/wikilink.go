@@ -7,11 +7,19 @@ import "strings"
 // (docs/context-engine-implementation.md §6.2), written as
 // "[[TARGET]]" or "[[TARGET|Alias]]".
 type WikiLink struct {
-	// Target is the raw token written between the brackets (before any
-	// "|Alias"), exactly as written — not yet validated as a real
-	// entity ID; see internal/validation for that separate step
-	// (FR-004).
+	// Target is the raw entity-ID token, exactly as written — not yet
+	// validated as a real entity ID; see internal/validation for that
+	// separate step (FR-004). Never includes an "#anchor" suffix (see
+	// Anchor) or "|Alias" text.
 	Target string
+	// Anchor is the "#anchor" token written between Target and any
+	// "|Alias" (040-stable-section-anchors research.md #2), e.g.
+	// "[[KNOW-003#retry-policy]]" or "[[KNOW-003#retry-policy|Alias]]".
+	// Empty when absent — the overwhelming majority of wikilinks,
+	// including every one written before this feature existed (spec
+	// FR-008). Raw, unvalidated text — internal/validation checks its
+	// existence separately (data-model.md "WikiLink (extended)").
+	Anchor string
 	// Alias is the display alias, if written; empty otherwise.
 	// Presentation-only — never affects resolution (§6.1).
 	Alias string
@@ -129,8 +137,9 @@ func extractLineLinks(line string) []WikiLink {
 			continue
 		}
 
-		target, alias := splitTargetAlias(line[i+2 : closeIdx])
-		links = append(links, WikiLink{Target: target, Alias: alias})
+		targetAndAnchor, alias := splitTargetAlias(line[i+2 : closeIdx])
+		target, anchor := splitTargetAnchor(targetAndAnchor)
+		links = append(links, WikiLink{Target: target, Anchor: anchor, Alias: alias})
 		i = closeIdx + 2
 	}
 	return links
@@ -143,6 +152,17 @@ func splitTargetAlias(inner string) (target, alias string) {
 		return inner[:idx], inner[idx+1:]
 	}
 	return inner, ""
+}
+
+// splitTargetAnchor splits the pre-alias portion of a wikilink's inner
+// content on its first "#", if any (040-stable-section-anchors
+// research.md #2) — always applied after splitTargetAlias, so an
+// alias's own text is never mistakenly scanned for "#".
+func splitTargetAnchor(targetAndAnchor string) (target, anchor string) {
+	if idx := strings.Index(targetAndAnchor, "#"); idx >= 0 {
+		return targetAndAnchor[:idx], targetAndAnchor[idx+1:]
+	}
+	return targetAndAnchor, ""
 }
 
 // maskInlineCodeSpans returns a same-length boolean slice marking every

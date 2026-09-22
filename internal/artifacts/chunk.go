@@ -10,9 +10,11 @@ type Chunk struct {
 	// Path is the artifact's own path, exactly as the caller supplied
 	// it to Chunks — never resolved, validated, or re-read.
 	Path string
-	// Heading, Level, StartLine, EndLine are copied from the
-	// originating Section.
+	// Heading, Anchor, Level, StartLine, EndLine are copied from the
+	// originating Section. Anchor is "" when the Section declared none
+	// (040-stable-section-anchors data-model.md "Chunk (extended)").
 	Heading   string
+	Anchor    string
 	Level     int
 	StartLine int
 	EndLine   int
@@ -35,6 +37,7 @@ func Chunks(path string, doc Document) []Chunk {
 		chunks = append(chunks, Chunk{
 			Path:      path,
 			Heading:   s.Heading,
+			Anchor:    s.Anchor,
 			Level:     s.Level,
 			StartLine: s.StartLine,
 			EndLine:   s.EndLine,

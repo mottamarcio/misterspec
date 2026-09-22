@@ -12,7 +12,9 @@ import (
 // 0) always means "recreate from scratch," never "migrate in place."
 // Bumped to 2 by 038-wikilink-chunk-provenance: links gains
 // source_section/source_line (data-model.md "links table (widened)").
-const schemaVersion = 2
+// Bumped to 3 by 040-stable-section-anchors: chunks gains anchor,
+// links gains target_anchor (data-model.md "Index Schema (extended)").
+const schemaVersion = 3
 
 // schemaStatements creates this package's own schema (data-model.md) —
 // one statement per Exec call, rather than relying on a driver's
@@ -31,6 +33,7 @@ var schemaStatements = []string{
 		id             INTEGER PRIMARY KEY,
 		document_id    INTEGER NOT NULL REFERENCES documents(id),
 		heading        TEXT,
+		anchor         TEXT,
 		content        TEXT NOT NULL,
 		start_line     INTEGER NOT NULL,
 		end_line       INTEGER NOT NULL,
@@ -47,7 +50,8 @@ var schemaStatements = []string{
 		target_artifact_id TEXT NOT NULL,
 		relation           TEXT NOT NULL,
 		source_section     TEXT,
-		source_line        INTEGER
+		source_line        INTEGER,
+		target_anchor      TEXT
 	)`,
 }
 

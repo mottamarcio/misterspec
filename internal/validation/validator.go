@@ -331,6 +331,7 @@ func checkEntity(root string, cfg project.Configuration, t ids.EntityType, numbe
 	}
 
 	findings = append(findings, checkWikilinks(root, cfg, filePath)...)
+	findings = append(findings, checkAnchors(root, filePath)...)
 
 	return findings
 }

@@ -219,6 +219,14 @@ The MVP MUST support:
 [[SPEC-014|Refresh Token Rotation]]
 ```
 
+Also supported, since 040-stable-section-anchors — an optional explicit
+anchor qualifying the target down to one specific Section:
+
+```text
+[[KNOW-003#retry-policy]]
+[[KNOW-003#retry-policy|Política de retries]]
+```
+
 The target MUST be a MisterSpec entity ID.
 
 The alias is presentation-only.
@@ -282,7 +290,16 @@ Validation should be able to report conditions such as:
 broken_wikilink
 ambiguous_wikilink
 invalid_wikilink
+unknown_anchor
+duplicate_anchor
 ```
+
+`unknown_anchor` (040-stable-section-anchors) marks an anchor-qualified
+link whose target artifact exists but declares no Section with that
+anchor — kept distinct from `broken_wikilink`, which means the target
+artifact itself doesn't exist. `duplicate_anchor` marks two Sections in
+the same artifact declaring the same explicit anchor, independent of
+whether anything references it.
 
 A link such as:
 
@@ -317,6 +334,21 @@ elsewhere, gated behind the evaluation harness's own evidence-based
 promotion process (see §30 Phase 9's own note on this) before it can
 ever become default ordering. See `specs/038-wikilink-chunk-
 provenance/` for the full contract.
+
+### 6.7 Stable section anchors (040-stable-section-anchors)
+
+A heading MAY declare an explicit, stable anchor as a trailing
+`{#slug}` suffix — e.g. `## Retry Policy {#retry-policy}` — independent
+of the heading's own title text, so a later title rewrite never breaks
+a reference to it. §6.1's `[[ID#anchor]]`/`[[ID#anchor|Alias]]` syntax
+addresses that Section specifically: retrieval (`internal context`)
+returns exactly that Section's own content plus a `heading_path`
+breadcrumb (its ancestor headings' titles, outermost first) — never the
+whole target artifact, and never an embed/transclusion of the
+referenced content into the referencing artifact. Every existing
+non-anchor wikilink, heading, and Chunk is completely unaffected — the
+anchor-aware code paths only ever activate when an anchor is actually
+present. See `specs/040-stable-section-anchors/` for the full contract.
 
 ---
 

@@ -708,6 +708,194 @@ func TestCollect_TwoReferencePathsToSameChunkDeduplicateWithOccurrenceDataIntact
 	}
 }
 
+// --- Spec 040: stable section anchors ---
+
+// TestCollect_AnchorQualifiedReferenceReturnsOnlyThatSection proves spec
+// 040 FR-006/data-model.md "Candidate / Reason (extended)": a wikilink
+// referencing a specific anchor produces exactly one Candidate for that
+// Section — not one Candidate per Chunk of the whole target artifact,
+// which multiple, unrelated sections here would otherwise contribute.
+func TestCollect_AnchorQualifiedReferenceReturnsOnlyThatSection(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Networking Policies\n\nGeneral networking notes.\n\n"+
+			"### Client Retry Policy {#retry-policy}\n\nBackoff details.\n\n"+
+			"## Unrelated Section\n\nSomething else entirely.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003#retry-policy]].\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	var matches int
+	var found Candidate
+	for _, c := range set.Candidates {
+		if c.Path == "ai/knowledge/KNOW-003-x.md" {
+			matches++
+			found = c
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("KNOW-003 contributed %d candidates, want exactly 1 (the anchored section alone): %+v", matches, set.Candidates)
+	}
+	if found.Heading != "Client Retry Policy" {
+		t.Errorf("Heading = %q, want %q", found.Heading, "Client Retry Policy")
+	}
+	if len(found.HeadingPath) != 1 || found.HeadingPath[0] != "Networking Policies" {
+		t.Errorf("HeadingPath = %+v, want [\"Networking Policies\"]", found.HeadingPath)
+	}
+}
+
+// TestCollect_UnknownAnchorReferenceIsOmittedNotFabricated proves the
+// code-review finding on chunkArtifactAnchor: operations.References
+// populates ReferenceEntry.TargetAnchor straight from the wikilink's
+// raw text with no existence check (internal/validation's own separate
+// job, CodeUnknownAnchor) — so a reference to an anchor that doesn't
+// actually exist on the target IS reachable in normal Collect use.
+// Collect must silently omit that reference, never include a
+// contentless placeholder Candidate for it (which would previously
+// have appeared with a nonzero score and no content, polluting the
+// Context Pack) and never fail the whole request over it.
+func TestCollect_UnknownAnchorReferenceIsOmittedNotFabricated(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Networking Policies\n\nGeneral networking notes.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003#nonexistent]].\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	for _, c := range set.Candidates {
+		if c.Path == "ai/knowledge/KNOW-003-x.md" {
+			t.Fatalf("expected no candidate for KNOW-003 (its only reference names a nonexistent anchor), got %+v", c)
+		}
+	}
+}
+
+// TestCollect_NonAnchorReferenceStillReturnsEveryChunk proves spec 040
+// FR-008: a plain (non-anchor) wikilink to a multi-section target is
+// completely unaffected — every Chunk of the target still becomes its
+// own Candidate, exactly as before this feature, with no HeadingPath.
+func TestCollect_NonAnchorReferenceStillReturnsEveryChunk(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Networking Policies\n\nGeneral networking notes.\n\n"+
+			"### Client Retry Policy {#retry-policy}\n\nBackoff details.\n\n"+
+			"## Unrelated Section\n\nSomething else entirely.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003]].\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	var matches int
+	for _, c := range set.Candidates {
+		if c.Path == "ai/knowledge/KNOW-003-x.md" {
+			matches++
+			if len(c.HeadingPath) != 0 {
+				t.Errorf("candidate %+v: HeadingPath = %+v, want empty for a non-anchor reference", c, c.HeadingPath)
+			}
+		}
+	}
+	if matches != 3 {
+		t.Fatalf("KNOW-003 contributed %d candidates, want exactly 3 (every one of its own Chunks, unaffected by this feature): %+v", matches, set.Candidates)
+	}
+}
+
+// TestCollect_AnchorOnEmptyBodySectionStillResolves proves spec 040's
+// Edge Cases / data-model.md "Chunk (extended)" note: an anchor
+// declared on a heading immediately followed by a subheading (empty
+// own Body, so artifacts.Chunks() would produce no Chunk for it at
+// all) still resolves successfully to exactly one Candidate with empty
+// Content — never treated as not-found.
+func TestCollect_AnchorOnEmptyBodySectionStillResolves(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Networking Policies {#networking}\n"+
+			"### Client Retry Policy {#retry-policy}\n\nBackoff details.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003#networking]].\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	var matches int
+	var found Candidate
+	for _, c := range set.Candidates {
+		if c.Path == "ai/knowledge/KNOW-003-x.md" {
+			matches++
+			found = c
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("KNOW-003 contributed %d candidates, want exactly 1 (the empty-body anchored section): %+v", matches, set.Candidates)
+	}
+	if found.Heading != "Networking Policies" {
+		t.Errorf("Heading = %q, want %q", found.Heading, "Networking Policies")
+	}
+	if found.Content != "" {
+		t.Errorf("Content = %q, want empty for an anchor on a Section whose own Body is empty", found.Content)
+	}
+}
+
+// TestCollect_AnchorSurvivesHeadingTitleRename proves spec 040 User
+// Story 2, Acceptance Scenario 1: renaming a Section's own heading
+// title text, while keeping its declared "{#anchor}" unchanged, leaves
+// an existing anchor-qualified reference resolving correctly — no
+// wikilink edit required.
+func TestCollect_AnchorSurvivesHeadingTitleRename(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Backoff and Retry Policy for Clients {#retry-policy}\n\nBackoff details.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003#retry-policy]].\n")
+	store := openSyncedStore(t, root, cfg)
+
+	set, err := Collect(root, cfg, store, Request{Target: "KNOW-001"})
+	if err != nil {
+		t.Fatalf("Collect() unexpected error: %v", err)
+	}
+
+	var found bool
+	for _, c := range set.Candidates {
+		if c.Path == "ai/knowledge/KNOW-003-x.md" {
+			found = true
+			if c.Heading != "Backoff and Retry Policy for Clients" {
+				t.Errorf("Heading = %q, want the renamed title", c.Heading)
+			}
+			if c.Content != "\nBackoff details." {
+				t.Errorf("Content = %q, want %q", c.Content, "\nBackoff details.")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no candidate found for KNOW-003 after renaming its title but keeping its anchor; set = %+v", set.Candidates)
+	}
+}
+
 func TestCollect_UnrecognizedIntentIsRejected(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()

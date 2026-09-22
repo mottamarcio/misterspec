@@ -249,6 +249,31 @@ func TestReferences_FormalEntryHasSourcePathButNoSection(t *testing.T) {
 	}
 }
 
+// TestReferences_AnchorQualifiedWikilinkHasTargetAnchor proves spec 040
+// data-model.md "ReferenceEntry / BacklinkEntry (extended)": an
+// anchor-qualified wikilink's ReferenceEntry carries TargetAnchor; a
+// plain wikilink in the same artifact stays "" (spec FR-008).
+func TestReferences_AnchorQualifiedWikilinkHasTargetAnchor(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupReferencesProgram(t, root)
+	writeReferencesSubject(t, root, "", "See [[SPEC-002#retry-policy]] and also [[SPEC-002]].\n")
+
+	result, err := operations.References(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("References() unexpected error: %v", err)
+	}
+	if len(result.Semantic) != 2 {
+		t.Fatalf("Semantic = %+v, want 2 entries", result.Semantic)
+	}
+	if result.Semantic[0].TargetAnchor != "retry-policy" {
+		t.Errorf("Semantic[0].TargetAnchor = %q, want %q", result.Semantic[0].TargetAnchor, "retry-policy")
+	}
+	if result.Semantic[1].TargetAnchor != "" {
+		t.Errorf("Semantic[1].TargetAnchor = %q, want \"\" for a plain wikilink", result.Semantic[1].TargetAnchor)
+	}
+}
+
 func TestReferences_TwoOccurrencesFromDifferentSectionsStayDistinct(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()
