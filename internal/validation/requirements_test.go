@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mottamarcio/misterspec/internal/ids"
@@ -158,5 +159,50 @@ func TestParseTaskCoverage_NoServesLine(t *testing.T) {
 	got := ParseTaskCoverage(taskID(1), body, cfg)
 	if len(got.References) != 0 {
 		t.Errorf("References = %+v, want none", got.References)
+	}
+}
+
+// TestRequirementSections_MatchesParseSpecRequirementsNumbers is
+// 042-impact-analysis-review T004 (Foundational): RequirementSections
+// finds exactly the same numbers parseSpecRequirements already finds
+// for the same body (contracts §2's regression case) — and returns
+// each one's own Section, with the expected Heading/Body content.
+func TestRequirementSections_MatchesParseSpecRequirementsNumbers(t *testing.T) {
+	body := []byte("### R1 — First\n\nBody of R1.\n\n### R2 — Second\n\nBody of R2.\n")
+
+	want := parseSpecRequirements(specID(1), body)
+	got := RequirementSections(specID(1), body)
+
+	if len(got) != len(want.Numbers) {
+		t.Fatalf("RequirementSections() returned %d entries, want %d (matching parseSpecRequirements)", len(got), len(want.Numbers))
+	}
+	for _, n := range want.Numbers {
+		section, ok := got[n]
+		if !ok {
+			t.Fatalf("RequirementSections()[%d] missing, want present", n)
+		}
+		if section.Heading == "" {
+			t.Errorf("RequirementSections()[%d].Heading is empty, want the R%d heading text", n, n)
+		}
+	}
+	if !strings.Contains(got[1].Body, "Body of R1.") {
+		t.Errorf("RequirementSections()[1].Body = %q, want it to contain %q", got[1].Body, "Body of R1.")
+	}
+	if !strings.Contains(got[2].Body, "Body of R2.") {
+		t.Errorf("RequirementSections()[2].Body = %q, want it to contain %q", got[2].Body, "Body of R2.")
+	}
+}
+
+// TestRequirementSections_IgnoresNonRequirementHeadings mirrors
+// TestParseSpecRequirements_NonRequirementHeadingIgnored for the new
+// export.
+func TestRequirementSections_IgnoresNonRequirementHeadings(t *testing.T) {
+	body := []byte("### Retry policy\n\n### R1 — Real requirement\n\n### Rationale\n")
+	got := RequirementSections(specID(1), body)
+	if len(got) != 1 {
+		t.Fatalf("RequirementSections() = %d entries, want 1", len(got))
+	}
+	if _, ok := got[1]; !ok {
+		t.Fatalf("RequirementSections() missing entry for R1")
 	}
 }

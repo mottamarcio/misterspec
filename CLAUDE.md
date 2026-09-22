@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/041-task-evidence-fingerprint/plan.md
+specs/042-impact-analysis-review/plan.md
 <!-- SPECKIT END -->

@@ -66,6 +66,37 @@ func parseSpecRequirements(spec ids.EntityID, body []byte) SpecRequirements {
 	return SpecRequirements{Spec: spec, Numbers: numbers, Duplicates: duplicates}
 }
 
+// RequirementSections scans body (a Spec's own spec.md body) the same
+// way parseSpecRequirements already does, additionally returning each
+// found "R<N>" heading's own Section — a new, additive sibling
+// (042-impact-analysis-review contracts §2, research.md #3);
+// parseSpecRequirements itself is unchanged. A duplicate "R<N>"
+// heading keeps only its first occurrence, matching
+// parseSpecRequirements's own Numbers (its later occurrence is instead
+// reported via Duplicates, which this function does not surface — a
+// caller needing that keeps using parseSpecRequirements/
+// specCoverageFindings directly).
+func RequirementSections(spec ids.EntityID, body []byte) map[int]artifacts.Section {
+	doc := artifacts.ParseDocument(body)
+
+	sections := make(map[int]artifacts.Section)
+	for _, section := range doc.Sections {
+		sub := requirementHeadingPattern.FindStringSubmatch(section.Heading)
+		if sub == nil {
+			continue
+		}
+		n, err := strconv.Atoi(sub[1])
+		if err != nil {
+			continue
+		}
+		if _, exists := sections[n]; exists {
+			continue
+		}
+		sections[n] = section
+	}
+	return sections
+}
+
 // RequirementRef is a resolved reference to one Requirement, as named by
 // a Task's own "Serves:" line (032/data-model.md "RequirementRef").
 type RequirementRef struct {
