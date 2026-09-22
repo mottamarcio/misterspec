@@ -40,6 +40,27 @@ type SyncReport struct {
 	Errors  []SyncError
 }
 
+// StoredPackItem is one persisted item inside a StoredPack's own
+// item list (043-incremental-context-reuse data-model.md "StoredPack").
+type StoredPackItem struct {
+	Path        string
+	StartLine   int
+	EndLine     int
+	Fingerprint string
+	Content     string
+}
+
+// StoredPack is one packs table row (043-incremental-context-reuse
+// data-model.md "StoredPack") — the persisted, disposable record a
+// future --base lookup reads.
+type StoredPack struct {
+	PackID     string
+	ConfigHash string
+	Target     string
+	CreatedAt  int64
+	Items      []StoredPackItem
+}
+
 // Store is this package's own abstraction over its storage — no SQL
 // type crosses this interface (docs/context-engine-implementation.md
 // §10.4).
@@ -72,6 +93,23 @@ type Store interface {
 	// research.md #4).
 	Outgoing(id string) ([]Link, error)
 	Incoming(id string) ([]Link, error)
+
+	// SavePack upserts pack into the packs table, then evicts the
+	// oldest rows beyond a fixed cap (043-incremental-context-reuse
+	// research.md #3) — never fails the caller's own response if
+	// eviction itself has nothing to do (an empty/under-cap table).
+	SavePack(pack StoredPack) error
+
+	// LookupPack returns the stored pack for packID, and found ==
+	// false (never an error) when no such row exists — the same "bool
+	// separate from error" convention CommitsSinceFileAdded/HeadCommit
+	// already use elsewhere in this codebase, applied here for "no
+	// row" being a perfectly normal outcome (research.md #4), not a
+	// failure. The caller is responsible for comparing the returned
+	// pack's own ConfigHash against the current call's freshly
+	// computed ConfigHash before treating it as diffable — LookupPack
+	// itself does no validation, only retrieval.
+	LookupPack(packID string) (pack StoredPack, found bool, err error)
 
 	// Close releases the underlying database handle.
 	Close() error

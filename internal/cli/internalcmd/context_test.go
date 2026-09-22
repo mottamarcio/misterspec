@@ -94,6 +94,36 @@ type contextResultJSON struct {
 	Items           []contextItemJSON      `json:"items"`
 	Diagnostics     contextDiagnosticsJSON `json:"diagnostics"`
 	Rendered        *string                `json:"rendered"`
+	// 043-incremental-context-reuse additions.
+	PackID    *string           `json:"pack_id"`
+	Diff      *contextDiffJSON  `json:"diff"`
+	Recovered *bool             `json:"recovered"`
+	Reason    *string           `json:"reason"`
+	Reuse     *contextReuseJSON `json:"reuse"`
+}
+
+type contextDiffHopJSON struct {
+	Kind      string           `json:"kind"`
+	BaseIndex *int             `json:"base_index"`
+	Item      *contextItemJSON `json:"item"`
+}
+
+type contextRemovedJSON struct {
+	Path      string `json:"path"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+}
+
+type contextDiffJSON struct {
+	BasePackID string               `json:"base_pack_id"`
+	Entries    []contextDiffHopJSON `json:"entries"`
+	Removed    []contextRemovedJSON `json:"removed"`
+}
+
+type contextReuseJSON struct {
+	ItemsReused         int `json:"items_reused"`
+	ItemsSent           int `json:"items_sent"`
+	TokensSavedEstimate int `json:"tokens_saved_estimate"`
 }
 
 type contextExclusionJSON struct {
@@ -519,6 +549,159 @@ func TestContextCmd_UnrecognizedModeIsInvalidArgument(t *testing.T) {
 	assertErrorCode(t, output, "invalid_argument")
 }
 
+// TestContextCmd_BaseModifiedEntryPreservesHeadingPathAndAnchor is a
+// code review finding fix (043-incremental-context-reuse): a diff
+// entry's own "modified" item must carry heading_path/anchor exactly
+// like a direct --base-less call would, for an anchor-qualified item
+// (040-stable-section-anchors) — a --base diff must not lose
+// information relative to a direct call (spec FR-003).
+func TestContextCmd_BaseModifiedEntryPreservesHeadingPathAndAnchor(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Networking Policies\n\nGeneral networking notes.\n\n"+
+			"### Client Retry Policy {#retry-policy}\n\nBackoff details.\n")
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-001-x.md",
+		"---\nid: KNOW-001\ntype: knowledge\nstatus: active\n---\n## Summary\n\nSee [[KNOW-003#retry-policy]].\n")
+
+	first := internalcmd.NewContextCmd()
+	first.SetArgs([]string{"KNOW-001", "--mode", "package", "--dir", root})
+	firstOut, exitCode := runCmd(first)
+	if exitCode != 0 {
+		t.Fatalf("first call exitCode = %d, want 0 (output: %s)", exitCode, firstOut)
+	}
+	packID := *decodeContextOutput(t, firstOut).Context.PackID
+
+	testutil.WriteFile(t, root, "ai/knowledge/KNOW-003-x.md",
+		"---\nid: KNOW-003\ntype: knowledge\nstatus: active\n---\n"+
+			"## Networking Policies\n\nGeneral networking notes.\n\n"+
+			"### Client Retry Policy {#retry-policy}\n\nBackoff CHANGED.\n")
+
+	second := internalcmd.NewContextCmd()
+	second.SetArgs([]string{"KNOW-001", "--mode", "package", "--base", packID, "--dir", root})
+	secondOut, exitCode := runCmd(second)
+	if exitCode != 0 {
+		t.Fatalf("second call exitCode = %d, want 0 (output: %s)", exitCode, secondOut)
+	}
+
+	decoded := decodeContextOutput(t, secondOut)
+	if decoded.Context.Diff == nil {
+		t.Fatalf("context.diff is nil, want a diff after the anchored item's content changed (output: %s)", secondOut)
+	}
+
+	var sawModifiedAnchored bool
+	for _, e := range decoded.Context.Diff.Entries {
+		if e.Kind != "modified" || e.Item == nil || e.Item.Path != "ai/knowledge/KNOW-003-x.md" {
+			continue
+		}
+		sawModifiedAnchored = true
+		if e.Item.HeadingPath == nil || len(*e.Item.HeadingPath) != 1 || (*e.Item.HeadingPath)[0] != "Networking Policies" {
+			t.Errorf("modified entry's item.heading_path = %+v, want [\"Networking Policies\"]", e.Item.HeadingPath)
+		}
+		if e.Item.Anchor == nil || *e.Item.Anchor != "retry-policy" {
+			t.Errorf("modified entry's item.anchor = %+v, want %q", e.Item.Anchor, "retry-policy")
+		}
+	}
+	if !sawModifiedAnchored {
+		t.Fatalf("no modified entry found for KNOW-003; diff = %+v", decoded.Context.Diff)
+	}
+}
+
+// TestContextCmd_SavePackFailureDoesNotFailTheResponse is a code
+// review finding fix: the packs table is explicitly disposable
+// (spec FR-011) — a SavePack write failure (simulated here by
+// dropping the packs table out from under a live cache, so Sync's own
+// documents/chunks/links tables stay intact and succeed while the
+// packs INSERT hits "no such table") must never fail the whole
+// --mode package response; the core context pack it already computed
+// is still returned successfully, just without a usable pack_id for
+// this one call's own future reuse.
+func TestContextCmd_SavePackFailureDoesNotFailTheResponse(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	// First call creates the cache database with its full current
+	// schema (including packs).
+	first := internalcmd.NewContextCmd()
+	first.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	if _, exitCode := runCmd(first); exitCode != 0 {
+		t.Fatalf("first call exitCode = %d, want 0", exitCode)
+	}
+
+	cachePath := filepath.Join(root, ".misterspec", "cache", "context.db")
+	db, err := sql.Open("sqlite", cachePath)
+	if err != nil {
+		t.Fatalf("sql.Open() unexpected error: %v", err)
+	}
+	if _, err := db.Exec("DROP TABLE packs"); err != nil {
+		t.Fatalf("dropping packs table: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("closing db: %v", err)
+	}
+
+	second := internalcmd.NewContextCmd()
+	second.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	output, exitCode := runCmd(second)
+	if exitCode != 0 {
+		t.Fatalf("second call exitCode = %d, want 0 even though SavePack fails with no packs table (output: %s)", exitCode, output)
+	}
+
+	decoded := decodeContextOutput(t, output)
+	if !decoded.OK {
+		t.Fatalf("ok = false, want true (output: %s)", output)
+	}
+	if len(decoded.Context.Items) == 0 {
+		t.Errorf("items is empty, want the full package returned despite the SavePack failure")
+	}
+}
+
+// TestContextCmd_LookupPackFailureRecoversFullPackage is a code review
+// finding fix: a LookupPack error is "cannot be confirmed" (spec
+// FR-004), not a reason to fail the whole call — --base must still
+// fall back to a full, successful recovery response, the same as a
+// genuinely unknown pack_id, simulated here by dropping the packs
+// table before a --base call.
+func TestContextCmd_LookupPackFailureRecoversFullPackage(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	first := internalcmd.NewContextCmd()
+	first.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	firstOut, exitCode := runCmd(first)
+	if exitCode != 0 {
+		t.Fatalf("first call exitCode = %d, want 0", exitCode)
+	}
+	packID := *decodeContextOutput(t, firstOut).Context.PackID
+
+	cachePath := filepath.Join(root, ".misterspec", "cache", "context.db")
+	db, err := sql.Open("sqlite", cachePath)
+	if err != nil {
+		t.Fatalf("sql.Open() unexpected error: %v", err)
+	}
+	if _, err := db.Exec("DROP TABLE packs"); err != nil {
+		t.Fatalf("dropping packs table: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("closing db: %v", err)
+	}
+
+	second := internalcmd.NewContextCmd()
+	second.SetArgs([]string{"SPEC-014", "--mode", "package", "--base", packID, "--dir", root})
+	output, exitCode := runCmd(second)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 even though LookupPack fails with no packs table (output: %s)", exitCode, output)
+	}
+
+	decoded := decodeContextOutput(t, output)
+	if decoded.Context.Recovered == nil || !*decoded.Context.Recovered {
+		t.Fatalf("recovered = %v, want true when the base cannot be confirmed due to a lookup failure", decoded.Context.Recovered)
+	}
+	if len(decoded.Context.Items) == 0 {
+		t.Errorf("items is empty, want the full package on recovery")
+	}
+}
+
 // --- User Story 1: full content without a mandatory re-read ---
 
 func TestContextCmd_ModePackageIncludesMatchingContent(t *testing.T) {
@@ -751,8 +934,8 @@ func TestContextCmd_SchemaVersionPresentInEveryMode(t *testing.T) {
 			t.Fatalf("--mode %s: exitCode = %d, want 0 (output: %s)", mode, exitCode, output)
 		}
 		decoded := decodeContextOutput(t, output)
-		if decoded.Context.SchemaVersion != 5 {
-			t.Errorf("--mode %s: schema_version = %d, want 5 (040-stable-section-anchors)", mode, decoded.Context.SchemaVersion)
+		if decoded.Context.SchemaVersion != 6 {
+			t.Errorf("--mode %s: schema_version = %d, want 6 (043-incremental-context-reuse)", mode, decoded.Context.SchemaVersion)
 		}
 	}
 }
@@ -830,8 +1013,8 @@ func TestContextCmd_ProvenanceOmittedByDefaultPresentWhenRequested(t *testing.T)
 		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, outDefault)
 	}
 	decodedDefault := decodeContextOutput(t, outDefault)
-	if decodedDefault.Context.SchemaVersion != 5 {
-		t.Errorf("schema_version = %d, want 5 (040-stable-section-anchors)", decodedDefault.Context.SchemaVersion)
+	if decodedDefault.Context.SchemaVersion != 6 {
+		t.Errorf("schema_version = %d, want 6 (043-incremental-context-reuse)", decodedDefault.Context.SchemaVersion)
 	}
 	for _, item := range decodedDefault.Context.Items {
 		if item.Provenance != nil {
@@ -849,8 +1032,8 @@ func TestContextCmd_ProvenanceOmittedByDefaultPresentWhenRequested(t *testing.T)
 		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode2, outProv)
 	}
 	decodedProv := decodeContextOutput(t, outProv)
-	if decodedProv.Context.SchemaVersion != 5 {
-		t.Errorf("--provenance: schema_version = %d, want 5", decodedProv.Context.SchemaVersion)
+	if decodedProv.Context.SchemaVersion != 6 {
+		t.Errorf("--provenance: schema_version = %d, want 6", decodedProv.Context.SchemaVersion)
 	}
 
 	var sawWikilinkItem bool
@@ -1247,8 +1430,8 @@ func TestContextCmd_AnchorQualifiedItemCarriesHeadingPathAndAnchor(t *testing.T)
 		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
 	}
 	decoded := decodeContextOutput(t, output)
-	if decoded.Context.SchemaVersion != 5 {
-		t.Errorf("schema_version = %d, want 5", decoded.Context.SchemaVersion)
+	if decoded.Context.SchemaVersion != 6 {
+		t.Errorf("schema_version = %d, want 6", decoded.Context.SchemaVersion)
 	}
 
 	var sawAnchored bool
@@ -1335,5 +1518,171 @@ func TestContextCmd_NonAnchorResponseHasNoHeadingPathOrAnchor(t *testing.T) {
 		if item.HeadingPath != nil || item.Anchor != nil {
 			t.Errorf("item %+v has heading_path/anchor with no anchor-qualified reference involved, want both absent", item)
 		}
+	}
+}
+
+// --- 043-incremental-context-reuse: User Story 1 (--base diffing) ---
+
+func TestContextCmd_ModePackageAlwaysIncludesPackID(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	decoded := decodeContextOutput(t, output)
+	if decoded.Context.PackID == nil || *decoded.Context.PackID == "" {
+		t.Fatalf("context.pack_id is missing/empty, want a non-empty pack_id on every --mode package response")
+	}
+}
+
+func TestContextCmd_BaseWithNoChangeIsAllReuse(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	first := internalcmd.NewContextCmd()
+	first.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	firstOut, exitCode := runCmd(first)
+	if exitCode != 0 {
+		t.Fatalf("first call exitCode = %d, want 0 (output: %s)", exitCode, firstOut)
+	}
+	packID := *decodeContextOutput(t, firstOut).Context.PackID
+
+	second := internalcmd.NewContextCmd()
+	second.SetArgs([]string{"SPEC-014", "--mode", "package", "--base", packID, "--dir", root})
+	secondOut, exitCode := runCmd(second)
+	if exitCode != 0 {
+		t.Fatalf("second call exitCode = %d, want 0 (output: %s)", exitCode, secondOut)
+	}
+
+	decoded := decodeContextOutput(t, secondOut)
+	if decoded.Context.Diff == nil {
+		t.Fatalf("context.diff is nil, want a diff for a recognized --base with no source change (output: %s)", secondOut)
+	}
+	if decoded.Context.Diff.BasePackID != packID {
+		t.Errorf("diff.base_pack_id = %q, want %q", decoded.Context.Diff.BasePackID, packID)
+	}
+	for _, e := range decoded.Context.Diff.Entries {
+		if e.Kind != "reuse" {
+			t.Errorf("entry %+v has Kind %q, want \"reuse\" for every entry (no source change)", e, e.Kind)
+		}
+	}
+	if decoded.Context.Reuse == nil || decoded.Context.Reuse.ItemsSent != 0 {
+		t.Errorf("reuse = %+v, want ItemsSent == 0", decoded.Context.Reuse)
+	}
+	if decoded.Context.Recovered != nil {
+		t.Errorf("recovered = %v, want absent for a successful diff", *decoded.Context.Recovered)
+	}
+}
+
+func TestContextCmd_BaseWithOneChangeIsOneModifiedEntry(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	first := internalcmd.NewContextCmd()
+	first.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	firstOut, exitCode := runCmd(first)
+	if exitCode != 0 {
+		t.Fatalf("first call exitCode = %d, want 0 (output: %s)", exitCode, firstOut)
+	}
+	packID := *decodeContextOutput(t, firstOut).Context.PackID
+
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-014/spec.md",
+		"---\nid: SPEC-014\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on:\n  - SPEC-011\nsupersedes: []\n---\n## Requirements\n\nCHANGED refresh token rotation. See [[KNOW-003]].\n")
+
+	second := internalcmd.NewContextCmd()
+	second.SetArgs([]string{"SPEC-014", "--mode", "package", "--base", packID, "--dir", root})
+	secondOut, exitCode := runCmd(second)
+	if exitCode != 0 {
+		t.Fatalf("second call exitCode = %d, want 0 (output: %s)", exitCode, secondOut)
+	}
+
+	decoded := decodeContextOutput(t, secondOut)
+	if decoded.Context.Diff == nil {
+		t.Fatalf("context.diff is nil, want a diff after a targeted content change (output: %s)", secondOut)
+	}
+	modified := 0
+	for _, e := range decoded.Context.Diff.Entries {
+		if e.Kind == "modified" {
+			modified++
+		}
+	}
+	if modified != 1 {
+		t.Errorf("modified entries = %d, want exactly 1", modified)
+	}
+}
+
+// --- 043-incremental-context-reuse: User Story 2 (unknown --base recovers safely) ---
+
+func TestContextCmd_BaseUnknownRecoversFullPackage(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--mode", "package", "--base", "sha256:0000000000000000000000000000000000000000000000000000000000000000", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	decoded := decodeContextOutput(t, output)
+	if decoded.Context.Recovered == nil || !*decoded.Context.Recovered {
+		t.Fatalf("recovered = %v, want true for an unrecognized --base", decoded.Context.Recovered)
+	}
+	if decoded.Context.Reason == nil || *decoded.Context.Reason != "unknown_base" {
+		t.Errorf("reason = %v, want %q", decoded.Context.Reason, "unknown_base")
+	}
+	if len(decoded.Context.Items) == 0 {
+		t.Errorf("items is empty on a recovery response, want the full package")
+	}
+	if decoded.Context.Diff != nil {
+		t.Errorf("diff = %+v, want nil on a recovery response", decoded.Context.Diff)
+	}
+}
+
+func TestContextCmd_BaseOnlyValidWithModePackage(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	cmd := internalcmd.NewContextCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--mode", "manifest", "--base", "sha256:anything", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode == 0 {
+		t.Fatalf("exitCode = 0, want non-zero for --base combined with --mode manifest (output: %s)", output)
+	}
+	assertErrorCode(t, output, "invalid_argument")
+}
+
+// --- 043-incremental-context-reuse: User Story 3 (config mismatch invalidates) ---
+
+func TestContextCmd_BaseConfigMismatchIsInvalidated(t *testing.T) {
+	root := testutil.Project(t)
+	writeContextFixture(t, root)
+
+	first := internalcmd.NewContextCmd()
+	first.SetArgs([]string{"SPEC-014", "--mode", "package", "--dir", root})
+	firstOut, exitCode := runCmd(first)
+	if exitCode != 0 {
+		t.Fatalf("first call exitCode = %d, want 0 (output: %s)", exitCode, firstOut)
+	}
+	packID := *decodeContextOutput(t, firstOut).Context.PackID
+
+	second := internalcmd.NewContextCmd()
+	second.SetArgs([]string{"SPEC-014", "--mode", "package", "--base", packID, "--budget", "100", "--dir", root})
+	secondOut, exitCode := runCmd(second)
+	if exitCode != 0 {
+		t.Fatalf("second call exitCode = %d, want 0 (output: %s)", exitCode, secondOut)
+	}
+
+	decoded := decodeContextOutput(t, secondOut)
+	if decoded.Context.Recovered == nil || !*decoded.Context.Recovered {
+		t.Fatalf("recovered = %v, want true when --budget differs from the base's own recorded config", decoded.Context.Recovered)
+	}
+	if decoded.Context.Reason == nil || *decoded.Context.Reason != "invalidated" {
+		t.Errorf("reason = %v, want %q", decoded.Context.Reason, "invalidated")
 	}
 }

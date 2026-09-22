@@ -24,7 +24,7 @@ func TestEnsureSchema_CreatesAllTables(t *testing.T) {
 		t.Fatalf("ensureSchema() unexpected error: %v", err)
 	}
 
-	for _, table := range []string{"documents", "chunks", "chunks_fts", "links"} {
+	for _, table := range []string{"documents", "chunks", "chunks_fts", "links", "packs"} {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type IN ('table') AND name = ?", table).Scan(&name)
 		if err != nil {
@@ -193,6 +193,61 @@ func TestEnsureSchema_RecreatesFromPreAnchorSchemaVersion2(t *testing.T) {
 		`INSERT INTO links (source_artifact_id, target_artifact_id, relation, target_anchor) VALUES ('SPEC-001', 'KNOW-003', 'wikilink', 'retry-policy')`,
 	); err != nil {
 		t.Errorf("schema was not transparently rebuilt from version 2: %v", err)
+	}
+	var version int
+	db.QueryRow("PRAGMA user_version").Scan(&version)
+	if version != schemaVersion {
+		t.Errorf("user_version after rebuild = %d, want %d", version, schemaVersion)
+	}
+}
+
+// TestEnsureSchema_PacksTableHasExpectedColumns is
+// 043-incremental-context-reuse T004 (Foundational): the packs table
+// accepts pack_id/config_hash/target/created_at/items_json, and
+// pack_id enforces uniqueness as its own primary key
+// (data-model.md "StoredPack").
+func TestEnsureSchema_PacksTableHasExpectedColumns(t *testing.T) {
+	db := openRawDB(t)
+
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("ensureSchema() unexpected error: %v", err)
+	}
+
+	_, err := db.Exec(
+		`INSERT INTO packs (pack_id, config_hash, target, created_at, items_json) VALUES ('sha256:aaa', 'sha256:bbb', 'SPEC-014', 100, '[]')`,
+	)
+	if err != nil {
+		t.Fatalf("packs table does not accept the expected columns: %v", err)
+	}
+
+	_, err = db.Exec(
+		`INSERT INTO packs (pack_id, config_hash, target, created_at, items_json) VALUES ('sha256:aaa', 'sha256:ccc', 'SPEC-020', 200, '[]')`,
+	)
+	if err == nil {
+		t.Error("inserting a duplicate pack_id succeeded, want a primary-key violation")
+	}
+}
+
+// TestEnsureSchema_RecreatesFromPreV4SchemaVersion3 is
+// 043-incremental-context-reuse T004: a database built under
+// schemaVersion 3 (040's own shape, no packs table) is detected as
+// stale and transparently rebuilt under schemaVersion 4 — no manual
+// migration, mirroring every prior schema-bump precedent in this file.
+func TestEnsureSchema_RecreatesFromPreV4SchemaVersion3(t *testing.T) {
+	db := openRawDB(t)
+
+	if _, err := db.Exec("PRAGMA user_version = 3"); err != nil {
+		t.Fatalf("seeding stale user_version: %v", err)
+	}
+
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("ensureSchema() unexpected error: %v", err)
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO packs (pack_id, config_hash, target, created_at, items_json) VALUES ('sha256:aaa', 'sha256:bbb', 'SPEC-014', 100, '[]')`,
+	); err != nil {
+		t.Errorf("schema was not rebuilt with a packs table from version 3: %v", err)
 	}
 	var version int
 	db.QueryRow("PRAGMA user_version").Scan(&version)

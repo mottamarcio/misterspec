@@ -169,6 +169,18 @@ misterspec internal context SPEC-014   # transparently rebuilds, same result</co
 "items":[/* Constitution + target only — everything else trimmed */],
 "diagnostics":{"reduction_percent":80.0,"estimator":"default","hard_limit":300}}}</code></pre>
 
+      <h2 id="context-pack-output-contract">033 · Context Pack Output Contract</h2>
+      <p><strong>What it is:</strong> A new <code>--mode</code> flag on <code>internal context</code> — <code>manifest</code> (default, metadata only, byte-identical to before), <code>package</code> (every selected item's own full <code>content</code>, a file-absolute <code>location</code>, and a content <code>fingerprint</code>, delivered directly), or <code>markdown</code> (an explicit name for the existing <code>--render</code> shape). Every response also names its own <code>schema_version</code> explicitly, and no mode duplicates the same selected content in two representations at once.</p>
+      <p><strong>Why it exists:</strong> Before this, the default response carried only metadata (path, heading, score, tokens) — never the actual text — so every Context-Pack-aware Skill had to re-read the source files it was just told about, paying the mechanical cost 017's own single entry point was supposed to eliminate. <code>--mode package</code> closes that gap: an agent gets everything it needs to act, in one call, with each item independently locatable and fingerprinted so a later divergence from the source is always detectable.</p>
+      <p><strong>Example</strong> — full content, delivered directly:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package
+{"ok":true,"context":{"schema_version":2,"target":"SPEC-014",
+"items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
+"content":"### R1 — First\n\nThe system MUST ...\n",
+"location":{"path":"ai/.../SPEC-014/spec.md","start_line":14,"end_line":18},
+"fingerprint":"sha256:3a7bd3e2360a3d..."}]}}</code></pre>
+      <p>An existing caller that never passes <code>--mode</code> sees no change at all — <code>package</code> is strictly additive, and the two modes are never mixed in the same response (full detail in the <a href="commands.html#internal-context">Command Reference</a>).</p>
+
       <h2 id="budget-accuracy">035 · Budget and Estimator Accuracy</h2>
       <p><strong>What it is:</strong> Makes 016's own budget promise
       actually true. The <code>Estimator</code> that produces every
@@ -214,6 +226,26 @@ misterspec internal context SPEC-014   # transparently rebuilds, same result</co
 "items":[{"path":"ai/.../SPEC-014/spec.md","tier":"semantic","reasons":["backlink"],
 "provenance":[{"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}]}}</code></pre>
       <p>The underlying local index (<a href="#sqlite-index">014</a>) widened its own <code>links</code> table to store this — a version bump the index's own existing disposable-rebuild mechanism already handles transparently; no manual migration, ever (Constitution Principle III).</p>
+
+      <h2 id="stable-section-anchors">040 · Stable Section Anchors</h2>
+      <p><strong>What it is:</strong> A wikilink can now target one specific section of an artifact — <code>[[KNOW-003#retry-policy|Retry Policy]]</code> — via an explicit, stable anchor declared on the heading itself (<code>## Retry Policy {#retry-policy}</code>), independent of the heading's own title text. Resolving such a reference retrieves just that section (plus the minimal ancestor heading context needed to keep it meaningful) instead of the whole target artifact; the item carries <code>heading_path</code>/<code>anchor</code> in the response.</p>
+      <p><strong>Why it exists:</strong> Before this, pointing at "the retry policy inside KNOW-003" meant pulling in the entire Knowledge artifact just to reach one paragraph — expensive, and fragile the moment the artifact grows unrelated sections. A stable, explicitly-declared anchor survives a heading rename (the old §062 wikilink-foundation resolution stays based on the artifact ID; the anchor is a second, independent coordinate), and a broken/duplicate/unknown anchor is a validation Finding, never a silent fallback to the whole document.</p>
+      <p><strong>Example</strong> — an anchor-qualified reference resolves to just that section:</p>
+      <pre><code>misterspec internal context KNOW-001
+{"ok":true,"context":{"schema_version":5,
+"items":[{"path":"ai/knowledge/KNOW-003-x.md","heading":"Client Retry Policy",
+"heading_path":["Networking Policies"],"anchor":"retry-policy", ...}]}}</code></pre>
+      <p><code>internal validate</code> gains two new Codes for this: <code>unknown_anchor</code> (a wikilink names an anchor the target artifact doesn't declare) and <code>duplicate_anchor</code> (two sections in the same artifact declare the same explicit anchor) — see the <a href="commands.html#internal-validate">Command Reference</a>.</p>
+
+      <h2 id="incremental-context-reuse">043 · Incremental Context Pack Reuse</h2>
+      <p><strong>What it is:</strong> A new <code>--base &lt;pack_id&gt;</code> flag on <code>internal context --mode package</code>. Every <code>--mode package</code> response now names its own deterministic <code>pack_id</code> (a hash of the request's own resolved configuration plus every selected item's own content); passing a previously returned <code>pack_id</code> back in as <code>--base</code> returns only what changed since it — an ordered reuse-or-replace <code>diff</code>, never the unchanged content resent — or, when that base can't be confirmed, the full package again, explicitly marked <code>recovered: true</code>.</p>
+      <p><strong>Why it exists:</strong> A caller that already fetched a Context Pack once — starting the next Task in the same Spec, or resuming after its own context got compacted — paid the full cost again every time, even when nothing (or almost nothing) had changed. <code>--base</code> lets it ask for just the difference instead, with one non-negotiable safety rule: a claimed base is a lookup key, never an assertion — an unknown or config-mismatched <code>pack_id</code> always falls back to a full, clearly-marked response rather than a silently incomplete one. The underlying pack cache is explicitly disposable (a new table in 014's own local index) — losing it only ever costs one call's worth of reuse, never correctness.</p>
+      <p><strong>Example</strong> — repeating the same request, nothing changed:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package --base sha256:6614b8dd...
+{"ok":true,"context":{"schema_version":6,"pack_id":"sha256:6614b8dd...",
+"diff":{"base_pack_id":"sha256:6614b8dd...","entries":[{"kind":"reuse","base_index":0}],"removed":[]},
+"reuse":{"items_reused":1,"items_sent":0,"tokens_saved_estimate":10}}}</code></pre>
+      <p>This local reuse mechanism is entirely independent of any LLM provider's own prompt caching — <code>reuse</code> reports a locally measured item/token count, never a claimed dollar or provider-side cost saving. Full flag/response detail in the <a href="commands.html#internal-context">Command Reference</a>.</p>
 
     </div>
   </main>
