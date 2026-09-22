@@ -250,6 +250,7 @@
         <li><code>--diagnostic-scores</code> — additionally include each item's own <code>score_components</code> breakdown (<code>tier</code>, <code>relation_weight</code>, <code>intent_bonus</code>, <code>text_relevance</code>, <code>section_preference</code>, <code>total</code>). Omitted by default in every mode.</li>
         <li><code>--provenance</code> — additionally include, for every item whose inclusion is backed by real wikilink occurrence data (a <code>wikilink</code> reason, or a <code>backlink</code> reason built from a semantic wikilink), a <code>provenance</code> array naming the exact referencing artifact, section, and line. An item with no such occurrence data (e.g. <code>target</code>, <code>constitution</code>, a formal relation) never gets the key at all — not even an empty array. Omitted by default in every mode.</li>
         <li><code>--prefer-section</code> — <strong>experimental, off by default.</strong> Scores a wikilink-derived reference higher when its own occurrence's section case-insensitively matches <code>Requirements</code> or <code>Functional Requirements</code>. Omitting this flag leaves ordering byte-identical to this feature never having existed — it exists only so the <a href="dogfooding.html#eval-harness">evaluation harness</a> can record a comparison against default ordering before any future Spec considers promoting it.</li>
+        <li><code>--base &lt;pack_id&gt;</code> — <code>--mode package</code> only. A <code>pack_id</code> returned by a previous <code>--mode package</code> call (for the same or a different request) — returns only what changed since it (<code>diff</code>), or the full package explicitly marked <code>recovered: true</code> when the base can't be confirmed. Never trusted as an assertion: a <code>--base</code> value alone, with no matching stored pack, is always treated as unknown. Combined with any mode other than <code>package</code>, fails with <code>invalid_argument</code>.</li>
       </ul>
       <pre><code>misterspec internal context SPEC-014 --intent implementation --budget 700
 {"ok":true,"context":{"schema_version":4,"target":"SPEC-014","intent":"implementation","budget":700,
@@ -274,9 +275,10 @@
 "items":[{"path":"ai/.../SPEC-014/spec.md","tier":"semantic","reasons":["backlink"],"score":65,"tokens":11,
 "provenance":[{"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}],
 "rendered":null}}</code></pre>
-      <p><strong><code>--mode package</code></strong> — every item's own selected text, delivered directly, with a file-absolute location and a content fingerprint, so a caller never has to re-read the source file for content already in the response:</p>
+      <p><strong><code>--mode package</code></strong> — every item's own selected text, delivered directly, with a file-absolute location and a content fingerprint, so a caller never has to re-read the source file for content already in the response. Every <code>--mode package</code> response also carries its own <code>pack_id</code> (043-incremental-context-reuse), reusable as a future <code>--base</code>:</p>
       <pre><code>misterspec internal context SPEC-014 --mode package
-{"ok":true,"context":{"schema_version":4,"target":"SPEC-014", ...
+{"ok":true,"context":{"schema_version":6,"target":"SPEC-014", ...
+"pack_id":"sha256:6614b8dd...",
 "items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
 "reasons":["target"],"score":100,"tokens":107,
 "content":"### R1 — First\n\nThe system MUST ...\n",
@@ -284,6 +286,22 @@
 "fingerprint":"sha256:3a7bd3e2360a3d..."}],
 "diagnostics":{"...":"...","payload_tokens":742,"estimator":"default","hard_limit":12000,"exclusions":[],"ranking_version":1},
 "rendered":null}}</code></pre>
+      <p><strong><code>--base &lt;pack_id&gt;</code></strong> (043-incremental-context-reuse) — pass a previously returned <code>pack_id</code> back in, and get only what changed since it. A caller that repeats the same request with no source change gets an all-<code>"reuse"</code> diff — no content resent at all:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package --base sha256:6614b8dd...
+{"ok":true,"context":{"schema_version":6,"pack_id":"sha256:6614b8dd...",
+"diff":{"base_pack_id":"sha256:6614b8dd...","entries":[{"kind":"reuse","base_index":0}],"removed":[]},
+"reuse":{"items_reused":1,"items_sent":0,"tokens_saved_estimate":10},
+"...":"... every other field unchanged ..."}}</code></pre>
+      <p>
+        Applying the diff — replacing each <code>"reuse"</code> entry with the named base pack's own item at <code>base_index</code>, keeping every <code>"added"</code>/<code>"modified"</code> entry's own <code>item</code>, in the response's own <code>entries</code> order — reproduces the exact full package a direct, <code>--base</code>-less call would return. A <code>--base</code> the system can't confirm (unknown, or computed under a different <code>--intent</code>/<code>--budget</code>/ranking or contract version) never returns a partial result — it falls back to the full package, explicitly marked:
+      </p>
+      <pre><code>misterspec internal context SPEC-014 --mode package --base sha256:0000...
+{"ok":true,"context":{"pack_id":"sha256:af02...","recovered":true,"reason":"unknown_base",
+"items":[ "... full package, same shape as a --base-less call ..." ],
+"reuse":{"items_reused":0,"items_sent":2,"tokens_saved_estimate":0}}}</code></pre>
+      <p>
+        <code>reason</code> is <code>"unknown_base"</code> (no stored pack for that <code>pack_id</code>) or <code>"invalidated"</code> (a stored pack existed, but this call's own request configuration no longer matches it — a pure content-only change never triggers this, it stays diffable). This local reuse mechanism is entirely independent of any LLM provider's own prompt caching — <code>reuse</code> reports a locally measured item/token count, never a claimed dollar or provider-side cost saving.
+      </p>
 
       <h2 id="internal-commits-since-file">internal commits-since-file</h2>
       <p><strong>Purpose:</strong> Return every commit on the current branch since a given file was first added — the real basis <a href="workflow.html"><code>/mister-wrap-up</code></a> uses to synthesize a Spec's own downstream documentation.</p>

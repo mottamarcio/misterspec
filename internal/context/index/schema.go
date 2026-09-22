@@ -14,7 +14,12 @@ import (
 // source_section/source_line (data-model.md "links table (widened)").
 // Bumped to 3 by 040-stable-section-anchors: chunks gains anchor,
 // links gains target_anchor (data-model.md "Index Schema (extended)").
-const schemaVersion = 3
+// Bumped to 4 by 043-incremental-context-reuse: new packs table
+// (data-model.md "StoredPack") — this table is disposable exactly
+// like every other table here (Constitution Principle III, spec
+// FR-011): losing every stored pack on an unrelated schema bump only
+// ever costs one call's worth of reuse, never correctness.
+const schemaVersion = 4
 
 // schemaStatements creates this package's own schema (data-model.md) —
 // one statement per Exec call, rather than relying on a driver's
@@ -53,6 +58,13 @@ var schemaStatements = []string{
 		source_line        INTEGER,
 		target_anchor      TEXT
 	)`,
+	`CREATE TABLE packs (
+		pack_id     TEXT PRIMARY KEY,
+		config_hash TEXT NOT NULL,
+		target      TEXT NOT NULL,
+		created_at  INTEGER NOT NULL,
+		items_json  TEXT NOT NULL
+	)`,
 }
 
 // dropStatements removes every table this package's schema may have
@@ -63,6 +75,7 @@ var dropStatements = []string{
 	`DROP TABLE IF EXISTS chunks_fts`,
 	`DROP TABLE IF EXISTS chunks`,
 	`DROP TABLE IF EXISTS links`,
+	`DROP TABLE IF EXISTS packs`,
 	`DROP TABLE IF EXISTS documents`,
 }
 

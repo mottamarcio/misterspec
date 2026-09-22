@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -45,7 +46,10 @@ var validContextModes = map[contextOutputMode]bool{
 // Bumped to 5 by 040-stable-section-anchors: an item produced via an
 // anchor-qualified reference gains heading_path/anchor
 // (contracts/stable-anchors-contract.md §6).
-const contextSchemaVersion = 5
+// Bumped to 6 by 043-incremental-context-reuse: --mode package
+// responses gain pack_id; --base adds diff/recovered/reason/reuse
+// (contracts/incremental-context-reuse-contract.md §3).
+const contextSchemaVersion = 6
 
 // rankingVersion identifies the scoring formula/weight set that
 // produced a response's ordering (036-text-search-ranking spec FR-009).
@@ -79,7 +83,7 @@ var validQueryModes = map[string]bool{
 }
 
 func NewContextCmd() *cobra.Command {
-	var dir, intent, task, query, budget, hardLimit, mode, queryMode string
+	var dir, intent, task, query, budget, hardLimit, mode, queryMode, base string
 	var render, diagnosticScores, provenance, preferSection bool
 
 	cmd := &cobra.Command{
@@ -147,6 +151,9 @@ func NewContextCmd() *cobra.Command {
 			if outputMode == modePackage && render {
 				return WriteError(cmd.OutOrStdout(), fmt.Errorf("%w: --render cannot be combined with --mode=package", ErrInvalidArgument))
 			}
+			if base != "" && outputMode != modePackage {
+				return WriteError(cmd.OutOrStdout(), fmt.Errorf("%w: --base is only valid with --mode=package", ErrInvalidArgument))
+			}
 
 			candidates, err := contextengine.Collect(proj.Root, proj.Config, store, req)
 			if err != nil {
@@ -161,39 +168,40 @@ func NewContextCmd() *cobra.Command {
 				rendered = contextengine.Render(req, result)
 			}
 
-			var items any
-			if outputMode == modePackage {
-				items = renderPackageItems(contextengine.BuildPackageItems(result.Items), result.Items, diagnosticScores, provenance)
-			} else {
-				items = renderContextItems(result.Items, diagnosticScores, provenance)
+			responseFields := map[string]any{
+				"schema_version":   contextSchemaVersion,
+				"target":           req.Target,
+				"intent":           string(req.Intent),
+				"budget":           resolvedBudget(req),
+				"estimated_tokens": result.Diagnostics.TokensSelected,
+				"budget_exceeded":  result.BudgetExceeded,
+				"overage":          result.Overage,
+				"diagnostics": map[string]any{
+					"candidates_considered": result.Diagnostics.CandidatesConsidered,
+					"items_selected":        result.Diagnostics.ItemsSelected,
+					"tokens_available":      result.Diagnostics.TokensAvailable,
+					"tokens_selected":       result.Diagnostics.TokensSelected,
+					"tokens_excluded":       result.Diagnostics.TokensExcluded,
+					"reduction_percent":     result.Diagnostics.ReductionPercent,
+					"payload_tokens":        payloadTokens(outputMode, result, rendered, estimator),
+					"estimator":             result.Diagnostics.Estimator,
+					"hard_limit":            result.Diagnostics.HardLimit,
+					"exclusions":            renderExclusions(result.Diagnostics.Exclusions),
+					"ranking_version":       rankingVersion,
+				},
+				"rendered": rendered,
 			}
 
-			return WriteSuccess(cmd.OutOrStdout(), map[string]any{
-				"context": map[string]any{
-					"schema_version":   contextSchemaVersion,
-					"target":           req.Target,
-					"intent":           string(req.Intent),
-					"budget":           resolvedBudget(req),
-					"estimated_tokens": result.Diagnostics.TokensSelected,
-					"budget_exceeded":  result.BudgetExceeded,
-					"overage":          result.Overage,
-					"items":            items,
-					"diagnostics": map[string]any{
-						"candidates_considered": result.Diagnostics.CandidatesConsidered,
-						"items_selected":        result.Diagnostics.ItemsSelected,
-						"tokens_available":      result.Diagnostics.TokensAvailable,
-						"tokens_selected":       result.Diagnostics.TokensSelected,
-						"tokens_excluded":       result.Diagnostics.TokensExcluded,
-						"reduction_percent":     result.Diagnostics.ReductionPercent,
-						"payload_tokens":        payloadTokens(outputMode, result, rendered, estimator),
-						"estimator":             result.Diagnostics.Estimator,
-						"hard_limit":            result.Diagnostics.HardLimit,
-						"exclusions":            renderExclusions(result.Diagnostics.Exclusions),
-						"ranking_version":       rankingVersion,
-					},
-					"rendered": rendered,
-				},
-			})
+			if outputMode == modePackage {
+				packageItems := contextengine.BuildPackageItems(result.Items)
+				if err := handlePackageReuse(store, req, result, packageItems, estimator, base, diagnosticScores, provenance, responseFields); err != nil {
+					return WriteError(cmd.OutOrStdout(), err)
+				}
+			} else {
+				responseFields["items"] = renderContextItems(result.Items, diagnosticScores, provenance)
+			}
+
+			return WriteSuccess(cmd.OutOrStdout(), map[string]any{"context": responseFields})
 		},
 	}
 
@@ -209,6 +217,7 @@ func NewContextCmd() *cobra.Command {
 	cmd.Flags().StringVar(&queryMode, "query-mode", "", "query interpretation: free (default, literal text) or advanced (native FTS5 syntax)")
 	cmd.Flags().BoolVar(&provenance, "provenance", false, "additionally include each wikilink-derived item's source occurrence (source_path/source_section/source_line)")
 	cmd.Flags().BoolVar(&preferSection, "prefer-section", false, "experimental, off-by-default: score a wikilink-derived reference higher when its occurrence's own section is a recognized requirements-bearing heading — never applied unless explicitly passed (spec FR-006)")
+	cmd.Flags().StringVar(&base, "base", "", "a previously returned pack_id — --mode=package returns only what changed since it, or the full package with recovered:true when it cannot be confirmed (043-incremental-context-reuse)")
 	return cmd
 }
 
@@ -325,43 +334,60 @@ func renderProvenance(reasons []contextengine.Reason) []map[string]any {
 
 // renderPackageItems renders "package"-mode items — every manifest
 // field plus content/location/fingerprint (data-model.md
-// "PackageItem", contracts §4). source is the same-order ResultItem
-// slice items was built from (BuildPackageItems preserves order 1:1),
-// used only to look up each item's own score_components/provenance
-// when diagnosticScores/provenance is true.
-func renderPackageItems(items []contextengine.PackageItem, source []contextengine.ResultItem, diagnosticScores, provenance bool) []map[string]any {
+// "PackageItem", contracts §4). Each item is now self-contained
+// (PackageItem carries its own HeadingPath/ScoreComponents/
+// SourceReasons, 043-incremental-context-reuse code review finding),
+// so this — and renderPackDiff's own "added"/"modified" entries —
+// render identically regardless of index alignment with any other
+// slice.
+func renderPackageItems(items []contextengine.PackageItem, diagnosticScores, provenance bool) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
-	for i, item := range items {
-		m := map[string]any{
-			"path":    item.Path,
-			"heading": item.Heading,
-			"tier":    item.Tier.String(),
-			"reasons": item.Reasons,
-			"score":   item.Score,
-			"tokens":  item.Tokens,
-			"content": item.Content,
-			"location": map[string]any{
-				"path":       item.Location.Path,
-				"start_line": item.Location.StartLine,
-				"end_line":   item.Location.EndLine,
-			},
-			"fingerprint": item.Fingerprint,
-		}
-		if diagnosticScores && i < len(source) {
-			m["score_components"] = renderScoreComponents(source[i].Components)
-		}
-		if provenance && i < len(source) {
-			if p := renderProvenance(source[i].Reasons); len(p) > 0 {
-				m["provenance"] = p
-			}
-		}
-		if i < len(source) && source[i].HeadingPath != nil {
-			m["heading_path"] = source[i].HeadingPath
-			m["anchor"] = anchorFor(source[i].Reasons)
-		}
-		out = append(out, m)
+	for _, item := range items {
+		out = append(out, renderPackageItemJSON(item, diagnosticScores, provenance))
 	}
 	return out
+}
+
+// renderPackageItemJSON renders one PackageItem's own full JSON shape
+// (data-model.md "PackageItem", contracts §4): base fields always;
+// heading_path/anchor whenever the item's own HeadingPath is non-nil
+// (040-stable-section-anchors); score_components/provenance when
+// diagnosticScores/provenance is requested, read directly from the
+// item's own ScoreComponents/SourceReasons — never from a separate,
+// index-aligned slice (043-incremental-context-reuse code review
+// finding: a diff entry's "added"/"modified" item previously lost all
+// four of these, since DiffAgainstBase's output has no 1:1 alignment
+// with the original ResultItem slice once items are appended/
+// reordered).
+func renderPackageItemJSON(item contextengine.PackageItem, diagnosticScores, provenance bool) map[string]any {
+	m := map[string]any{
+		"path":    item.Path,
+		"heading": item.Heading,
+		"tier":    item.Tier.String(),
+		"reasons": item.Reasons,
+		"score":   item.Score,
+		"tokens":  item.Tokens,
+		"content": item.Content,
+		"location": map[string]any{
+			"path":       item.Location.Path,
+			"start_line": item.Location.StartLine,
+			"end_line":   item.Location.EndLine,
+		},
+		"fingerprint": item.Fingerprint,
+	}
+	if diagnosticScores {
+		m["score_components"] = renderScoreComponents(item.ScoreComponents)
+	}
+	if provenance {
+		if p := renderProvenance(item.SourceReasons); len(p) > 0 {
+			m["provenance"] = p
+		}
+	}
+	if item.HeadingPath != nil {
+		m["heading_path"] = item.HeadingPath
+		m["anchor"] = anchorFor(item.SourceReasons)
+	}
+	return m
 }
 
 // renderScoreComponents renders one ScoreComponents as a JSON-ready map
@@ -409,4 +435,142 @@ func payloadTokens(mode contextOutputMode, result contextengine.Result, rendered
 		return contextengine.PayloadTokens(result.Diagnostics.TokensSelected, nil, s, estimator)
 	}
 	return result.Diagnostics.TokensSelected
+}
+
+// handlePackageReuse computes this call's own PackID (research.md #2),
+// always persists it via store.SavePack (so a future call can use it
+// as a --base — every --mode package call saves a pack, not only ones
+// already using --base), and populates fields with "pack_id" plus
+// either the full "items" (base == ""), a "diff"+"reuse" (a
+// confirmed, config-compatible base), or "recovered"+"reason"+"items"+
+// "reuse" (an unknown or config-mismatched base) — 043-incremental-
+// context-reuse contracts §3/§4.
+func handlePackageReuse(store index.Store, req contextengine.Request, result contextengine.Result, packageItems []contextengine.PackageItem, estimator artifacts.Estimator, base string, diagnosticScores, provenance bool, fields map[string]any) error {
+	config := contextengine.ConfigIdentity{
+		Target:               req.Target,
+		Intent:               string(req.Intent),
+		Task:                 req.Task,
+		Query:                req.Query,
+		QueryMode:            string(req.QueryMode),
+		Budget:               resolvedBudget(req),
+		HardLimit:            result.Diagnostics.HardLimit,
+		PreferSection:        req.PreferSection,
+		RankingVersion:       rankingVersion,
+		ContextSchemaVersion: contextSchemaVersion,
+		Estimator:            result.Diagnostics.Estimator,
+	}
+	itemIdentities := make([]contextengine.PackItemIdentity, 0, len(packageItems))
+	storedItems := make([]index.StoredPackItem, 0, len(packageItems))
+	for _, item := range packageItems {
+		itemIdentities = append(itemIdentities, contextengine.PackItemIdentity{
+			Path: item.Location.Path, StartLine: item.Location.StartLine, EndLine: item.Location.EndLine,
+			Fingerprint: item.Fingerprint,
+		})
+		storedItems = append(storedItems, index.StoredPackItem{
+			Path: item.Location.Path, StartLine: item.Location.StartLine, EndLine: item.Location.EndLine,
+			Fingerprint: item.Fingerprint, Content: item.Content,
+		})
+	}
+
+	configHash := contextengine.ComputeConfigHash(config)
+	packID := contextengine.ComputePackID(contextengine.PackIdentity{Config: config, Items: itemIdentities})
+	fields["pack_id"] = string(packID)
+
+	// SavePack is best-effort: the packs table is explicitly disposable
+	// (schema.go, spec FR-011) — losing a write (e.g. a concurrent
+	// caller holding the SQLite write lock) must cost only that one
+	// call's own future reuse opportunity, never the correctness of
+	// the context pack this call already successfully computed. Code
+	// review finding: the original implementation propagated this
+	// error as a hard failure of the whole --mode package response.
+	_ = store.SavePack(index.StoredPack{
+		PackID: string(packID), ConfigHash: string(configHash), Target: req.Target,
+		CreatedAt: time.Now().Unix(), Items: storedItems,
+	})
+
+	if base == "" {
+		fields["items"] = renderPackageItems(packageItems, diagnosticScores, provenance)
+		return nil
+	}
+
+	// A LookupPack error is also "cannot be confirmed" (spec FR-004),
+	// not a reason to fail the whole call — the packs table is
+	// disposable (research.md #3), so any lookup problem falls back to
+	// the same safe full recovery as a genuinely unknown pack_id.
+	stored, found, err := store.LookupPack(base)
+	if err != nil || !found {
+		return recoverFullPackage(fields, packageItems, diagnosticScores, provenance, "unknown_base")
+	}
+	if stored.ConfigHash != string(configHash) {
+		return recoverFullPackage(fields, packageItems, diagnosticScores, provenance, "invalidated")
+	}
+
+	diff := contextengine.DiffAgainstBase(packageItems, stored.Items)
+	fields["diff"] = renderPackDiff(base, diff, diagnosticScores, provenance)
+	fields["reuse"] = renderReuse(diff, stored.Items, estimator)
+	return nil
+}
+
+// recoverFullPackage renders the same full package a base-less call
+// would, explicitly marked recovered (043-incremental-context-reuse
+// contracts §3/§4, spec FR-005) — reason is "unknown_base" or
+// "invalidated" (research.md #4).
+func recoverFullPackage(fields map[string]any, packageItems []contextengine.PackageItem, diagnosticScores, provenance bool, reason string) error {
+	fields["recovered"] = true
+	fields["reason"] = reason
+	fields["items"] = renderPackageItems(packageItems, diagnosticScores, provenance)
+	fields["reuse"] = map[string]any{"items_reused": 0, "items_sent": len(packageItems), "tokens_saved_estimate": 0}
+	return nil
+}
+
+// renderPackDiff renders a PackDiff as JSON-ready data (contracts §3).
+// An "added"/"modified" entry's own item renders with the same
+// diagnosticScores/provenance flags a direct call would use, since
+// PackageItem now self-describes heading_path/anchor/score_components/
+// provenance (043-incremental-context-reuse code review finding).
+func renderPackDiff(basePackID string, diff contextengine.PackDiff, diagnosticScores, provenance bool) map[string]any {
+	entries := make([]map[string]any, 0, len(diff.Entries))
+	for _, e := range diff.Entries {
+		m := map[string]any{"kind": e.Kind}
+		if e.BaseIndex != nil {
+			m["base_index"] = *e.BaseIndex
+		}
+		if e.Item != nil {
+			m["item"] = renderPackageItemJSON(*e.Item, diagnosticScores, provenance)
+		}
+		entries = append(entries, m)
+	}
+	removed := make([]map[string]any, 0, len(diff.Removed))
+	for _, r := range diff.Removed {
+		removed = append(removed, map[string]any{
+			"path": r.Path, "start_line": r.StartLine, "end_line": r.EndLine,
+		})
+	}
+	return map[string]any{
+		"base_pack_id": basePackID,
+		"entries":      entries,
+		"removed":      removed,
+	}
+}
+
+// renderReuse renders diff's own reuse diagnostics (043-incremental-
+// context-reuse data-model.md "ReuseDiagnostics", research.md #6).
+func renderReuse(diff contextengine.PackDiff, baseItems []index.StoredPackItem, estimator artifacts.Estimator) map[string]any {
+	reused, sent, tokensSaved := 0, 0, 0
+	for _, e := range diff.Entries {
+		switch e.Kind {
+		case "reuse":
+			reused++
+			if e.BaseIndex != nil && *e.BaseIndex < len(baseItems) {
+				tokensSaved += estimator.Estimate(baseItems[*e.BaseIndex].Content)
+			}
+		case "added", "modified":
+			sent++
+		}
+	}
+	return map[string]any{
+		"items_reused":          reused,
+		"items_sent":            sent,
+		"tokens_saved_estimate": tokensSaved,
+	}
 }
