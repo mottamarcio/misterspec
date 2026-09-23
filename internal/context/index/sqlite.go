@@ -2,12 +2,20 @@ package index
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
+
+// packCacheCap bounds the packs table's own row count
+// (043-incremental-context-reuse research.md #3) — a fixed, simple
+// eviction policy (oldest created_at first) rather than a
+// configurable knob, since no evidence yet justifies making this
+// tunable (Constitution Principle IV).
+const packCacheCap = 50
 
 // sqliteStore is the concrete, modernc.org/sqlite-backed Store.
 type sqliteStore struct {
@@ -55,6 +63,63 @@ func (s *sqliteStore) Outgoing(id string) ([]Link, error) {
 // the inverse of Outgoing.
 func (s *sqliteStore) Incoming(id string) ([]Link, error) {
 	return s.queryLinks("SELECT relation, source_artifact_id, target_artifact_id FROM links WHERE target_artifact_id = ?", id)
+}
+
+// SavePack upserts pack into the packs table, then evicts the oldest
+// rows beyond packCacheCap (043-incremental-context-reuse research.md
+// #3).
+func (s *sqliteStore) SavePack(pack StoredPack) error {
+	itemsJSON, err := json.Marshal(pack.Items)
+	if err != nil {
+		return fmt.Errorf("index: marshaling pack items for %s: %w", pack.PackID, err)
+	}
+
+	_, err = s.db.Exec(
+		`INSERT INTO packs (pack_id, config_hash, target, created_at, items_json) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(pack_id) DO UPDATE SET config_hash = excluded.config_hash, target = excluded.target, created_at = excluded.created_at, items_json = excluded.items_json`,
+		pack.PackID, pack.ConfigHash, pack.Target, pack.CreatedAt, string(itemsJSON),
+	)
+	if err != nil {
+		return fmt.Errorf("index: saving pack %s: %w", pack.PackID, err)
+	}
+
+	// ORDER BY created_at DESC, rowid DESC: created_at alone (Unix
+	// seconds) ties within a same-second burst of SavePack calls, and
+	// SQLite's own tie resolution for an unordered LIMIT is otherwise
+	// unspecified — rowid (the table's own implicit, monotonically
+	// assigned column, unaffected by ON CONFLICT DO UPDATE on an
+	// existing row) breaks the tie in actual insertion order, so the
+	// just-saved pack is never the one evicted (code review finding).
+	_, err = s.db.Exec(
+		`DELETE FROM packs WHERE pack_id NOT IN (SELECT pack_id FROM packs ORDER BY created_at DESC, rowid DESC LIMIT ?)`,
+		packCacheCap,
+	)
+	if err != nil {
+		return fmt.Errorf("index: evicting old packs: %w", err)
+	}
+	return nil
+}
+
+// LookupPack returns the stored pack for packID, and found == false
+// (never an error) when no such row exists (043-incremental-context-
+// reuse research.md #4).
+func (s *sqliteStore) LookupPack(packID string) (pack StoredPack, found bool, err error) {
+	var itemsJSON string
+	row := s.db.QueryRow(
+		`SELECT pack_id, config_hash, target, created_at, items_json FROM packs WHERE pack_id = ?`,
+		packID,
+	)
+	if err := row.Scan(&pack.PackID, &pack.ConfigHash, &pack.Target, &pack.CreatedAt, &itemsJSON); err != nil {
+		if err == sql.ErrNoRows {
+			return StoredPack{}, false, nil
+		}
+		return StoredPack{}, false, fmt.Errorf("index: looking up pack %s: %w", packID, err)
+	}
+
+	if err := json.Unmarshal([]byte(itemsJSON), &pack.Items); err != nil {
+		return StoredPack{}, false, fmt.Errorf("index: unmarshaling pack items for %s: %w", packID, err)
+	}
+	return pack, true, nil
 }
 
 func (s *sqliteStore) queryLinks(query, id string) ([]Link, error) {

@@ -39,9 +39,50 @@ type Request struct {
 	// budgeting/research.md #6). nil means "not specified" —
 	// DefaultBudget is used. A non-nil pointer, even to zero or a
 	// negative number, is a real, explicit budget request — never
-	// silently promoted to the default.
+	// silently promoted to the default. This is the "soft limit" —
+	// only ever shapes how much optional content is included; never
+	// used to flag mandatory content as excessive
+	// (035-context-budget-accuracy FR-005).
 	Budget *int
+	// HardLimit optionally overrides DefaultHardLimit — the ceiling
+	// above which mandatory content is reported as exceeded (FR-005,
+	// FR-007). nil means "not specified" — DefaultHardLimit is used,
+	// never treated as "no limit" (FR-006). Independent of Budget: a
+	// HardLimit smaller than the resolved Budget is accepted, not
+	// rejected — it simply means a tight mandatory-content ceiling
+	// alongside a generous optional-content target (data-model.md
+	// Request validation rule).
+	HardLimit *int
+	// QueryMode selects how Query/Task is interpreted by Tier 4's own
+	// free-text search (036-text-search-ranking spec FR-002). The zero
+	// value ("") means QueryModeFree — every token is literal text,
+	// never FTS5 query syntax. Never inferred from Query/Task's own
+	// content — always this explicit field (research.md #2).
+	QueryMode QueryMode
+	// PreferSection turns on the off-by-default Requirements/active-
+	// task-section preference (038-wikilink-chunk-provenance spec User
+	// Story 2, FR-005/FR-006). The zero value (false) means today's
+	// exact ordering, byte-identical to this field never having
+	// existed — this MUST NOT be flipped to a default of true without a
+	// future Spec recording a comparison through 037-eval-quality-
+	// efficiency's harness (research.md #5).
+	PreferSection bool
 }
+
+// QueryMode names how Request.Query/Task is interpreted at the index
+// boundary (036-text-search-ranking data-model.md QueryMode).
+type QueryMode string
+
+const (
+	// QueryModeFree treats every token as literal text — FTS5 reserved
+	// characters/keywords never cause a syntax error (spec FR-001,
+	// FR-003). The default when QueryMode is unset.
+	QueryModeFree QueryMode = "free"
+	// QueryModeAdvanced passes Query/Task to FTS5's own MATCH grammar
+	// unmodified — phrase, prefix, boolean, and NEAR syntax are honored
+	// (spec FR-002).
+	QueryModeAdvanced QueryMode = "advanced"
+)
 
 // recognizedIntents is the set validateIntent checks Intent against.
 var recognizedIntents = map[Intent]bool{

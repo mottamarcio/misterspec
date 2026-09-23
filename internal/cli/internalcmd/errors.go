@@ -7,6 +7,9 @@ import (
 	"github.com/mottamarcio/misterspec/internal/artifacts"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
 	contextengine "github.com/mottamarcio/misterspec/internal/context"
+	"github.com/mottamarcio/misterspec/internal/context/index"
+	"github.com/mottamarcio/misterspec/internal/eval"
+	"github.com/mottamarcio/misterspec/internal/impact"
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/project"
 	"github.com/mottamarcio/misterspec/internal/selfupdate"
@@ -34,6 +37,8 @@ func classify(err error) (code string, exitCode int) {
 		return "entity_not_found", 3
 	case errors.Is(err, operations.ErrEntityAmbiguous):
 		return "entity_ambiguous", 3
+	case errors.Is(err, operations.ErrSpecContextRequired):
+		return "spec_context_required", 3
 	case errors.Is(err, operations.ErrInvalidTarget), errors.Is(err, validation.ErrInvalidTarget):
 		return "invalid_target", 2
 	case errors.Is(err, operations.ErrInvalidParent):
@@ -42,16 +47,28 @@ func classify(err error) (code string, exitCode int) {
 		return "already_exists", 5
 	case errors.Is(err, operations.ErrUnsupportedType):
 		return "unsupported_type", 2
-	case errors.Is(err, operations.ErrInvalidSlug), errors.Is(err, ErrInvalidArgument):
+	case errors.Is(err, operations.ErrInvalidSlug), errors.Is(err, ErrInvalidArgument), errors.Is(err, operations.ErrInvalidEvidenceRequest):
 		return "invalid_argument", 2
 	case errors.Is(err, contextengine.ErrUnsupportedIntent):
 		return "unsupported_intent", 2
+	case errors.Is(err, index.ErrQuerySyntax):
+		return "query_syntax_error", 2
+	case errors.Is(err, eval.ErrInvalidCase):
+		return "invalid_case", 2
+	case errors.Is(err, eval.ErrIncompatibleRun):
+		return "incompatible_run", 2
+	case errors.Is(err, eval.ErrInvalidRunRecord):
+		return "invalid_argument", 2
 	case errors.Is(err, artifacts.ErrPathOutsideProject):
 		return "path_outside_project", 5
 	case errors.Is(err, bootstrap.ErrAlreadyInitialized):
 		return "already_initialized", 5
 	case errors.Is(err, bootstrap.ErrUnknownAgent):
 		return "unknown_agent", 5
+	case errors.Is(err, impact.ErrRevisionNotFound):
+		return "revision_not_found", 2
+	case errors.Is(err, impact.ErrNotARepository):
+		return "not_a_repository", 6
 	case errors.Is(err, selfupdate.ErrChecksumMismatch):
 		return "checksum_mismatch", 7
 	case errors.Is(err, selfupdate.ErrReleaseCheckFailed):

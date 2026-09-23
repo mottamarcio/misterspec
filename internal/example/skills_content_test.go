@@ -42,7 +42,8 @@ var knownInternalCommands = map[string]bool{
 	"resolve": true, "inspect": true, "parent": true, "children": true,
 	"create": true, "create-artifact": true, "fingerprint": true,
 	"inventory": true, "validate": true, "status": true, "context": true,
-	"commits-since-file": true,
+	"commits-since-file": true, "migration-check-tasks": true, "prepare": true,
+	"capture-evidence": true,
 }
 
 // skillOperationsAllowlist is data-model.md's per-Skill operations
@@ -56,7 +57,7 @@ var skillOperationsAllowlist = map[string][]string{
 	"mister-specify":        {"resolve", "children", "create", "validate"},
 	"mister-plan":           {"resolve", "inspect", "context", "create-artifact", "validate"},
 	"mister-tasks":          {"resolve", "inspect", "context", "create-artifact", "validate"},
-	"mister-implement":      {"resolve", "inspect", "context", "validate"},
+	"mister-implement":      {"resolve", "inspect", "context", "validate", "prepare", "capture-evidence"},
 	"mister-analyze":        {"resolve", "inspect", "context", "create-artifact", "validate"},
 	"mister-wrap-up":        {"resolve", "inspect", "inventory", "context", "commits-since-file"},
 }
@@ -83,6 +84,8 @@ func assertSkillConformant(t *testing.T, name string) {
 	assertSectionsPresentInOrder(t, name, content)
 	assertOperationsAllowlisted(t, name, content)
 	assertCompletionContractConcepts(t, name, content)
+	assertExampleSyntax(t, name, content)
+	assertVerificationCapabilities(t, name, content)
 }
 
 func assertFrontmatter(t *testing.T, name, content string) {

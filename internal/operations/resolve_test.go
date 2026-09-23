@@ -128,6 +128,88 @@ func TestResolve_WrongWidthIsInvalidNotNotFound(t *testing.T) {
 	}
 }
 
+// TestResolveTask_CompositeResolvesEachSpecIndependently covers spec.md
+// User Story 1 / Acceptance Scenarios 1-2: two Specs each with a
+// TASK-001 must resolve to two different locations via the composite
+// form, never mixed up.
+func TestResolveTask_CompositeResolvesEachSpecIndependently(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 1\n\n- [ ] Complete\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 2\n\n- [ ] Complete\n")
+
+	locA, err := operations.ResolveTask(root, cfg, "SPEC-001:TASK-001", nil)
+	if err != nil {
+		t.Fatalf("ResolveTask(SPEC-001:TASK-001) unexpected error: %v", err)
+	}
+	wantA := "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md#TASK-001"
+	if locA.Path != wantA {
+		t.Errorf("ResolveTask(SPEC-001:TASK-001) Path = %q, want %q", locA.Path, wantA)
+	}
+
+	locB, err := operations.ResolveTask(root, cfg, "SPEC-002:TASK-001", nil)
+	if err != nil {
+		t.Fatalf("ResolveTask(SPEC-002:TASK-001) unexpected error: %v", err)
+	}
+	wantB := "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md#TASK-001"
+	if locB.Path != wantB {
+		t.Errorf("ResolveTask(SPEC-002:TASK-001) Path = %q, want %q", locB.Path, wantB)
+	}
+
+	if locA.Path == locB.Path {
+		t.Fatal("both composite references resolved to the same location, want distinct")
+	}
+}
+
+// TestResolveTask_BareAmbiguousRequiresSpecContext covers spec.md FR-003
+// / Acceptance Scenario 3: a bare TASK-001 claimed by two Specs must
+// fail with SpecContextRequiredError naming both candidates, never an
+// arbitrary pick and never ErrEntityAmbiguous.
+func TestResolveTask_BareAmbiguousRequiresSpecContext(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 1\n\n- [ ] Complete\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 2\n\n- [ ] Complete\n")
+
+	_, err := operations.ResolveTask(root, cfg, "TASK-001", nil)
+	if !errors.Is(err, operations.ErrSpecContextRequired) {
+		t.Fatalf("ResolveTask(TASK-001) error = %v, want errors.Is(err, ErrSpecContextRequired)", err)
+	}
+	var scErr *operations.SpecContextRequiredError
+	if !errors.As(err, &scErr) {
+		t.Fatalf("ResolveTask(TASK-001) error = %v, want a *operations.SpecContextRequiredError", err)
+	}
+	if scErr.TaskNumber != 1 {
+		t.Errorf("SpecContextRequiredError.TaskNumber = %d, want 1", scErr.TaskNumber)
+	}
+	if len(scErr.Candidates) != 2 {
+		t.Fatalf("SpecContextRequiredError.Candidates = %v, want 2 entries", scErr.Candidates)
+	}
+}
+
+// TestResolveTask_BareUniqueAcrossProjectStillResolves covers spec.md
+// FR-009: a bare TASK-001 claimed by exactly one Spec project-wide still
+// resolves without requiring the composite form.
+func TestResolveTask_BareUniqueAcrossProjectStillResolves(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-001 — Only one\n\n- [ ] Complete\n")
+
+	loc, err := operations.ResolveTask(root, cfg, "TASK-001", nil)
+	if err != nil {
+		t.Fatalf("ResolveTask(TASK-001) unexpected error: %v", err)
+	}
+	want := "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md#TASK-001"
+	if loc.Path != want {
+		t.Errorf("ResolveTask(TASK-001) Path = %q, want %q", loc.Path, want)
+	}
+}
+
 func TestResolve_KnowledgeFlatFile(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()

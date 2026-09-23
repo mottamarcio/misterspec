@@ -127,7 +127,10 @@ Required operations:
 - `internal context SPEC-### --intent wrap-up` — request a budgeted
   Context Pack before broader exploration. If this fails, proceed
   using this Skill's own Required Context above instead — it is never
-  a Failure Condition.
+  a Failure Condition. Record the occurrence as
+  `context_fallbacks` in this task's own RunRecord once one exists,
+  rather than silently absorbing the extra read
+  (037-eval-quality-efficiency).
 
 ## Procedure
 

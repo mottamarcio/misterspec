@@ -68,6 +68,21 @@
       <p><strong>Purpose:</strong> Return deterministic metadata for an artifact.</p>
       <pre><code>misterspec internal inspect SPEC-014
 {"ok":true,"entity":{"id":"SPEC-014","type":"spec","status":"ready","parent":"FEAT-004","depends_on":["SPEC-011"],"supersedes":[]}}</code></pre>
+      <p>
+        A Task number is only unique <em>within</em> its owning Spec —
+        two different Specs may each have their own <code>TASK-001</code>.
+        To name a Task unambiguously from outside its own Spec, use the
+        composite form <code>SPEC-###:TASK-###</code>:
+      </p>
+      <pre><code>misterspec internal inspect SPEC-014:TASK-003
+{"ok":true,"entity":{"id":"TASK-003","type":"tasks","status":"pending","parent":"SPEC-014","depends_on":[],"supersedes":[]}}</code></pre>
+      <p>
+        A bare <code>TASK-###</code> (no Spec given) still resolves when
+        exactly one Spec in the project claims that number. When more
+        than one Spec claims it, the command fails with
+        <code>spec_context_required</code> instead of guessing — retry
+        with the composite form.
+      </p>
 
       <h2 id="internal-parent">internal parent &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return the structural parent.</p>
@@ -106,6 +121,134 @@
       <p><strong>Purpose:</strong> Run structural validation — one entity if an ID is given, the whole project otherwise.</p>
       <pre><code>misterspec internal validate SPEC-014
 {"ok":true,"valid":true,"findings":[]}</code></pre>
+      <p>
+        Duplicate Task IDs are flagged only <em>within</em> the same
+        Spec's Tasks artifact — two different Specs legitimately sharing
+        a <code>TASK-NNN</code> number is not reported as a duplicate.
+      </p>
+      <p>
+        Validation also checks a Spec's declared requirements
+        (<code>### R1</code>, <code>### R2</code>, …) against each
+        Task's own <code>Serves: SPEC-###:R#</code> reference: an
+        uncovered requirement, a reference to a nonexistent or
+        cross-Spec requirement, and a Task with no <code>Serves:</code>
+        line at all are all reported. A Spec still in
+        <code>draft</code> is exempt from this coverage check; any
+        later status blocks on incomplete coverage
+        (<code>phase_gate_blocked</code>, emitted alongside the
+        underlying finding it escalates). Separately, every Spec's
+        <code>depends_on</code> graph is checked for cycles — including
+        a Spec depending on itself — reported with the full cycle path.
+      </p>
+
+      <h2 id="internal-migration-check-tasks">internal migration-check-tasks</h2>
+      <p><strong>Purpose:</strong> Read-only diagnostic listing every Task number claimed by more than one Spec project-wide — the cases that would have collided under the old, project-wide Task numbering. Never modifies any artifact.</p>
+      <pre><code>misterspec internal migration-check-tasks
+{"ok":true,"collisions":[{"task_number":1,"specs":["SPEC-001","SPEC-002"],"paths":["ai/.../SPEC-001/tasks.md#TASK-001","ai/.../SPEC-002/tasks.md#TASK-001"]}]}</code></pre>
+      <p>An empty <code>collisions</code> array is the common, healthy outcome — it is not an error.</p>
+
+      <h2 id="internal-prepare">internal prepare SPEC-### [--task TASK-###]</h2>
+      <p><strong>Purpose:</strong> Assemble everything needed to start one Task — identity, readiness, served requirements' own text, declared scope, verification method, and associated Plan sections — in a single, read-only response. No command is ever executed.</p>
+      <p><strong>Flags:</strong> <code>--task &lt;id&gt;</code> (optional — bare <code>TASK-###</code> or composite <code>SPEC-###:TASK-###</code>; omit to auto-select the lowest-numbered Ready Task in the Spec).</p>
+      <pre><code>misterspec internal prepare SPEC-014 --task TASK-003
+{"ok":true,"preparation":{"task":"SPEC-014:TASK-003","heading":"Add refresh-token rotation",
+"ready":true,"blockers":[],
+"requirements":[{"ref":"SPEC-014:R1","content":"### R1 — ...","fingerprint":"sha256:..."}],
+"scope":"internal/auth/refresh.go","verify":"go test ./internal/auth/... -run TestRefreshRotation",
+"plan_sections":[{"heading":"Implementation Sequence","content":"...","fingerprint":"sha256:...","matched_requirements":["SPEC-014:R1"]}],
+"code_context":[{"path":"internal/auth/refresh.go","heading":"RotateRefreshToken",
+"content":"func RotateRefreshToken() error { ... }","location":{"path":"internal/auth/refresh.go","start_line":40,"end_line":40},
+"fingerprint":"sha256:9c1a..."}],
+"code_scope_not_found":[]}}</code></pre>
+      <p>
+        <code>code_context</code>/<code>code_scope_not_found</code>
+        (044-architecture-code-context-rules) resolve <code>scope</code>
+        against a disposable, fingerprinted index of the project's own
+        <code>.go</code> declarations — one entry per declaration named
+        by <code>Scope:</code>, plus any test already associated with
+        it, rendered in the same shape <a href="#internal-context"><code>internal
+        context --mode package</code></a> already uses for content.
+        Each item's own <code>content</code> is the declaration's full
+        body when the owning file's total estimated size is small
+        enough, its signature alone otherwise — never the full body of
+        every file unconditionally. A <code>Scope:</code> path that no
+        longer resolves to an indexed file is named explicitly in
+        <code>code_scope_not_found</code>, never silently dropped.
+      </p>
+      <p>
+        A blocked Task keeps <code>ok:true</code> but sets <code>ready:false</code>
+        with named <code>blockers</code>, and exits <code>10</code> — distinct from
+        <code>internal validate</code>'s own <code>4</code>, since "this Task isn't
+        actionable yet" is a different condition than a structural project problem.
+      </p>
+      <p>
+        When no Task is named and none in the Spec is currently ready:
+      </p>
+      <pre><code>misterspec internal prepare SPEC-014
+{"ok":true,"preparation":null,"message":"no Task in SPEC-014 is ready — every Task is either complete or blocked"}</code></pre>
+      <p>
+        Recognizes three new Task-body labels, alongside the existing <code>Serves:</code>:
+        <code>Depends on: TASK-###</code> (or <code>none</code> — absence means the same
+        thing), <code>Scope:</code>, and <code>Verify:</code>. A <code>Depends on:</code>
+        cycle or a reference to a nonexistent/cross-Spec Task is also caught by
+        <code>internal validate</code> as <code>task_dependency_cycle</code> /
+        <code>invalid_task_dependency</code>.
+      </p>
+
+      <h2 id="internal-check-architecture">internal check-architecture</h2>
+      <p><strong>Purpose:</strong> Evaluate the project's own declared architecture rules (forbidden dependency, layer boundary, required contract — <code>architecture_rules</code> in <code>.misterspec/config.yaml</code>) against the current Go source tree. Every rule always reports exactly one of three statuses: <code>pass</code>, <code>fail</code>, or <code>not_evaluated</code> — never a silent <code>pass</code> for a rule or a project the one shipped adapter (Go) can't actually check.</p>
+      <p><strong>Flags:</strong> none beyond the universal <code>--dir</code>; rules and <code>code_exclusions</code> come entirely from the project's own config.</p>
+      <pre><code>misterspec internal check-architecture
+{"ok":true,"architecture":{"adapter":"go",
+"results":[{"rule_index":0,"status":"fail","path":"internal/artifacts/parser.go","line":12,
+"message":"internal/artifacts imports internal/cli/internalcmd, which this rule forbids","reason":""},
+{"rule_index":1,"status":"not_evaluated","path":"","line":0,
+"message":"rule kind \"required_contract\" is not supported by the go adapter","reason":"rule_kind_unsupported"}]}}</code></pre>
+      <p>
+        A project with no <code>go.mod</code> at its root returns
+        <code>"adapter":""</code> with every declared rule reported
+        <code>not_evaluated</code>/<code>"reason":"no_adapter_for_project"</code>
+        — never approved by default just because nothing could check
+        it. Zero declared rules still returns <code>ok:true</code> with
+        an empty <code>results</code> array, not an error. A rule's own
+        <code>to</code> pattern names an import path relative to the
+        project's own module (e.g. <code>internal/cli/internalcmd</code>),
+        not the full <code>github.com/...</code> import string — the
+        module prefix is stripped automatically for an internal import;
+        an external dependency's own full import path is matched
+        as-is.
+      </p>
+
+      <h2 id="internal-capture-evidence">internal capture-evidence SPEC-### --task TASK-###</h2>
+      <p><strong>Purpose:</strong> Compute a Task's own content fingerprint and Git snapshot, optionally run one explicit, fully-specified verification command, and return the result as structured <code>Evidence-*:</code> fields — the framework's answer to "this Task is checked complete" no longer being trusted on its own (a checked box with no evidence still reports <code>"pending"</code> from <a href="#internal-prepare">internal prepare</a> and <code>unverified_task</code> from <a href="#internal-validate">internal validate</a>). Never writes into <code>tasks.md</code> itself — recording the returned fields as the Task's own <code>Evidence-*:</code> body lines stays <code>/mister-implement</code>'s job.</p>
+      <p><strong>Flags:</strong> <code>--task &lt;id&gt;</code> (required — bare <code>TASK-###</code> or composite <code>SPEC-###:TASK-###</code>); <code>--origin automated|declared</code> (required); <code>--by &lt;string&gt;</code> (required — the tool or person capturing this evidence); <code>--result pass|fail</code> (required iff <code>--origin declared</code>; forbidden otherwise — an automated result is derived from the command's own exit code, never asserted); <code>--command &lt;string&gt;</code> (required iff <code>--origin automated</code>; forbidden otherwise — never inferred from prose); <code>--args &lt;string&gt;</code> (repeatable); <code>--exec-dir &lt;path&gt;</code> (default <code>.</code>, relative to the project root — distinct from <code>--dir</code>, which names the *project* directory on every <code>internal</code> command); <code>--timeout &lt;duration&gt;</code> (default <code>2m</code>).</p>
+      <pre><code>misterspec internal capture-evidence SPEC-014 --task TASK-003 \
+  --origin declared --by "reviewer:alice" --result pass
+{"ok":true,"evidence":{"task":"TASK-003","result":"pass","origin":"declared",
+"by":"reviewer:alice","captured_at":"2026-09-22T14:30:00Z",
+"git_revision":"a1b2c3d","working_tree":"clean","input_fingerprint":"sha256:9f2c..."}}</code></pre>
+      <p><strong>Automated origin</strong> — runs the given command, captures its real exit code as <code>result</code>, and writes its full combined output to a new sibling <code>&lt;specDir&gt;/evidence/&lt;Task&gt;-&lt;timestamp&gt;.log</code> (never inlined into the response):</p>
+      <pre><code>misterspec internal capture-evidence SPEC-014 --task TASK-003 \
+  --origin automated --by "go test" \
+  --command go --args test --args ./internal/foo/... \
+  --exec-dir . --timeout 90s
+{"ok":true,"evidence":{"task":"TASK-003","result":"fail","origin":"automated",
+"by":"go test","captured_at":"2026-09-22T14:31:12Z","command":"go test ./internal/foo/...",
+"git_revision":"a1b2c3d","working_tree":"dirty","input_fingerprint":"sha256:9f2c...",
+"log":"ai/.../SPEC-014/evidence/TASK-003-20260922T143112Z.log"}}</code></pre>
+      <p>
+        A command that runs and exits non-zero still returns
+        <code>ok:true</code> with <code>result:"fail"</code> — that is a
+        successful *capture* of a failure, not an operational error.
+        <code>working_tree</code> is <code>"clean"</code> or
+        <code>"dirty"</code>: the SHA alone is never treated as
+        sufficient when the working tree had relevant local changes at
+        capture time. A failed capture (bad <code>--exec-dir</code>,
+        malformed request — <code>--origin declared</code> with
+        <code>--command</code>, or vice versa) returns
+        <code>invalid_argument</code>, never a silently accepted
+        half-populated result.
+      </p>
 
       <h2 id="internal-status">internal status</h2>
       <p><strong>Purpose:</strong> Return a machine-facing structural status summary for the whole project.</p>
@@ -115,12 +258,25 @@
       <h2 id="internal-references">internal references &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return an artifact's outgoing formal and semantic relationships.</p>
       <pre><code>misterspec internal references SPEC-014
-{"ok":true,"references":{"formal":[{"relation":"depends_on","target":"SPEC-011"}],"semantic":[{"relation":"wikilink","target":"KNOW-003"}]}}</code></pre>
+{"ok":true,"references":{"formal":[{"relation":"depends_on","target":"SPEC-011",
+"source_path":"ai/.../SPEC-014/spec.md","source_section":"","source_line":0}],
+"semantic":[{"relation":"wikilink","target":"KNOW-003",
+"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}}</code></pre>
+      <p>
+        <code>source_path</code> is always populated — the queried
+        artifact's own path, regardless of relation kind.
+        <code>source_section</code>/<code>source_line</code> are
+        populated only for a semantic (<code>wikilink</code>) entry —
+        empty/zero for a formal one, which has no line-level wikilink
+        origin to report (038-wikilink-chunk-provenance).
+      </p>
 
       <h2 id="internal-backlinks">internal backlinks &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return every artifact that formally or semantically references the given artifact.</p>
       <pre><code>misterspec internal backlinks SPEC-011
-{"ok":true,"backlinks":{"formal":[{"relation":"depends_on","source":"SPEC-014"}],"semantic":[]}}</code></pre>
+{"ok":true,"backlinks":{"formal":[{"relation":"depends_on","source":"SPEC-014",
+"source_path":"ai/.../SPEC-014/spec.md","source_section":"","source_line":0}],"semantic":[]}}</code></pre>
+      <p>Same <code>source_path</code>/<code>source_section</code>/<code>source_line</code> fields as <code>internal references</code>, from the referencing (source) artifact's own perspective.</p>
 
       <h2 id="internal-context">internal context &lt;id&gt;</h2>
       <p><strong>Purpose:</strong> Return a budgeted, ranked context pack for an artifact — the <a href="context-engine.html">Context Engine</a>'s own single entry point.</p>
@@ -129,15 +285,66 @@
         <li><code>--intent</code> — <code>planning</code>, <code>tasks</code>, <code>implementation</code>, <code>validation</code>, or <code>analysis</code>.</li>
         <li><code>--task &lt;text&gt;</code> — the current task's own text.</li>
         <li><code>--query &lt;text&gt;</code> — free-text query.</li>
-        <li><code>--budget &lt;int&gt;</code> — token budget, including negative (default: 6000 when omitted). Must be a valid integer, or the command fails with <code>invalid_argument</code>.</li>
-        <li><code>--render</code> — additionally include a rendered Markdown context pack.</li>
+        <li><code>--budget &lt;int&gt;</code> — the soft limit: the target for how much <em>optional</em> content to include, including negative (default: 6000 when omitted). Must be a valid integer, or the command fails with <code>invalid_argument</code>. Never used to flag mandatory content as excessive — see <code>--hard-limit</code>.</li>
+        <li><code>--hard-limit &lt;int&gt;</code> — the hard limit: the ceiling above which mandatory content is reported as exceeded (default: 12000, twice <code>--budget</code>'s own default, when omitted — never treated as "no limit"). Independent of <code>--budget</code>; a smaller <code>--hard-limit</code> than <code>--budget</code> is accepted, not rejected. Must be a valid integer, or the command fails with <code>invalid_argument</code>.</li>
+        <li><code>--render</code> — additionally include a rendered Markdown context pack. Unchanged since before <code>--mode</code> existed; cannot be combined with <code>--mode package</code>.</li>
+        <li><code>--mode</code> — <code>manifest</code> (default — metadata only, exactly today's shape), <code>package</code> (every item also carries <code>content</code>, a file-absolute <code>location</code>, and a <code>fingerprint</code>), or <code>markdown</code> (an explicit name for <code>--render</code>'s own shape).</li>
+        <li><code>--query-mode</code> — <code>free</code> (default — every token in <code>--query</code>/<code>--task</code> is literal text; FTS5 reserved characters/keywords can never cause a syntax error) or <code>advanced</code> (the query is passed to FTS5's own MATCH grammar unmodified — phrase, prefix, boolean, and <code>NEAR</code> syntax honored). Never inferred from the query text — always this explicit flag. An unrecognized value fails with <code>invalid_argument</code>; a malformed <code>advanced</code> expression fails with <code>query_syntax_error</code>.</li>
+        <li><code>--diagnostic-scores</code> — additionally include each item's own <code>score_components</code> breakdown (<code>tier</code>, <code>relation_weight</code>, <code>intent_bonus</code>, <code>text_relevance</code>, <code>section_preference</code>, <code>total</code>). Omitted by default in every mode.</li>
+        <li><code>--provenance</code> — additionally include, for every item whose inclusion is backed by real wikilink occurrence data (a <code>wikilink</code> reason, or a <code>backlink</code> reason built from a semantic wikilink), a <code>provenance</code> array naming the exact referencing artifact, section, and line. An item with no such occurrence data (e.g. <code>target</code>, <code>constitution</code>, a formal relation) never gets the key at all — not even an empty array. Omitted by default in every mode.</li>
+        <li><code>--prefer-section</code> — <strong>experimental, off by default.</strong> Scores a wikilink-derived reference higher when its own occurrence's section case-insensitively matches <code>Requirements</code> or <code>Functional Requirements</code>. Omitting this flag leaves ordering byte-identical to this feature never having existed — it exists only so the <a href="dogfooding.html#eval-harness">evaluation harness</a> can record a comparison against default ordering before any future Spec considers promoting it.</li>
+        <li><code>--base &lt;pack_id&gt;</code> — <code>--mode package</code> only. A <code>pack_id</code> returned by a previous <code>--mode package</code> call (for the same or a different request) — returns only what changed since it (<code>diff</code>), or the full package explicitly marked <code>recovered: true</code> when the base can't be confirmed. Never trusted as an assertion: a <code>--base</code> value alone, with no matching stored pack, is always treated as unknown. Combined with any mode other than <code>package</code>, fails with <code>invalid_argument</code>.</li>
       </ul>
       <pre><code>misterspec internal context SPEC-014 --intent implementation --budget 700
-{"ok":true,"context":{"target":"SPEC-014","intent":"implementation","budget":700,
+{"ok":true,"context":{"schema_version":4,"target":"SPEC-014","intent":"implementation","budget":700,
 "estimated_tokens":589,"budget_exceeded":false,"overage":0,
 "items":[{"path":"ai/.../SPEC-014/spec.md","tier":"mandatory","reasons":["target"],"score":100,"tokens":107}],
-"diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7},
+"diagnostics":{"candidates_considered":18,"items_selected":9,"reduction_percent":61.7,"payload_tokens":589,
+"estimator":"default","hard_limit":12000,"exclusions":[],"ranking_version":1},
 "rendered":null}}</code></pre>
+      <p>
+        <code>schema_version</code> is now <code>4</code> (038-wikilink-chunk-provenance's new opt-in <code>--provenance</code> field). It was bumped to <code>3</code> by 036-text-search-ranking: same-tier free-text ordering is now driven by SQLite's own <code>bm25()</code> relevance value instead of a recomputed term-occurrence heuristic, and <code>diagnostics.ranking_version</code> identifies the scoring formula/weight set that produced a response's ordering — bumped only after comparative evaluation evidence supports a change, never silently under the same value. Earlier fields (<code>diagnostics.estimator</code>, <code>diagnostics.hard_limit</code>, <code>diagnostics.exclusions</code>) and behavior are unchanged.
+      </p>
+      <p><strong><code>--diagnostic-scores</code></strong> — each item gains a <code>score_components</code> breakdown, in every mode:</p>
+      <pre><code>misterspec internal context SPEC-014 --query "refresh token" --diagnostic-scores
+{"ok":true,"context":{"schema_version":4, ...
+"items":[{"path":"ai/knowledge/KNOW-002.md","tier":"text","reasons":["text_match"],"score":27,"tokens":42,
+"score_components":{"tier":3,"relation_weight":0,"intent_bonus":0,"text_relevance":27,"section_preference":0,"total":27}}],
+"diagnostics":{"...":"...","ranking_version":1},
+"rendered":null}}</code></pre>
+      <p><strong><code>--provenance</code></strong> — every wikilink-backed item names exactly where it was referenced from:</p>
+      <pre><code>misterspec internal context KNOW-003 --provenance
+{"ok":true,"context":{"schema_version":4, ...
+"items":[{"path":"ai/.../SPEC-014/spec.md","tier":"semantic","reasons":["backlink"],"score":65,"tokens":11,
+"provenance":[{"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}],
+"rendered":null}}</code></pre>
+      <p><strong><code>--mode package</code></strong> — every item's own selected text, delivered directly, with a file-absolute location and a content fingerprint, so a caller never has to re-read the source file for content already in the response. Every <code>--mode package</code> response also carries its own <code>pack_id</code> (043-incremental-context-reuse), reusable as a future <code>--base</code>:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package
+{"ok":true,"context":{"schema_version":6,"target":"SPEC-014", ...
+"pack_id":"sha256:6614b8dd...",
+"items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
+"reasons":["target"],"score":100,"tokens":107,
+"content":"### R1 — First\n\nThe system MUST ...\n",
+"location":{"path":"ai/.../SPEC-014/spec.md","start_line":14,"end_line":18},
+"fingerprint":"sha256:3a7bd3e2360a3d..."}],
+"diagnostics":{"...":"...","payload_tokens":742,"estimator":"default","hard_limit":12000,"exclusions":[],"ranking_version":1},
+"rendered":null}}</code></pre>
+      <p><strong><code>--base &lt;pack_id&gt;</code></strong> (043-incremental-context-reuse) — pass a previously returned <code>pack_id</code> back in, and get only what changed since it. A caller that repeats the same request with no source change gets an all-<code>"reuse"</code> diff — no content resent at all:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package --base sha256:6614b8dd...
+{"ok":true,"context":{"schema_version":6,"pack_id":"sha256:6614b8dd...",
+"diff":{"base_pack_id":"sha256:6614b8dd...","entries":[{"kind":"reuse","base_index":0}],"removed":[]},
+"reuse":{"items_reused":1,"items_sent":0,"tokens_saved_estimate":10},
+"...":"... every other field unchanged ..."}}</code></pre>
+      <p>
+        Applying the diff — replacing each <code>"reuse"</code> entry with the named base pack's own item at <code>base_index</code>, keeping every <code>"added"</code>/<code>"modified"</code> entry's own <code>item</code>, in the response's own <code>entries</code> order — reproduces the exact full package a direct, <code>--base</code>-less call would return. A <code>--base</code> the system can't confirm (unknown, or computed under a different <code>--intent</code>/<code>--budget</code>/ranking or contract version) never returns a partial result — it falls back to the full package, explicitly marked:
+      </p>
+      <pre><code>misterspec internal context SPEC-014 --mode package --base sha256:0000...
+{"ok":true,"context":{"pack_id":"sha256:af02...","recovered":true,"reason":"unknown_base",
+"items":[ "... full package, same shape as a --base-less call ..." ],
+"reuse":{"items_reused":0,"items_sent":2,"tokens_saved_estimate":0}}}</code></pre>
+      <p>
+        <code>reason</code> is <code>"unknown_base"</code> (no stored pack for that <code>pack_id</code>) or <code>"invalidated"</code> (a stored pack existed, but this call's own request configuration no longer matches it — a pure content-only change never triggers this, it stays diffable). This local reuse mechanism is entirely independent of any LLM provider's own prompt caching — <code>reuse</code> reports a locally measured item/token count, never a claimed dollar or provider-side cost saving.
+      </p>
 
       <h2 id="internal-commits-since-file">internal commits-since-file</h2>
       <p><strong>Purpose:</strong> Return every commit on the current branch since a given file was first added — the real basis <a href="workflow.html"><code>/mister-wrap-up</code></a> uses to synthesize a Spec's own downstream documentation.</p>
@@ -145,6 +352,66 @@
       <pre><code>misterspec internal commits-since-file --path specs/014-sqlite-index/plan.md
 {"ok":true,"available":true,"commits":[{"hash":"...","subject":"...","author_date":"2026-08-01"}]}</code></pre>
       <p><code>available</code> is <code>false</code> (never an error) when the target isn't a Git repository or the file was never committed.</p>
+
+      <h2 id="internal-eval-retrieval">internal eval-retrieval</h2>
+      <p><strong>Purpose:</strong> Run a fixed, versioned set of deterministic retrieval evaluation cases — entirely offline, no LLM session required, safe to run in CI on every change. Part of the <a href="dogfooding.html#eval-harness">evaluation harness</a> (Spec 037) that supersedes the one-off exercise described in <a href="dogfooding.html">Dogfooding &amp; Evaluation</a>.</p>
+      <p><strong>Flags:</strong> <code>--cases &lt;dir&gt;</code> (required — a directory of case YAML files, each naming a target, required/forbidden content, and the fixture directory to run against); <code>--out &lt;path&gt;</code> (optional — also write the full run record JSON to this path); <code>--variant</code>/<code>--repo-revision</code> (optional config labels recorded on the run, for later comparison).</p>
+      <pre><code>misterspec internal eval-retrieval --cases specs/037-.../fixture/cases
+{"ok":true,"schema_version":1,
+"result":{"run":{"run_id":"retrieval-2026-...","kind":"retrieval",
+"config":{"variant":"default","ranking_version":"1"},
+"results":[{"case_id":"free-text-query-01","passed":true,"missing":[],"unexpected":[],
+"positions":{"SPEC-100":8}}]},
+"summary":{"total":6,"passed":6,"failed":0}}}</code></pre>
+      <p>A failing case is reported inside <code>result</code>, not surfaced as a command failure — the run still succeeds (<code>ok:true</code>); a specific case's <code>missing</code>/<code>unexpected</code> arrays name exactly what didn't match, never only a lowered aggregate score.</p>
+
+      <h2 id="internal-eval-compare">internal eval-compare</h2>
+      <p><strong>Purpose:</strong> Compare a candidate run record against a named, recorded baseline — flagging when more than one configuration dimension changed at once, and surfacing a per-case regression even when an unrelated aggregate metric improves in the same comparison.</p>
+      <p><strong>Flags:</strong> <code>--baseline &lt;name&gt;</code> (required — a baseline recorded under <code>eval/baselines/</code>); <code>--candidate &lt;path&gt;</code> (required — a run record JSON file, e.g. from <code>eval-retrieval --out</code>); <code>--repetitions &lt;dir&gt;</code> (optional — additional same-config run records, used to tell a real change apart from normal run-to-run variance).</p>
+      <pre><code>misterspec internal eval-compare --baseline retrieval-2026-09 --candidate /tmp/candidate.json
+{"ok":true,"schema_version":1,
+"result":{"comparison":{"baseline_name":"retrieval-2026-09","candidate_run_id":"retrieval-2026-...",
+"dimension_diff":[],"changed_cases":[{"id":"free-text-query-01","baseline_outcome":"fail",
+"candidate_outcome":"pass","direction":"improved"}],
+"aggregate":{"success_rate":1.0}}}}</code></pre>
+      <p>
+        A non-empty <code>dimension_diff</code> means the candidate's own config differs from the baseline's in more than the one dimension the comparison was meant to isolate — the comparison still runs, but a caller reading it knows not to trust <code>changed_cases</code> as isolating a single cause. A baseline recorded against an older <code>ranking_version</code>/<code>context_schema_version</code> than the candidate is flagged as stale (<code>result.comparison.stale</code>) rather than silently trusted.
+      </p>
+
+      <h2 id="internal-analyze-impact">internal analyze-impact</h2>
+      <p><strong>Purpose:</strong> Report every artifact or Task with a known relation to what changed between two Git revisions — a Requirement's text change propagated to the Tasks that <code>Serves:</code> it, a formal <code>depends_on</code>/<code>parent</code>/<code>supersedes</code> backlink, a Task whose own recorded evidence is already stale/failed, or a wikilink-only mention (reported, but never as a certainty of breakage). Read-only — never mutates the filesystem.</p>
+      <p><strong>Flags:</strong> <code>--from &lt;revision&gt;</code> (required); <code>--to &lt;revision&gt;</code> (optional — default: the working tree); <code>--path &lt;path&gt;</code> (optional — scope the diff to one artifact instead of the whole project).</p>
+      <pre><code>misterspec internal analyze-impact --from a1b2c3d
+{"ok":true,"analyze_impact_schema_version":1,
+"change_set":{"from":"a1b2c3d","to":"working-tree",
+"elements":[{"id":"SPEC-014","path":"ai/.../SPEC-014/spec.md","status":"modified","requirement_number":2}],
+"unmapped_code_paths":0},
+"affected_items":[{"id":"SPEC-014:TASK-003","path":"ai/.../SPEC-014/tasks.md#TASK-003",
+"classification":"deterministic_invalidation","severity":"medium",
+"reason":"TASK-003 serves SPEC-014:R2, whose content changed between a1b2c3d and working-tree",
+"paths":[{"hops":[{"relation":"coverage","from":"SPEC-014","to":"SPEC-014:TASK-003",
+"source_path":"ai/.../SPEC-014/tasks.md","source_section":"","source_line":0}]}],
+"reverification_candidate":"SPEC-014:TASK-003"}],
+"no_known_relation_elements":[]}</code></pre>
+      <p>
+        <code>classification</code> is always exactly one of
+        <code>deterministic_invalidation</code> (a formal, coverage, or
+        already-broken-evidence relation) or
+        <code>suggested_review</code> — a wikilink-only mention is
+        <strong>never</strong> promoted to
+        <code>deterministic_invalidation</code>, structurally, not just
+        by convention. A multi-hop dependency chain is reported with
+        its full <code>paths[].hops</code> sequence, not only the
+        nearest hop, and the same item reached by more than one
+        distinct relation keeps every path separately. An element with
+        zero known relations is named explicitly in
+        <code>no_known_relation_elements</code> — its absence from
+        <code>affected_items</code> is never presented as a verified
+        absence of impact. <code>unmapped_code_paths</code> counts
+        changed paths this feature has no Requirement mapping for yet
+        (source code, pending a future architecture-rules Spec) —
+        declared, never silently dropped from the response.
+      </p>
 
       <h2 id="errors">Error codes</h2>
       <p>Every command shares the same error shape and code set:</p>
@@ -156,14 +423,20 @@
           <tbody class="divide-y divide-slate-200">
             <tr><td class="px-4 py-2"><code>entity_not_found</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">The ID doesn't resolve to any artifact.</td></tr>
             <tr><td class="px-4 py-2"><code>entity_ambiguous</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">The ID resolves to more than one artifact.</td></tr>
+            <tr><td class="px-4 py-2"><code>spec_context_required</code></td><td class="px-4 py-2">3</td><td class="px-4 py-2">A bare <code>TASK-###</code> is claimed by more than one Spec — retry as <code>SPEC-###:TASK-###</code>.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_target</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Wrong entity type for this operation.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_argument</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">A CLI-boundary problem (bad flag value, unrecognized type/kind).</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_intent</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --intent</code> value not recognized.</td></tr>
+            <tr><td class="px-4 py-2"><code>query_syntax_error</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>internal context --query-mode advanced</code> expression is malformed FTS5 syntax.</td></tr>
+            <tr><td class="px-4 py-2"><code>invalid_case</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">An <code>eval-retrieval</code> case file failed validation, or referenced an identifier that doesn't resolve.</td></tr>
+            <tr><td class="px-4 py-2"><code>incompatible_run</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>eval-compare</code>'s baseline and candidate run records have different <code>kind</code> (e.g. one <code>retrieval</code>, one <code>task_execution</code>) — refused rather than compared meaninglessly.</td></tr>
+            <tr><td class="px-4 py-2"><code>revision_not_found</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2"><code>analyze-impact</code>'s <code>--from</code> or a non-empty <code>--to</code> doesn't resolve in the project's Git repository.</td></tr>
             <tr><td class="px-4 py-2"><code>invalid_parent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The given <code>--parent</code> can't have this child type.</td></tr>
             <tr><td class="px-4 py-2"><code>already_exists</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">The target artifact already exists.</td></tr>
             <tr><td class="px-4 py-2"><code>unsupported_type</code></td><td class="px-4 py-2">2</td><td class="px-4 py-2">Unrecognized entity/artifact type or kind.</td></tr>
             <tr><td class="px-4 py-2"><code>path_outside_project</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2">A resolved path would escape the project root.</td></tr>
             <tr><td class="px-4 py-2"><code>project_not_initialized</code></td><td class="px-4 py-2">6</td><td class="px-4 py-2">No <code>.misterspec/config.yaml</code> found.</td></tr>
+            <tr><td class="px-4 py-2"><code>not_a_repository</code></td><td class="px-4 py-2">6</td><td class="px-4 py-2"><code>analyze-impact</code> targeted a directory that isn't a Git repository — there's no history to diff.</td></tr>
             <tr><td class="px-4 py-2"><code>already_initialized</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>init</code> targeted an already-bootstrapped project.</td></tr>
             <tr><td class="px-4 py-2"><code>unknown_agent</code></td><td class="px-4 py-2">5</td><td class="px-4 py-2"><code>--agent</code> ID not registered.</td></tr>
             <tr><td class="px-4 py-2"><code>checksum_mismatch</code></td><td class="px-4 py-2">7</td><td class="px-4 py-2"><code>--update</code>'s downloaded binary didn't match the published checksum — nothing was replaced.</td></tr>

@@ -103,3 +103,28 @@ type EntityID struct {
 func (id EntityID) String() string {
 	return fmt.Sprintf("%s-%0*d", id.Prefix, id.Width, id.Number)
 }
+
+// TaskID is a Task's composite identity: its owning Spec plus its own
+// local Task number (031-canonical-task-identity spec.md "Composite Task
+// Identity"). A Task number is only unique within its owning Spec's
+// tasks.md — two different Specs may each legitimately number their
+// first task TASK-001 — so TaskID, not Local alone, is what uniquely
+// names a Task project-wide.
+//
+// A TaskID parsed from a bare "TASK-NNN" reference (no Spec half given)
+// has a zero-value Spec (Spec.Number == 0, never valid on its own) — see
+// ParseTaskRef.
+type TaskID struct {
+	// Spec is the owning Spec's identity (Type == Spec). Zero-value when
+	// TaskID was parsed from a bare local reference with no Spec half.
+	Spec EntityID
+	// Local is the task's own local identity (Type == Task), unique only
+	// within Spec.
+	Local EntityID
+}
+
+// String renders id in its canonical composite form (e.g.
+// "SPEC-014:TASK-003").
+func (id TaskID) String() string {
+	return fmt.Sprintf("%s:%s", id.Spec.String(), id.Local.String())
+}

@@ -792,8 +792,10 @@ The deterministic validator shall detect at least:
 * invalid supersedes references;
 * broken artifact links where deterministically detectable;
 * duplicate requirement markers inside one Spec;
-* duplicate Task IDs;
-* Task references to nonexistent requirements;
+* duplicate Task IDs within the same Spec's Tasks artifact (Task numbering is scoped per Spec — the same `TASK-NNN` number legitimately appears in more than one Spec, see 031-canonical-task-identity);
+* Task references to nonexistent requirements or to a requirement of a different Spec;
+* a requirement declared in a Spec with no Task serving it, gated by lifecycle phase (tolerated while `draft`, blocking from `ready` onward — see 032-requirement-coverage-dependency-validation);
+* circular Spec `depends_on` relationships (a dependency cycle, including a Spec depending on itself), reported with the full cycle path;
 * missing Plan where Spec state requires a Plan;
 * missing Tasks where Spec state requires Tasks;
 * missing Validation artifact where required;
@@ -1319,19 +1321,45 @@ Recommended task form:
 ## TASK-001 — Add session persistence
 
 - [ ] Complete
-- Requirements: SPEC-001:R1, SPEC-001:R3
-- Depends on: none
-- Scope:
-  - internal/session/store.go
-- Verification:
-  - go test ./internal/session/...
-
-### Evidence
-
-Pending.
+Serves: SPEC-001:R1, SPEC-001:R3
+Depends on: none
+Scope: internal/session/store.go
+Verify: go test ./internal/session/...
 ```
 
-Task status should primarily use Markdown checkboxes rather than duplicate lifecycle metadata.
+Once verified (041-task-evidence-fingerprint), the Task additionally
+carries flat `Evidence-*:` lines recording that verification — never a
+nested "### Evidence" sub-heading, which `ParseDocument` would treat as
+ending this Task's own Section at that point (a Section always ends at
+the next heading of any level), silently detaching everything below it
+from this Task:
+
+```markdown
+- [x] Complete
+Serves: SPEC-001:R1, SPEC-001:R3
+Depends on: none
+Scope: internal/session/store.go
+Verify: go test ./internal/session/...
+Evidence-Result: pass
+Evidence-Origin: automated
+Evidence-By: /mister-implement
+Evidence-CapturedAt: 2026-09-22T14:30:00Z
+Evidence-Command: go test ./internal/session/...
+Evidence-GitRevision: a1b2c3d
+Evidence-WorkingTree: clean
+Evidence-Fingerprint: sha256:9f2c...
+Evidence-Log: .../SPEC-001/evidence/TASK-001-20260922T143000Z.log
+```
+
+Task status is a Markdown checkbox, but the checkbox alone is no longer
+sufficient: real completion additionally requires a valid, non-stale
+`Evidence-Result: pass` — `internal capture-evidence` computes the
+fingerprint/Git-state/verification-result fields above (never writing
+them itself); the calling Skill (`/mister-implement`) is the one that
+records them onto the Task (041-task-evidence-fingerprint, amending
+this section's earlier "checkboxes rather than duplicate lifecycle
+metadata" note — the checkbox remains the visible marker, but is no
+longer, by itself, proof of verification).
 
 ---
 

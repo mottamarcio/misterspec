@@ -1,6 +1,7 @@
 package index
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -249,6 +250,115 @@ func TestSync_NeverModifiesProjectFiles(t *testing.T) {
 	}
 	if string(before) != string(after) {
 		t.Errorf("SPEC-001's own file content changed after Sync/Rebuild — this feature must be strictly read-only with respect to project artifacts (FR-011)")
+	}
+}
+
+func TestIndexLinks_PopulatesSourceSectionAndLineForWikilinkNullForFormal(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md",
+		"---\nid: PRG-001\ntype: program\nstatus: active\n---\n## Overview\n\nThe program.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/feature.md",
+		"---\nid: FEAT-001\ntype: feature\nstatus: active\nparent: PRG-001\n---\n## Overview\n\nThe feature.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md",
+		"---\nid: SPEC-001\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n## Intent\n\nThe target.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md",
+		"---\nid: SPEC-002\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on:\n  - SPEC-001\nsupersedes: []\n---\n## Requirements\n\nSee [[SPEC-001]] for details.\n")
+	store := openTestStore(t, root)
+	if _, err := store.Sync(root, cfg); err != nil {
+		t.Fatalf("Sync() unexpected error: %v", err)
+	}
+
+	rows, err := store.db.Query(`SELECT relation, source_section, source_line FROM links WHERE source_artifact_id = 'SPEC-002' AND target_artifact_id = 'SPEC-001'`)
+	if err != nil {
+		t.Fatalf("querying links: %v", err)
+	}
+	defer rows.Close()
+
+	found := map[string]struct {
+		section sql.NullString
+		line    sql.NullInt64
+	}{}
+	for rows.Next() {
+		var relation string
+		var section sql.NullString
+		var line sql.NullInt64
+		if err := rows.Scan(&relation, &section, &line); err != nil {
+			t.Fatalf("scanning links row: %v", err)
+		}
+		found[relation] = struct {
+			section sql.NullString
+			line    sql.NullInt64
+		}{section, line}
+	}
+
+	wikilink, ok := found["wikilink"]
+	if !ok {
+		t.Fatalf("no wikilink row found for SPEC-002 -> SPEC-001; found relations: %v", found)
+	}
+	if !wikilink.section.Valid || wikilink.section.String != "Requirements" {
+		t.Errorf("wikilink source_section = %+v, want valid %q", wikilink.section, "Requirements")
+	}
+	if !wikilink.line.Valid || wikilink.line.Int64 <= 0 {
+		t.Errorf("wikilink source_line = %+v, want a valid positive line", wikilink.line)
+	}
+
+	dependsOn, ok := found["depends_on"]
+	if !ok {
+		t.Fatalf("no depends_on row found for SPEC-002 -> SPEC-001; found relations: %v", found)
+	}
+	if dependsOn.section.Valid || dependsOn.line.Valid {
+		t.Errorf("depends_on source_section/source_line = %+v/%+v, want both NULL (formal relation, spec FR-009)", dependsOn.section, dependsOn.line)
+	}
+}
+
+// TestSync_IndexesChunkAndLinkAnchors proves spec 040 data-model.md
+// "Index Schema (extended)": a Chunk's own Anchor lands in chunks.anchor,
+// and an anchor-qualified wikilink's target lands in
+// links.target_anchor — both NULL/empty for their non-anchor
+// counterparts.
+func TestSync_IndexesChunkAndLinkAnchors(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md",
+		"---\nid: PRG-001\ntype: program\nstatus: active\n---\n## Overview\n\nThe program.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/feature.md",
+		"---\nid: FEAT-001\ntype: feature\nstatus: active\nparent: PRG-001\n---\n## Overview\n\nThe feature.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md",
+		"---\nid: SPEC-001\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on: []\nsupersedes: []\n---\n## Retry Policy {#retry-policy}\n\nBackoff details.\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/spec.md",
+		"---\nid: SPEC-002\ntype: spec\nstatus: ready\nparent: FEAT-001\ndepends_on:\n  - SPEC-001\nsupersedes: []\n---\n## Requirements\n\nSee [[SPEC-001#retry-policy]] for details.\n")
+	store := openTestStore(t, root)
+	if _, err := store.Sync(root, cfg); err != nil {
+		t.Fatalf("Sync() unexpected error: %v", err)
+	}
+
+	var anchor sql.NullString
+	if err := store.db.QueryRow(`SELECT anchor FROM chunks WHERE heading = 'Retry Policy'`).Scan(&anchor); err != nil {
+		t.Fatalf("querying chunks.anchor: %v", err)
+	}
+	if !anchor.Valid || anchor.String != "retry-policy" {
+		t.Errorf("chunks.anchor = %+v, want valid %q", anchor, "retry-policy")
+	}
+
+	var targetAnchor sql.NullString
+	if err := store.db.QueryRow(
+		`SELECT target_anchor FROM links WHERE source_artifact_id = 'SPEC-002' AND target_artifact_id = 'SPEC-001' AND relation = 'wikilink'`,
+	).Scan(&targetAnchor); err != nil {
+		t.Fatalf("querying links.target_anchor (wikilink): %v", err)
+	}
+	if !targetAnchor.Valid || targetAnchor.String != "retry-policy" {
+		t.Errorf("links.target_anchor (wikilink) = %+v, want valid %q", targetAnchor, "retry-policy")
+	}
+
+	var dependsOnAnchor sql.NullString
+	if err := store.db.QueryRow(
+		`SELECT target_anchor FROM links WHERE source_artifact_id = 'SPEC-002' AND target_artifact_id = 'SPEC-001' AND relation = 'depends_on'`,
+	).Scan(&dependsOnAnchor); err != nil {
+		t.Fatalf("querying links.target_anchor (depends_on): %v", err)
+	}
+	if dependsOnAnchor.Valid {
+		t.Errorf("links.target_anchor (depends_on) = %+v, want NULL for a formal relation", dependsOnAnchor)
 	}
 }
 

@@ -61,6 +61,47 @@ type Configuration struct {
 	// automatically manages a dedicated Git branch for that Feature
 	// (022-feature-branch-automation). Defaults to true.
 	GitBranchAutomation bool `yaml:"git_branch_automation"`
+
+	// ArchitectureRules declares configurable architecture constraints
+	// (forbidden dependency, layer boundary, required contract) this
+	// project wants checked (044-architecture-code-context-rules
+	// data-model.md "ArchitectureRule (config)"). Optional; empty/nil
+	// when absent — zero declared rules is not an error.
+	ArchitectureRules []ArchitectureRule `yaml:"architecture_rules"`
+
+	// CodeExclusions is a list of glob patterns, relative to the
+	// project root, excluded from both architecture-rule evaluation
+	// and code-context indexing (research.md #4). Optional; empty/nil
+	// when absent.
+	CodeExclusions []string `yaml:"code_exclusions"`
+}
+
+// ArchitectureRule is one declared architecture constraint
+// (044-architecture-code-context-rules data-model.md
+// "ArchitectureRule (config)").
+type ArchitectureRule struct {
+	// Kind is one of "forbidden_dependency", "layer_boundary", or
+	// "required_contract".
+	Kind string `yaml:"kind"`
+	// From is a module/path pattern naming what the rule constrains.
+	From string `yaml:"from"`
+	// To is, for "forbidden_dependency", the forbidden import path
+	// pattern; for "layer_boundary", the boundary's own "outer"
+	// pattern From MUST NOT import from. Empty for "required_contract".
+	To string `yaml:"to"`
+	// Contract is, for "required_contract" only, the required import/
+	// symbol pattern From MUST import or implement. Empty otherwise.
+	Contract string `yaml:"contract"`
+}
+
+// validArchitectureRuleKinds is the fixed set Load accepts — any other
+// value is an invalid-configuration condition (data-model.md
+// "ArchitectureRule (config)": "A malformed rule... is itself a
+// configuration problem").
+var validArchitectureRuleKinds = map[string]bool{
+	"forbidden_dependency": true,
+	"layer_boundary":       true,
+	"required_contract":    true,
 }
 
 // Default configuration values, used by Load to fill in fields the project
@@ -120,6 +161,11 @@ type configYAML struct {
 	ProgramsRoot        *string `yaml:"programs_root"`
 	IDWidth             *int    `yaml:"id_width"`
 	GitBranchAutomation *bool   `yaml:"git_branch_automation"`
+	// ArchitectureRules/CodeExclusions need no pointer wrapper — a
+	// nil slice already unambiguously means "absent from the YAML"
+	// for Load's own purposes (044-architecture-code-context-rules).
+	ArchitectureRules []ArchitectureRule `yaml:"architecture_rules"`
+	CodeExclusions    []string           `yaml:"code_exclusions"`
 }
 
 // Load reads and validates root's .misterspec/config.yaml, returning a
@@ -210,6 +256,36 @@ func validateConfig(raw configYAML) (Configuration, error) {
 	} else {
 		cfg.GitBranchAutomation = *raw.GitBranchAutomation
 	}
+
+	for _, rule := range raw.ArchitectureRules {
+		if !validArchitectureRuleKinds[rule.Kind] {
+			return Configuration{}, &ConfigError{
+				Field:  "architecture_rules",
+				Reason: fmt.Sprintf("unrecognized kind %q", rule.Kind),
+			}
+		}
+		if rule.From == "" {
+			return Configuration{}, &ConfigError{
+				Field:  "architecture_rules",
+				Reason: fmt.Sprintf("rule of kind %q has an empty \"from\"", rule.Kind),
+			}
+		}
+		if rule.Kind == "required_contract" {
+			if rule.Contract == "" {
+				return Configuration{}, &ConfigError{
+					Field:  "architecture_rules",
+					Reason: fmt.Sprintf("rule of kind %q has an empty \"contract\"", rule.Kind),
+				}
+			}
+		} else if rule.To == "" {
+			return Configuration{}, &ConfigError{
+				Field:  "architecture_rules",
+				Reason: fmt.Sprintf("rule of kind %q has an empty \"to\"", rule.Kind),
+			}
+		}
+	}
+	cfg.ArchitectureRules = raw.ArchitectureRules
+	cfg.CodeExclusions = raw.CodeExclusions
 
 	return cfg, nil
 }

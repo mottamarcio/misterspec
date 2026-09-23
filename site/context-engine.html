@@ -24,7 +24,7 @@
   <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
     <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
 
-      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 011–017</p>
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 011–017, 035–036, 038</p>
       <h1>The Context Engine</h1>
       <p>
         misterspec's own "Second Brain" — a local-first, deterministic
@@ -50,7 +50,13 @@
           <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
           <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">016 Ranking</span>
           <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
-          <span class="px-2.5 py-1.5 rounded bg-slate-900 text-white">017 CLI</span>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">017 CLI</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">035 Budget Accuracy</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-white border border-slate-300">036 BM25 Search</span>
+          <iconify-icon icon="lucide:arrow-right" class="text-slate-400"></iconify-icon>
+          <span class="px-2.5 py-1.5 rounded bg-slate-900 text-white">038 Provenance</span>
         </div>
       </div>
 
@@ -130,7 +136,11 @@ misterspec internal context SPEC-014   # transparently rebuilds, same result</co
       already sharing the same Tier — Tier always dominates Score, an
       absolute, never-crossed invariant. <code>ApplyBudget</code> then
       fits the ranked list into a token budget, tier by tier, always
-      preserving mandatory content in full.</p>
+      preserving mandatory content in full. A separate, harder ceiling
+      (<a href="context-engine.html#budget-accuracy">035 · Budget and
+      Estimator Accuracy</a>) is what actually decides whether mandatory
+      content counts as "exceeded" — the budget here only ever shapes
+      optional content.</p>
       <p><strong>Why it exists:</strong> A strong but coincidental
       textual match must never outrank a real dependency, no matter how
       well it happens to match the request's own words — and a budget
@@ -151,11 +161,91 @@ misterspec internal context SPEC-014   # transparently rebuilds, same result</co
       in the <a href="commands.html#internal-context">Command
       Reference</a>.</p>
       <p><strong>Example</strong> — a deliberately tight budget, showing
-      mandatory content always wins:</p>
-      <pre><code>misterspec internal context SPEC-017 --intent planning --budget 300
-{"ok":true,"context":{"budget":300,"budget_exceeded":true,"overage":7,
+      mandatory content always wins (note: <code>budget_exceeded</code>
+      here compares against the hard limit, not <code>--budget</code>
+      itself — see <a href="#budget-accuracy">035</a>):</p>
+      <pre><code>misterspec internal context SPEC-017 --intent planning --budget 300 --hard-limit 300
+{"ok":true,"context":{"schema_version":2,"budget":300,"budget_exceeded":true,"overage":7,
 "items":[/* Constitution + target only — everything else trimmed */],
-"diagnostics":{"reduction_percent":80.0}}}</code></pre>
+"diagnostics":{"reduction_percent":80.0,"estimator":"default","hard_limit":300}}}</code></pre>
+
+      <h2 id="context-pack-output-contract">033 · Context Pack Output Contract</h2>
+      <p><strong>What it is:</strong> A new <code>--mode</code> flag on <code>internal context</code> — <code>manifest</code> (default, metadata only, byte-identical to before), <code>package</code> (every selected item's own full <code>content</code>, a file-absolute <code>location</code>, and a content <code>fingerprint</code>, delivered directly), or <code>markdown</code> (an explicit name for the existing <code>--render</code> shape). Every response also names its own <code>schema_version</code> explicitly, and no mode duplicates the same selected content in two representations at once.</p>
+      <p><strong>Why it exists:</strong> Before this, the default response carried only metadata (path, heading, score, tokens) — never the actual text — so every Context-Pack-aware Skill had to re-read the source files it was just told about, paying the mechanical cost 017's own single entry point was supposed to eliminate. <code>--mode package</code> closes that gap: an agent gets everything it needs to act, in one call, with each item independently locatable and fingerprinted so a later divergence from the source is always detectable.</p>
+      <p><strong>Example</strong> — full content, delivered directly:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package
+{"ok":true,"context":{"schema_version":2,"target":"SPEC-014",
+"items":[{"path":"ai/.../SPEC-014/spec.md","heading":"R1 — First","tier":"mandatory",
+"content":"### R1 — First\n\nThe system MUST ...\n",
+"location":{"path":"ai/.../SPEC-014/spec.md","start_line":14,"end_line":18},
+"fingerprint":"sha256:3a7bd3e2360a3d..."}]}}</code></pre>
+      <p>An existing caller that never passes <code>--mode</code> sees no change at all — <code>package</code> is strictly additive, and the two modes are never mixed in the same response (full detail in the <a href="commands.html#internal-context">Command Reference</a>).</p>
+
+      <h2 id="budget-accuracy">035 · Budget and Estimator Accuracy</h2>
+      <p><strong>What it is:</strong> Makes 016's own budget promise
+      actually true. The <code>Estimator</code> that produces every
+      token count is now identified by name in the response
+      (<code>diagnostics.estimator</code>). The single budget number is
+      split into two independent limits: a soft <em>budget</em> (the
+      target for optional content) and a separate, always-finite hard
+      <em>limit</em> (the ceiling above which mandatory content is
+      reported as exceeded) — a small <code>--budget</code> alone can no
+      longer misleadingly flag mandatory content as "exceeded."
+      <code>ApplyBudget</code> also stopped giving up on a whole
+      priority tier the instant one candidate didn't fit: it now keeps
+      trying smaller, later candidates of the same tier
+      (<code>diagnostics.exclusions</code> records what was skipped and
+      why), and an oversized single section can be included as a
+      coherent, un-truncated prefix instead of excluded outright.</p>
+      <p><strong>Why it exists:</strong> The <code>Estimator</code>
+      interface existed in the code since 013 but was never actually
+      used — nothing said which method produced a number. Separately,
+      one budget serving two different jobs (optional-content target
+      and mandatory-content ceiling) meant a small, deliberately narrow
+      <code>--budget</code> for a quick lookup could wrongly read as a
+      critical overage. See it fully documented in the
+      <a href="commands.html#internal-context">Command Reference</a>.</p>
+      <p><strong>Example</strong> — decoupled limits, no false alarm:</p>
+      <pre><code>misterspec internal context SPEC-017 --budget 500 --hard-limit 50000
+{"ok":true,"context":{"schema_version":2,"budget_exceeded":false,"overage":0,
+"diagnostics":{"estimator":"default","hard_limit":50000,"exclusions":[]}}}</code></pre>
+
+      <h2 id="text-search-ranking">036 · Robust Text Search and Measurable Ranking</h2>
+      <p><strong>What it is:</strong> Free-text queries (<code>--query</code>/<code>--task</code>) are now tokenized and escaped before reaching SQLite's FTS5 engine by default — ordinary punctuation can no longer throw a query-syntax error. An explicit <code>--query-mode advanced</code> opts into raw FTS5 grammar (phrase, prefix, boolean, <code>NEAR</code>) for callers who actually want it. Separately, same-tier free-text ordering now uses the real <code>bm25()</code> relevance value SQLite already computes, instead of a recomputed term-occurrence heuristic that was silently discarding it. A new <code>diagnostics.ranking_version</code> field identifies the scoring formula/weight set behind a response's own ordering — bumped only after comparative evaluation evidence supports a change, never silently under the same value.</p>
+      <p><strong>Why it exists:</strong> A query containing a colon, quotes, or parentheses (exactly the kind of text a real requirement or error message contains) could previously fail outright instead of returning results — the tier-first ranking invariant (016) was never at risk, but the tie-break signal within a tier was weaker than the data SQLite already had.</p>
+      <p><strong>Example</strong> — punctuation that used to fail now just works:</p>
+      <pre><code>misterspec internal context SPEC-014 --query 'retry-policy: "at most once" (idempotent)'
+{"ok":true,"context":{"schema_version":3, ...}}</code></pre>
+
+      <h2 id="wikilink-chunk-provenance">038 · Wikilinks with Chunk-Level Provenance</h2>
+      <p><strong>What it is:</strong> Every wikilink-based reference now carries its own provenance through to the Context Pack: which artifact wrote it, which section it falls under, and its own file-absolute line — not just "some artifact references this one." <code>internal references</code>/<code>internal backlinks</code> report <code>source_path</code>/<code>source_section</code>/<code>source_line</code> on every entry (empty/zero for a formal relation, which has no line-level wikilink origin); <code>internal context</code> exposes the same detail per item behind a new opt-in <code>--provenance</code> flag. A still-experimental, off-by-default <code>--prefer-section</code> flag can additionally score a reference written in a Requirements-bearing section above one written elsewhere — gated behind the same evidence-based promotion process as 036's own ranking changes (see <a href="dogfooding.html">Dogfooding &amp; Evaluation</a>) before it can ever become default ordering.</p>
+      <p><strong>Why it exists:</strong> Retrieval already included referenced content — it just couldn't explain <em>why</em> precisely enough to trust or act on. Recording the exact occurrence turns "SPEC-014 references this, somewhere" into "SPEC-014 references this from its own Requirements section, line 42" — a maintainer or agent can judge relevance without opening the source file.</p>
+      <p><strong>Example</strong> — an item's own exact origin:</p>
+      <pre><code>misterspec internal context KNOW-003 --provenance
+{"ok":true,"context":{"schema_version":4,
+"items":[{"path":"ai/.../SPEC-014/spec.md","tier":"semantic","reasons":["backlink"],
+"provenance":[{"source_path":"ai/.../SPEC-014/spec.md","source_section":"Requirements","source_line":42}]}]}}</code></pre>
+      <p>The underlying local index (<a href="#sqlite-index">014</a>) widened its own <code>links</code> table to store this — a version bump the index's own existing disposable-rebuild mechanism already handles transparently; no manual migration, ever (Constitution Principle III).</p>
+
+      <h2 id="stable-section-anchors">040 · Stable Section Anchors</h2>
+      <p><strong>What it is:</strong> A wikilink can now target one specific section of an artifact — <code>[[KNOW-003#retry-policy|Retry Policy]]</code> — via an explicit, stable anchor declared on the heading itself (<code>## Retry Policy {#retry-policy}</code>), independent of the heading's own title text. Resolving such a reference retrieves just that section (plus the minimal ancestor heading context needed to keep it meaningful) instead of the whole target artifact; the item carries <code>heading_path</code>/<code>anchor</code> in the response.</p>
+      <p><strong>Why it exists:</strong> Before this, pointing at "the retry policy inside KNOW-003" meant pulling in the entire Knowledge artifact just to reach one paragraph — expensive, and fragile the moment the artifact grows unrelated sections. A stable, explicitly-declared anchor survives a heading rename (the old §062 wikilink-foundation resolution stays based on the artifact ID; the anchor is a second, independent coordinate), and a broken/duplicate/unknown anchor is a validation Finding, never a silent fallback to the whole document.</p>
+      <p><strong>Example</strong> — an anchor-qualified reference resolves to just that section:</p>
+      <pre><code>misterspec internal context KNOW-001
+{"ok":true,"context":{"schema_version":5,
+"items":[{"path":"ai/knowledge/KNOW-003-x.md","heading":"Client Retry Policy",
+"heading_path":["Networking Policies"],"anchor":"retry-policy", ...}]}}</code></pre>
+      <p><code>internal validate</code> gains two new Codes for this: <code>unknown_anchor</code> (a wikilink names an anchor the target artifact doesn't declare) and <code>duplicate_anchor</code> (two sections in the same artifact declare the same explicit anchor) — see the <a href="commands.html#internal-validate">Command Reference</a>.</p>
+
+      <h2 id="incremental-context-reuse">043 · Incremental Context Pack Reuse</h2>
+      <p><strong>What it is:</strong> A new <code>--base &lt;pack_id&gt;</code> flag on <code>internal context --mode package</code>. Every <code>--mode package</code> response now names its own deterministic <code>pack_id</code> (a hash of the request's own resolved configuration plus every selected item's own content); passing a previously returned <code>pack_id</code> back in as <code>--base</code> returns only what changed since it — an ordered reuse-or-replace <code>diff</code>, never the unchanged content resent — or, when that base can't be confirmed, the full package again, explicitly marked <code>recovered: true</code>.</p>
+      <p><strong>Why it exists:</strong> A caller that already fetched a Context Pack once — starting the next Task in the same Spec, or resuming after its own context got compacted — paid the full cost again every time, even when nothing (or almost nothing) had changed. <code>--base</code> lets it ask for just the difference instead, with one non-negotiable safety rule: a claimed base is a lookup key, never an assertion — an unknown or config-mismatched <code>pack_id</code> always falls back to a full, clearly-marked response rather than a silently incomplete one. The underlying pack cache is explicitly disposable (a new table in 014's own local index) — losing it only ever costs one call's worth of reuse, never correctness.</p>
+      <p><strong>Example</strong> — repeating the same request, nothing changed:</p>
+      <pre><code>misterspec internal context SPEC-014 --mode package --base sha256:6614b8dd...
+{"ok":true,"context":{"schema_version":6,"pack_id":"sha256:6614b8dd...",
+"diff":{"base_pack_id":"sha256:6614b8dd...","entries":[{"kind":"reuse","base_index":0}],"removed":[]},
+"reuse":{"items_reused":1,"items_sent":0,"tokens_saved_estimate":10}}}</code></pre>
+      <p>This local reuse mechanism is entirely independent of any LLM provider's own prompt caching — <code>reuse</code> reports a locally measured item/token count, never a claimed dollar or provider-side cost saving. Full flag/response detail in the <a href="commands.html#internal-context">Command Reference</a>.</p>
 
     </div>
   </main>

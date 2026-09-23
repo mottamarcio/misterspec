@@ -313,6 +313,77 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 }
 
+// TestHeadCommit_ReturnsCurrentShortSHA is 041-task-evidence-fingerprint
+// T002 (Foundational): HeadCommit reports the current commit with
+// available == true inside a real repository with commits.
+func TestHeadCommit_ReturnsCurrentShortSHA(t *testing.T) {
+	dir := initFixtureRepo(t)
+	want := strings.TrimSpace(runGit(t, dir, "rev-parse", "--short", "HEAD"))
+
+	sha, available, err := HeadCommit(dir)
+	if err != nil {
+		t.Fatalf("HeadCommit() unexpected error: %v", err)
+	}
+	if !available {
+		t.Fatal("available = false inside a real repo with commits, want true")
+	}
+	if sha != want {
+		t.Errorf("HeadCommit() sha = %q, want %q", sha, want)
+	}
+}
+
+// TestHeadCommit_NotARepo mirrors CommitsSinceFileAdded's own "bool
+// separate from error" convention (research.md #7).
+func TestHeadCommit_NotARepo(t *testing.T) {
+	dir := t.TempDir()
+
+	sha, available, err := HeadCommit(dir)
+	if err != nil {
+		t.Fatalf("HeadCommit() unexpected error: %v", err)
+	}
+	if available {
+		t.Error("available = true outside a Git repository, want false")
+	}
+	if sha != "" {
+		t.Errorf("sha = %q, want \"\" when not available", sha)
+	}
+}
+
+// TestIsWorkingTreeDirty_CleanRepo is 041-task-evidence-fingerprint T003
+// (Foundational).
+func TestIsWorkingTreeDirty_CleanRepo(t *testing.T) {
+	dir := initFixtureRepo(t)
+
+	dirty, err := IsWorkingTreeDirty(dir)
+	if err != nil {
+		t.Fatalf("IsWorkingTreeDirty() unexpected error: %v", err)
+	}
+	if dirty {
+		t.Error("IsWorkingTreeDirty() = true for a freshly-committed repo with no local changes, want false")
+	}
+}
+
+func TestIsWorkingTreeDirty_UncommittedFile(t *testing.T) {
+	dir := initFixtureRepo(t)
+	writeFile(t, dir, "untracked.txt", "local change")
+
+	dirty, err := IsWorkingTreeDirty(dir)
+	if err != nil {
+		t.Fatalf("IsWorkingTreeDirty() unexpected error: %v", err)
+	}
+	if !dirty {
+		t.Error("IsWorkingTreeDirty() = false after writing an uncommitted file, want true")
+	}
+}
+
+func TestIsWorkingTreeDirty_NotARepo(t *testing.T) {
+	dir := t.TempDir()
+
+	if _, err := IsWorkingTreeDirty(dir); err == nil {
+		t.Error("IsWorkingTreeDirty() error = nil outside a Git repository, want non-nil")
+	}
+}
+
 // runGit is a small test-only helper — production code never has a
 // reason to run arbitrary Git subcommands beyond IsRepo/CurrentBranch/
 // BranchName/EnsureBranch's own fixed set.
@@ -325,4 +396,142 @@ func runGit(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 	return string(out)
+}
+
+// commitAll is a small test-only helper: stage everything and commit,
+// returning the new commit's short SHA (042-impact-analysis-review
+// T002/T003 fixtures).
+func commitAll(t *testing.T, dir, message string) string {
+	t.Helper()
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", message)
+	return strings.TrimSpace(runGit(t, dir, "rev-parse", "--short", "HEAD"))
+}
+
+// TestDiffNameStatus_AddedModifiedRemoved is 042-impact-analysis-review
+// T002 (Foundational): DiffNameStatus reports an added, a modified, and
+// a removed path correctly between two commits (contracts §1).
+func TestDiffNameStatus_AddedModifiedRemoved(t *testing.T) {
+	dir := initFixtureRepo(t)
+	writeFile(t, dir, "keep.md", "v1")
+	writeFile(t, dir, "remove.md", "v1")
+	from := commitAll(t, dir, "base")
+
+	writeFile(t, dir, "keep.md", "v2")
+	writeFile(t, dir, "added.md", "new")
+	if err := os.Remove(filepath.Join(dir, "remove.md")); err != nil {
+		t.Fatalf("removing remove.md: %v", err)
+	}
+	to := commitAll(t, dir, "change")
+
+	entries, err := DiffNameStatus(dir, from, to)
+	if err != nil {
+		t.Fatalf("DiffNameStatus() unexpected error: %v", err)
+	}
+
+	got := map[string]string{}
+	for _, e := range entries {
+		got[e.Path] = e.Status
+	}
+	if got["added.md"] != "A" {
+		t.Errorf("added.md status = %q, want \"A\"", got["added.md"])
+	}
+	if got["keep.md"] != "M" {
+		t.Errorf("keep.md status = %q, want \"M\"", got["keep.md"])
+	}
+	if got["remove.md"] != "D" {
+		t.Errorf("remove.md status = %q, want \"D\"", got["remove.md"])
+	}
+}
+
+// TestDiffNameStatus_EmptyToDiffsAgainstWorkingTree is 042-impact-
+// analysis-review T002: to == "" diffs from against the working tree,
+// so an uncommitted edit shows up (contracts §1).
+func TestDiffNameStatus_EmptyToDiffsAgainstWorkingTree(t *testing.T) {
+	dir := initFixtureRepo(t)
+	writeFile(t, dir, "keep.md", "v1")
+	from := commitAll(t, dir, "base")
+
+	writeFile(t, dir, "keep.md", "v2 uncommitted")
+
+	entries, err := DiffNameStatus(dir, from, "")
+	if err != nil {
+		t.Fatalf("DiffNameStatus() unexpected error: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Path != "keep.md" || entries[0].Status != "M" {
+		t.Errorf("DiffNameStatus() = %+v, want one modified entry for keep.md", entries)
+	}
+}
+
+// TestDiffNameStatus_FromNotFound is 042-impact-analysis-review T002:
+// an unresolvable from returns a non-nil error.
+func TestDiffNameStatus_FromNotFound(t *testing.T) {
+	dir := initFixtureRepo(t)
+
+	if _, err := DiffNameStatus(dir, "does-not-exist", ""); err == nil {
+		t.Error("DiffNameStatus() error = nil for an unresolvable revision, want non-nil")
+	}
+}
+
+// TestFileAtRevision_ExistsAtCommit is 042-impact-analysis-review T003
+// (Foundational): FileAtRevision returns a file's content and found ==
+// true at a commit where it exists (contracts §1).
+func TestFileAtRevision_ExistsAtCommit(t *testing.T) {
+	dir := initFixtureRepo(t)
+	writeFile(t, dir, "spec.md", "hello")
+	rev := commitAll(t, dir, "add spec.md")
+
+	content, found, err := FileAtRevision(dir, "spec.md", rev)
+	if err != nil {
+		t.Fatalf("FileAtRevision() unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("found = false at the commit that added the file, want true")
+	}
+	if string(content) != "hello" {
+		t.Errorf("content = %q, want %q", content, "hello")
+	}
+}
+
+// TestFileAtRevision_NotYetAdded mirrors CommitsSinceFileAdded's own
+// "bool separate from error" convention: found is false, with no
+// error, at a commit before the file existed.
+func TestFileAtRevision_NotYetAdded(t *testing.T) {
+	dir := initFixtureRepo(t)
+	writeFile(t, dir, "other.md", "unrelated")
+	before := commitAll(t, dir, "base without spec.md")
+	writeFile(t, dir, "spec.md", "hello")
+	commitAll(t, dir, "add spec.md")
+
+	content, found, err := FileAtRevision(dir, "spec.md", before)
+	if err != nil {
+		t.Fatalf("FileAtRevision() unexpected error: %v", err)
+	}
+	if found {
+		t.Error("found = true at a commit before the file existed, want false")
+	}
+	if content != nil {
+		t.Errorf("content = %q, want nil", content)
+	}
+}
+
+// TestFileAtRevision_EmptyRevReadsWorkingTree is 042-impact-analysis-
+// review T003: rev == "" reads the working-tree file directly,
+// reflecting an uncommitted edit.
+func TestFileAtRevision_EmptyRevReadsWorkingTree(t *testing.T) {
+	dir := initFixtureRepo(t)
+	writeFile(t, dir, "spec.md", "committed")
+	commitAll(t, dir, "add spec.md")
+	writeFile(t, dir, "spec.md", "uncommitted edit")
+
+	content, found, err := FileAtRevision(dir, "spec.md", "")
+	if err != nil {
+		t.Fatalf("FileAtRevision() unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("found = false for an existing working-tree file, want true")
+	}
+	if string(content) != "uncommitted edit" {
+		t.Errorf("content = %q, want %q", content, "uncommitted edit")
+	}
 }

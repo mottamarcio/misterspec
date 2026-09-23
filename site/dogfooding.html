@@ -24,7 +24,7 @@
   <main class="flex-1 min-w-0 px-6 py-10 lg:px-16">
     <div class="max-w-3xl mx-auto prose prose-slate prose-headings:font-semibold prose-h2:text-xl prose-h2:mt-10 prose-a:text-slate-900 prose-pre:bg-slate-900 prose-pre:text-slate-100">
 
-      <p class="text-sm font-medium text-slate-500 mb-1">Features · Spec 019</p>
+      <p class="text-sm font-medium text-slate-500 mb-1">Features · Specs 019, 037</p>
       <h1>Dogfooding & Evaluation</h1>
       <p>
         Before trusting the <a href="context-engine.html">Context
@@ -78,6 +78,41 @@
         fixture, and findings are recorded in
         <code>specs/019-dogfooding-evaluation/report.md</code> in the
         repository.
+      </p>
+
+      <h2 id="eval-harness"><iconify-icon icon="lucide:repeat" class="align-[-0.15em] mr-1"></iconify-icon>From a one-off exercise to a reusable harness (Spec 037)</h2>
+      <p>
+        The manual exercise above proved the methodology, but had no
+        repetitions, no cost accounting, and nothing reusable for the
+        <em>next</em> retrieval or ranking proposal — every future
+        change would otherwise have to invent its own ad hoc
+        measurement from scratch. Spec 037 turned it into a standing,
+        reusable evaluation harness: <code>misterspec internal
+        eval-retrieval</code> runs a versioned set of deterministic
+        retrieval cases (no LLM session required — safe to run in CI on
+        every change), reporting a case-by-case pass/fail and the exact
+        rank position of every required item. <code>misterspec internal
+        eval-compare</code> then diffs a candidate run against a named,
+        recorded baseline, flagging when more than one configuration
+        dimension changed at once and surfacing a per-case regression
+        even when an unrelated aggregate metric improves in the same
+        comparison.
+      </p>
+      <p>
+        Live agent task-execution runs stay a documented, hand-recorded
+        protocol — the binary deliberately never launches or drives a
+        live coding-agent session itself (Constitution Principle IV);
+        it only ever consumes the resulting record. Any future
+        retrieval, ranking, or budgeting proposal (like <a
+        href="context-engine.html#text-search-ranking">036</a>'s own
+        BM25 change, or <a
+        href="context-engine.html#wikilink-chunk-provenance">038</a>'s
+        still-experimental <code>--prefer-section</code>) is expected
+        to record a baseline and compare against it through this
+        harness before ever being promoted to default behavior — see
+        the full commands in the <a
+        href="commands.html#internal-eval-retrieval">Command
+        Reference</a>.
       </p>
 
     </div>

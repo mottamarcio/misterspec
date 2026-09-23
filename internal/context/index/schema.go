@@ -10,7 +10,20 @@ import (
 // disposable (Constitution Principle III) — a version mismatch (an
 // older schema, or a brand-new empty database whose default version is
 // 0) always means "recreate from scratch," never "migrate in place."
-const schemaVersion = 1
+// Bumped to 2 by 038-wikilink-chunk-provenance: links gains
+// source_section/source_line (data-model.md "links table (widened)").
+// Bumped to 3 by 040-stable-section-anchors: chunks gains anchor,
+// links gains target_anchor (data-model.md "Index Schema (extended)").
+// Bumped to 4 by 043-incremental-context-reuse: new packs table
+// (data-model.md "StoredPack") — this table is disposable exactly
+// like every other table here (Constitution Principle III, spec
+// FR-011): losing every stored pack on an unrelated schema bump only
+// ever costs one call's worth of reuse, never correctness.
+// Bumped to 5 by 044-architecture-code-context-rules: new code_files/
+// code_declarations tables (data-model.md "CodeFile"/"CodeDeclaration")
+// — the code-side sibling of documents/chunks, equally disposable and
+// reconstructable from the project's own current *.go files.
+const schemaVersion = 5
 
 // schemaStatements creates this package's own schema (data-model.md) —
 // one statement per Exec call, rather than relying on a driver's
@@ -29,6 +42,7 @@ var schemaStatements = []string{
 		id             INTEGER PRIMARY KEY,
 		document_id    INTEGER NOT NULL REFERENCES documents(id),
 		heading        TEXT,
+		anchor         TEXT,
 		content        TEXT NOT NULL,
 		start_line     INTEGER NOT NULL,
 		end_line       INTEGER NOT NULL,
@@ -43,7 +57,34 @@ var schemaStatements = []string{
 		id                 INTEGER PRIMARY KEY,
 		source_artifact_id TEXT NOT NULL,
 		target_artifact_id TEXT NOT NULL,
-		relation           TEXT NOT NULL
+		relation           TEXT NOT NULL,
+		source_section     TEXT,
+		source_line        INTEGER,
+		target_anchor      TEXT
+	)`,
+	`CREATE TABLE packs (
+		pack_id     TEXT PRIMARY KEY,
+		config_hash TEXT NOT NULL,
+		target      TEXT NOT NULL,
+		created_at  INTEGER NOT NULL,
+		items_json  TEXT NOT NULL
+	)`,
+	`CREATE TABLE code_files (
+		id          INTEGER PRIMARY KEY,
+		path        TEXT NOT NULL UNIQUE,
+		fingerprint TEXT NOT NULL,
+		indexed_at  INTEGER NOT NULL
+	)`,
+	`CREATE TABLE code_declarations (
+		id           INTEGER PRIMARY KEY,
+		code_file_id INTEGER NOT NULL REFERENCES code_files(id),
+		name         TEXT NOT NULL,
+		kind         TEXT NOT NULL,
+		signature    TEXT NOT NULL,
+		body         TEXT,
+		start_line   INTEGER NOT NULL,
+		end_line     INTEGER NOT NULL,
+		is_test      INTEGER NOT NULL
 	)`,
 }
 
@@ -55,6 +96,9 @@ var dropStatements = []string{
 	`DROP TABLE IF EXISTS chunks_fts`,
 	`DROP TABLE IF EXISTS chunks`,
 	`DROP TABLE IF EXISTS links`,
+	`DROP TABLE IF EXISTS packs`,
+	`DROP TABLE IF EXISTS code_declarations`,
+	`DROP TABLE IF EXISTS code_files`,
 	`DROP TABLE IF EXISTS documents`,
 }
 

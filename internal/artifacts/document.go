@@ -12,10 +12,21 @@ import (
 // child headings never duplicates its children's own content into its
 // own Body (013-document-model-chunking/research.md #2).
 type Section struct {
-	// Heading is the heading text, without the leading "#"s. Empty for
-	// the untitled preamble section (content before the first heading,
-	// or the whole body when there is no heading at all).
+	// Heading is the heading text, without the leading "#"s and without
+	// any trailing explicit anchor suffix (see Anchor). Empty for the
+	// untitled preamble section (content before the first heading, or
+	// the whole body when there is no heading at all).
 	Heading string
+	// Anchor is the explicit, stable section identifier declared as a
+	// trailing "{#slug}" suffix on the heading's own line (040-stable-
+	// section-anchors research.md #1), e.g. "## Retry Policy
+	// {#retry-policy}" yields Heading "Retry Policy" and Anchor
+	// "retry-policy". Empty when no such suffix is present — the
+	// overwhelming majority of headings. An unterminated/malformed
+	// suffix (no closing "}") is never stripped: it stays literal
+	// Heading text and Anchor remains empty (ParseDocument's own
+	// always-succeeds contract, data-model.md "Section").
+	Anchor string
 	// Level is 1-6 for a real ATX heading; 0 for the untitled preamble
 	// section.
 	Level int
@@ -45,6 +56,25 @@ type Document struct {
 // with "#" but no following space (e.g. a prose "#123" reference) is
 // correctly not matched, per CommonMark's own ATX rule.
 var headingPattern = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
+
+// anchorSuffixPattern matches a trailing explicit-anchor suffix on an
+// already-trimmed heading text — "{#slug}" preceded by optional
+// whitespace, anchored to the end of the string (040-stable-section-
+// anchors research.md #1). The slug itself ([^}]+) is opaque author
+// text: internal/validation, not this parser, judges its uniqueness
+// (data-model.md "Section"). An unterminated "{#" with no closing "}"
+// simply does not match, leaving the heading's literal text untouched —
+// ParseDocument never errors on malformed input.
+var anchorSuffixPattern = regexp.MustCompile(`\s*\{#([^}]+)\}$`)
+
+// splitHeadingAnchor separates heading's own trailing "{#slug}" suffix
+// (if any) from its displayed title text.
+func splitHeadingAnchor(heading string) (title, anchor string) {
+	if m := anchorSuffixPattern.FindStringSubmatch(heading); m != nil {
+		return strings.TrimSpace(heading[:len(heading)-len(m[0])]), m[1]
+	}
+	return heading, ""
+}
 
 // ParseDocument splits body into an ordered, flat list of Sections using
 // ATX headings as boundaries (FR-001, FR-002). Heading-like text inside
@@ -96,8 +126,10 @@ func ParseDocument(body []byte) Document {
 		if !fenced[i] {
 			if m := headingPattern.FindStringSubmatch(strings.TrimRight(line, "\r")); m != nil {
 				flush(lineNum - 1)
+				title, anchor := splitHeadingAnchor(strings.TrimSpace(m[2]))
 				cur = &Section{
-					Heading:   strings.TrimSpace(m[2]),
+					Heading:   title,
+					Anchor:    anchor,
 					Level:     len(m[1]),
 					StartLine: lineNum,
 				}

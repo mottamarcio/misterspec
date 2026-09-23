@@ -7,6 +7,7 @@ import (
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
 	"github.com/mottamarcio/misterspec/internal/bootstrap"
+	"github.com/mottamarcio/misterspec/internal/impact"
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/project"
 	"github.com/mottamarcio/misterspec/internal/validation"
@@ -22,6 +23,7 @@ func TestClassify(t *testing.T) {
 		{"not initialized", project.ErrNotInitialized, "project_not_initialized", 6},
 		{"entity not found", operations.ErrEntityNotFound, "entity_not_found", 3},
 		{"entity ambiguous", &operations.AmbiguousIDError{ID: "SPEC-001", Locations: []string{"a", "b"}}, "entity_ambiguous", 3},
+		{"spec context required", &operations.SpecContextRequiredError{TaskNumber: 1, Candidates: nil}, "spec_context_required", 3},
 		{"invalid target (operations)", operations.ErrInvalidTarget, "invalid_target", 2},
 		{"invalid target (validation)", validation.ErrInvalidTarget, "invalid_target", 2},
 		{"invalid parent", operations.ErrInvalidParent, "invalid_parent", 5},
@@ -32,6 +34,8 @@ func TestClassify(t *testing.T) {
 		{"path outside project", artifacts.ErrPathOutsideProject, "path_outside_project", 5},
 		{"already initialized", bootstrap.ErrAlreadyInitialized, "already_initialized", 5},
 		{"unknown agent", bootstrap.ErrUnknownAgent, "unknown_agent", 5},
+		{"revision not found", impact.ErrRevisionNotFound, "revision_not_found", 2},
+		{"not a repository", impact.ErrNotARepository, "not_a_repository", 6},
 		{"unrecognized fallback", errors.New("boom"), "unexpected_failure", 1},
 	}
 

@@ -199,3 +199,101 @@ func TestReferences_OutOfScopeTargetIsInvalid(t *testing.T) {
 		t.Fatalf("References() error = %v, want errors.Is(err, ErrInvalidTarget)", err)
 	}
 }
+
+// wantSubjectPath is SPEC-001's own canonical path, as every
+// writeReferencesSubject-based test in this file already writes it.
+const wantSubjectPath = "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/spec.md"
+
+func TestReferences_SemanticEntryHasSourceOccurrence(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupReferencesProgram(t, root)
+	writeReferencesSubject(t, root, "", "## Related Specs\n\nSee [[SPEC-002]] for details.\n")
+
+	result, err := operations.References(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("References() unexpected error: %v", err)
+	}
+	if len(result.Semantic) != 1 {
+		t.Fatalf("Semantic = %+v, want 1 entry", result.Semantic)
+	}
+	entry := result.Semantic[0]
+	if entry.SourcePath != wantSubjectPath {
+		t.Errorf("SourcePath = %q, want %q", entry.SourcePath, wantSubjectPath)
+	}
+	if entry.SourceSection != "Related Specs" {
+		t.Errorf("SourceSection = %q, want %q", entry.SourceSection, "Related Specs")
+	}
+	if entry.SourceLine <= 0 {
+		t.Errorf("SourceLine = %d, want a positive file-absolute line", entry.SourceLine)
+	}
+}
+
+func TestReferences_FormalEntryHasSourcePathButNoSection(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupReferencesProgram(t, root)
+	writeReferencesSubject(t, root, "depends_on:\n  - SPEC-002\nsupersedes: []\n", "")
+
+	result, err := operations.References(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("References() unexpected error: %v", err)
+	}
+	for _, entry := range result.Formal {
+		if entry.SourcePath != wantSubjectPath {
+			t.Errorf("Formal entry %+v: SourcePath = %q, want %q", entry, entry.SourcePath, wantSubjectPath)
+		}
+		if entry.SourceSection != "" || entry.SourceLine != 0 {
+			t.Errorf("Formal entry %+v: want SourceSection empty and SourceLine 0 (spec FR-009 — no line-level wikilink origin)", entry)
+		}
+	}
+}
+
+// TestReferences_AnchorQualifiedWikilinkHasTargetAnchor proves spec 040
+// data-model.md "ReferenceEntry / BacklinkEntry (extended)": an
+// anchor-qualified wikilink's ReferenceEntry carries TargetAnchor; a
+// plain wikilink in the same artifact stays "" (spec FR-008).
+func TestReferences_AnchorQualifiedWikilinkHasTargetAnchor(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupReferencesProgram(t, root)
+	writeReferencesSubject(t, root, "", "See [[SPEC-002#retry-policy]] and also [[SPEC-002]].\n")
+
+	result, err := operations.References(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("References() unexpected error: %v", err)
+	}
+	if len(result.Semantic) != 2 {
+		t.Fatalf("Semantic = %+v, want 2 entries", result.Semantic)
+	}
+	if result.Semantic[0].TargetAnchor != "retry-policy" {
+		t.Errorf("Semantic[0].TargetAnchor = %q, want %q", result.Semantic[0].TargetAnchor, "retry-policy")
+	}
+	if result.Semantic[1].TargetAnchor != "" {
+		t.Errorf("Semantic[1].TargetAnchor = %q, want \"\" for a plain wikilink", result.Semantic[1].TargetAnchor)
+	}
+}
+
+func TestReferences_TwoOccurrencesFromDifferentSectionsStayDistinct(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	setupReferencesProgram(t, root)
+	writeReferencesSubject(t, root, "", ""+
+		"## Requirements\n\nSee [[SPEC-002]] here.\n\n"+
+		"## Notes\n\nAlso mentioned here: [[SPEC-002]].\n")
+
+	result, err := operations.References(root, cfg, "SPEC-001")
+	if err != nil {
+		t.Fatalf("References() unexpected error: %v", err)
+	}
+	if len(result.Semantic) != 2 {
+		t.Fatalf("Semantic = %+v, want 2 distinct occurrences (spec FR-004)", result.Semantic)
+	}
+	sections := map[string]bool{result.Semantic[0].SourceSection: true, result.Semantic[1].SourceSection: true}
+	if !sections["Requirements"] || !sections["Notes"] {
+		t.Errorf("Semantic sections = %v, want both %q and %q represented", sections, "Requirements", "Notes")
+	}
+	if result.Semantic[0].SourceLine == result.Semantic[1].SourceLine {
+		t.Errorf("both occurrences report the same SourceLine %d, want two distinct lines", result.Semantic[0].SourceLine)
+	}
+}

@@ -27,6 +27,23 @@ type BacklinkEntry struct {
 	// non-nil for these five id-bearing types once ParseMetadata
 	// succeeds).
 	Source ids.EntityID
+	// SourcePath is the referencing (Source) artifact's own path —
+	// always populated, regardless of Relation; the only way a caller
+	// learns it without a separate lookup (038-wikilink-chunk-
+	// provenance data-model.md "ReferenceEntry / BacklinkEntry
+	// (extended)").
+	SourcePath string
+	// SourceSection/SourceLine are the wikilink occurrence's own
+	// enclosing section/line (artifacts.OccurrenceFor) — populated only
+	// when Relation == "wikilink"; empty/zero for a formal entry (spec
+	// FR-009).
+	SourceSection string
+	SourceLine    int
+	// TargetAnchor is the anchor named by the underlying wikilink, if
+	// any (040-stable-section-anchors data-model.md "ReferenceEntry /
+	// BacklinkEntry (extended)") — same population rule as
+	// ReferenceEntry.TargetAnchor.
+	TargetAnchor string
 }
 
 // BacklinksResult groups a queried artifact's incoming relationships,
@@ -76,22 +93,42 @@ func Backlinks(root string, cfg project.Configuration, rawID string) (BacklinksR
 				}
 				source := *meta.ID
 
-				formal = append(formal, matchingFormalBacklinks(meta, targetID, source)...)
+				formal = append(formal, matchingFormalBacklinks(meta, targetID, source, filePath)...)
 
-				body, err := artifacts.ReadBody(filepath.Join(root, filePath))
+				body, bodyStartLine, err := artifacts.ReadBodyWithOffset(filepath.Join(root, filePath))
 				if err != nil {
 					continue
 				}
+				offset := bodyStartLine - 1
 				links, err := artifacts.ExtractWikiLinks(body)
 				if err != nil {
 					continue
 				}
+				// chunks is computed lazily — only once a link actually
+				// resolves to targetID — so the common case (an artifact
+				// with no matching link) never pays for a wasted
+				// ParseDocument+Chunks pass (perf finding, code review).
+				var chunks []artifacts.Chunk
+				var chunksComputed bool
 				for _, link := range links {
 					id, paths, err := ids.ResolveTarget(root, cfg, link.Target)
 					if err != nil || len(paths) != 1 || id != targetID {
 						continue
 					}
-					semantic = append(semantic, BacklinkEntry{Relation: "wikilink", Source: source})
+					if !chunksComputed {
+						chunks = artifacts.ChunksWithOffset(filePath, body, offset)
+						chunksComputed = true
+					}
+					link.Line += offset
+					occ := artifacts.OccurrenceFor(link, chunks)
+					semantic = append(semantic, BacklinkEntry{
+						Relation:      "wikilink",
+						Source:        source,
+						SourcePath:    filePath,
+						SourceSection: occ.SourceSection,
+						SourceLine:    occ.SourceLine,
+						TargetAnchor:  link.Anchor,
+					})
 				}
 			}
 		}
@@ -102,20 +139,21 @@ func Backlinks(root string, cfg project.Configuration, rawID string) (BacklinksR
 
 // matchingFormalBacklinks reports every formal relationship in meta that
 // names target, labeled with source (the artifact meta itself belongs
-// to).
-func matchingFormalBacklinks(meta artifacts.Metadata, target ids.EntityID, source ids.EntityID) []BacklinkEntry {
+// to) and sourcePath (that artifact's own path, always populated —
+// data-model.md "SourcePath is always populated").
+func matchingFormalBacklinks(meta artifacts.Metadata, target ids.EntityID, source ids.EntityID, sourcePath string) []BacklinkEntry {
 	var out []BacklinkEntry
 	if meta.Parent != nil && *meta.Parent == target {
-		out = append(out, BacklinkEntry{Relation: "parent", Source: source})
+		out = append(out, BacklinkEntry{Relation: "parent", Source: source, SourcePath: sourcePath})
 	}
 	for _, d := range meta.DependsOn {
 		if d == target {
-			out = append(out, BacklinkEntry{Relation: "depends_on", Source: source})
+			out = append(out, BacklinkEntry{Relation: "depends_on", Source: source, SourcePath: sourcePath})
 		}
 	}
 	for _, s := range meta.Supersedes {
 		if s == target {
-			out = append(out, BacklinkEntry{Relation: "supersedes", Source: source})
+			out = append(out, BacklinkEntry{Relation: "supersedes", Source: source, SourcePath: sourcePath})
 		}
 	}
 	return out

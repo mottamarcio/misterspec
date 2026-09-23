@@ -241,12 +241,19 @@ func indexOneArtifact(tx *sql.Tx, root string, cfg project.Configuration, relPat
 	if err != nil {
 		return err
 	}
-	body, err := artifacts.ReadBody(full)
+	body, bodyStartLine, err := artifacts.ReadBodyWithOffset(full)
 	if err != nil {
 		return err
 	}
+	offset := bodyStartLine - 1
+	// File-absolute, not body-relative — the same fix
+	// internal/context/collector.go's chunkArtifact applies, needed
+	// here too so a chunk found both directly and via this index's own
+	// text search reports the identical (Path, StartLine, EndLine)
+	// identity and deduplicates correctly (033-context-pack-output-
+	// contract research.md Decision 1).
+	chunks := artifacts.ChunksWithOffset(relPath, body, offset)
 	doc := artifacts.ParseDocument(body)
-	chunks := artifacts.Chunks(relPath, doc)
 
 	var artifactID sql.NullString
 	if meta.ID != nil {
@@ -290,23 +297,33 @@ func indexLinks(tx *sql.Tx, root string, cfg project.Configuration, artifactID s
 		return fmt.Errorf("index: computing references for %s: %w", artifactID, err)
 	}
 	for _, r := range refs.Formal {
-		if err := insertLink(tx, r.Relation, artifactID, r.Target.String()); err != nil {
+		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine, r.TargetAnchor); err != nil {
 			return err
 		}
 	}
 	for _, r := range refs.Semantic {
-		if err := insertLink(tx, r.Relation, artifactID, r.Target.String()); err != nil {
+		if err := insertLink(tx, r.Relation, artifactID, r.Target.String(), r.SourceSection, r.SourceLine, r.TargetAnchor); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// insertLink inserts one links row.
-func insertLink(tx *sql.Tx, relation, source, target string) error {
+// insertLink inserts one links row. sourceSection/sourceLine/
+// targetAnchor are stored NULL for a formal relation, or for a
+// semantic one with no anchor (038-wikilink-chunk-provenance data-
+// model.md; 040-stable-section-anchors data-model.md "Index Schema
+// (extended)") — an empty sourceSection/zero sourceLine/empty
+// targetAnchor (as ReferenceEntry/BacklinkEntry already report) becomes
+// SQL NULL via sql.NullString/sql.NullInt64's own IsZero-style Valid
+// flag.
+func insertLink(tx *sql.Tx, relation, source, target, sourceSection string, sourceLine int, targetAnchor string) error {
+	section := sql.NullString{String: sourceSection, Valid: sourceSection != ""}
+	line := sql.NullInt64{Int64: int64(sourceLine), Valid: sourceLine != 0}
+	anchor := sql.NullString{String: targetAnchor, Valid: targetAnchor != ""}
 	if _, err := tx.Exec(
-		`INSERT INTO links (source_artifact_id, target_artifact_id, relation) VALUES (?, ?, ?)`,
-		source, target, relation,
+		`INSERT INTO links (source_artifact_id, target_artifact_id, relation, source_section, source_line, target_anchor) VALUES (?, ?, ?, ?, ?, ?)`,
+		source, target, relation, section, line, anchor,
 	); err != nil {
 		return fmt.Errorf("index: inserting link row: %w", err)
 	}
@@ -317,9 +334,10 @@ func insertLink(tx *sql.Tx, relation, source, target string) error {
 // chunks_fts row (research.md #8 — explicit Go-driven synchronization,
 // no SQL triggers).
 func insertChunk(tx *sql.Tx, documentID int64, c artifacts.Chunk) error {
+	anchor := sql.NullString{String: c.Anchor, Valid: c.Anchor != ""}
 	res, err := tx.Exec(
-		`INSERT INTO chunks (document_id, heading, content, start_line, end_line, token_estimate) VALUES (?, ?, ?, ?, ?, ?)`,
-		documentID, c.Heading, c.Content, c.StartLine, c.EndLine, artifacts.EstimateTokens(c.Content),
+		`INSERT INTO chunks (document_id, heading, anchor, content, start_line, end_line, token_estimate) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		documentID, c.Heading, anchor, c.Content, c.StartLine, c.EndLine, artifacts.EstimateTokens(c.Content),
 	)
 	if err != nil {
 		return fmt.Errorf("index: inserting chunk row: %w", err)

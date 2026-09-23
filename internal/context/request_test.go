@@ -39,3 +39,16 @@ func TestValidateIntent_RecognizedValuesNeverMatchErrUnsupportedIntent(t *testin
 		}
 	}
 }
+
+func TestRequest_HardLimitFieldExistsAndNilResolvesToDefault(t *testing.T) {
+	got := resolveHardLimit(Request{})
+	if got != DefaultHardLimit {
+		t.Errorf("resolveHardLimit(Request{}) = %d, want DefaultHardLimit (%d)", got, DefaultHardLimit)
+	}
+
+	explicit := 500
+	got = resolveHardLimit(Request{HardLimit: &explicit})
+	if got != explicit {
+		t.Errorf("resolveHardLimit(Request{HardLimit: &%d}) = %d, want %d", explicit, got, explicit)
+	}
+}

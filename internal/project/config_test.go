@@ -2,6 +2,7 @@ package project_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/mottamarcio/misterspec/internal/project"
@@ -28,7 +29,11 @@ func TestLoad_Valid(t *testing.T) {
 		IDWidth:             3,
 		GitBranchAutomation: true,
 	}
-	if cfg != want {
+	// reflect.DeepEqual, not !=: Configuration is no longer comparable
+	// once ArchitectureRules/CodeExclusions (both slices) were added
+	// (044-architecture-code-context-rules) — correction found during
+	// implementation.
+	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
 	}
 }
@@ -101,6 +106,103 @@ func TestLoad_MalformedYAML(t *testing.T) {
 	if !errors.Is(err, project.ErrInvalidConfiguration) {
 		t.Fatalf("Load() error = %v, want errors.Is(err, ErrInvalidConfiguration)", err)
 	}
+}
+
+// TestLoad_ArchitectureRulesAndCodeExclusions is
+// 044-architecture-code-context-rules T005 (Foundational): a
+// well-formed architecture_rules list and code_exclusions list are
+// parsed into Configuration.ArchitectureRules/CodeExclusions
+// (data-model.md "ArchitectureRule (config)"/"CodeExclusions
+// (config)").
+func TestLoad_ArchitectureRulesAndCodeExclusions(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, "schema_version: 1\nagent_id: claude-code\n"+
+		"architecture_rules:\n  - kind: forbidden_dependency\n    from: internal/artifacts/**\n    to: internal/cli/internalcmd\n"+
+		"code_exclusions:\n  - vendor/**\n")
+
+	cfg, err := project.Load(root)
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if len(cfg.ArchitectureRules) != 1 {
+		t.Fatalf("ArchitectureRules = %+v, want 1 entry", cfg.ArchitectureRules)
+	}
+	rule := cfg.ArchitectureRules[0]
+	if rule.Kind != "forbidden_dependency" || rule.From != "internal/artifacts/**" || rule.To != "internal/cli/internalcmd" {
+		t.Errorf("ArchitectureRules[0] = %+v, want {forbidden_dependency, internal/artifacts/**, internal/cli/internalcmd}", rule)
+	}
+	if len(cfg.CodeExclusions) != 1 || cfg.CodeExclusions[0] != "vendor/**" {
+		t.Errorf("CodeExclusions = %+v, want [\"vendor/**\"]", cfg.CodeExclusions)
+	}
+}
+
+// TestLoad_ArchitectureRulesAndCodeExclusionsAbsentAreEmpty is
+// 044-architecture-code-context-rules T005: both keys absent from the
+// YAML produce empty/nil slices, never an error.
+func TestLoad_ArchitectureRulesAndCodeExclusionsAbsentAreEmpty(t *testing.T) {
+	root := testutil.Project(t)
+
+	cfg, err := project.Load(root)
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if len(cfg.ArchitectureRules) != 0 {
+		t.Errorf("ArchitectureRules = %+v, want none", cfg.ArchitectureRules)
+	}
+	if len(cfg.CodeExclusions) != 0 {
+		t.Errorf("CodeExclusions = %+v, want none", cfg.CodeExclusions)
+	}
+}
+
+// TestLoad_ArchitectureRuleUnknownKind is
+// 044-architecture-code-context-rules T005 (contracts §7): a rule
+// with an unrecognized kind is rejected via the same
+// ErrInvalidConfiguration convention every other malformed field
+// already uses.
+func TestLoad_ArchitectureRuleUnknownKind(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, "schema_version: 1\nagent_id: claude-code\n"+
+		"architecture_rules:\n  - kind: not_a_real_kind\n    from: internal/foo/**\n")
+
+	_, err := project.Load(root)
+	assertInvalidField(t, err, "architecture_rules")
+}
+
+// TestLoad_ArchitectureRuleEmptyFrom is
+// 044-architecture-code-context-rules T005.
+func TestLoad_ArchitectureRuleEmptyFrom(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, "schema_version: 1\nagent_id: claude-code\n"+
+		"architecture_rules:\n  - kind: forbidden_dependency\n    from: \"\"\n    to: internal/foo\n")
+
+	_, err := project.Load(root)
+	assertInvalidField(t, err, "architecture_rules")
+}
+
+// TestLoad_ArchitectureRuleEmptyTo is a code-review regression: a
+// forbidden_dependency/layer_boundary rule with an empty "to" must be
+// rejected, not silently accepted and later always report a false
+// StatusPass (an empty "to" glob only matches an empty normalized
+// import path, which architecture.evaluateDependencyRule essentially
+// never produces).
+func TestLoad_ArchitectureRuleEmptyTo(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, "schema_version: 1\nagent_id: claude-code\n"+
+		"architecture_rules:\n  - kind: forbidden_dependency\n    from: internal/foo/**\n")
+
+	_, err := project.Load(root)
+	assertInvalidField(t, err, "architecture_rules")
+}
+
+// TestLoad_ArchitectureRuleEmptyContract is the required_contract
+// counterpart of TestLoad_ArchitectureRuleEmptyTo.
+func TestLoad_ArchitectureRuleEmptyContract(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, "schema_version: 1\nagent_id: claude-code\n"+
+		"architecture_rules:\n  - kind: required_contract\n    from: internal/foo/**\n")
+
+	_, err := project.Load(root)
+	assertInvalidField(t, err, "architecture_rules")
 }
 
 func assertInvalidField(t *testing.T, err error, field string) {
