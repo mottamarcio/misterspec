@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mottamarcio/misterspec/internal/artifacts"
+	contextengine "github.com/mottamarcio/misterspec/internal/context"
+	"github.com/mottamarcio/misterspec/internal/context/index"
 	"github.com/mottamarcio/misterspec/internal/ids"
 	"github.com/mottamarcio/misterspec/internal/operations"
 	"github.com/mottamarcio/misterspec/internal/prepare"
@@ -96,7 +98,10 @@ func NewPrepareCmd() *cobra.Command {
 			readiness := prepare.ComputeReadinessWithCycleCheck(target.Task, target.Dependency.DependsOn, statusOf, infos)
 			requirements := prepare.LookupRequirementTexts(specBody, target.Coverage.References)
 			planSections := prepare.AssociatePlanSections(planBody, target.Coverage.References)
-			result := prepare.BuildTaskPreparation(target.Task, target.Heading, readiness, requirements, target.Fields, planSections)
+
+			codeContext, codeScopeNotFound := resolveCodeContextBestEffort(proj, target.Fields.Scope)
+
+			result := prepare.BuildTaskPreparation(target.Task, target.Heading, readiness, requirements, target.Fields, planSections, codeContext, codeScopeNotFound)
 
 			if writeErr := WriteSuccess(cmd.OutOrStdout(), map[string]any{
 				"preparation": renderPreparation(result, spec),
@@ -113,6 +118,35 @@ func NewPrepareCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dir, "dir", ".", "target project directory")
 	cmd.Flags().StringVar(&task, "task", "", "the Task to prepare (bare TASK-### or composite SPEC-###:TASK-###)")
 	return cmd
+}
+
+// resolveCodeContextBestEffort opens/syncs the same disposable code
+// index internal context already owns (044-architecture-code-context-
+// rules research.md #6), then resolves scope against it via
+// prepare.ResolveCodeContext. Mirrors context.go's own
+// index.Open/SyncCode lifecycle — one open per call, closed before
+// returning. True to its name: any failure opening or syncing the code
+// index (e.g. an unwritable cache directory) is swallowed rather than
+// aborting the whole `internal prepare` response — code_context is
+// additive, and a Task whose Scope names no .go file at all should
+// never fail to prepare over it.
+func resolveCodeContextBestEffort(proj *project.Project, scope string) ([]contextengine.PackageItem, []string) {
+	cachePath := filepath.Join(proj.Root, ".misterspec", "cache", "context.db")
+	store, err := index.Open(cachePath)
+	if err != nil {
+		return nil, nil
+	}
+	defer store.Close()
+
+	if _, err := store.SyncCode(proj.Root, proj.Config.CodeExclusions); err != nil {
+		return nil, nil
+	}
+
+	items, notFound, err := prepare.ResolveCodeContext(store, scope, artifacts.DefaultEstimator{})
+	if err != nil {
+		return nil, nil
+	}
+	return items, notFound
 }
 
 // readSpecBody reads the owning Spec's own spec.md body — required for
@@ -188,14 +222,29 @@ func renderPreparation(p prepare.TaskPreparation, spec ids.EntityID) map[string]
 		blockers = append(blockers, fmt.Sprintf("%s:%s", spec, b))
 	}
 
+	// code_context reuses renderPackageItemJSON — the same per-item
+	// shape --mode package already renders (033) — so a caller reading
+	// internal prepare's own JSON learns one item shape, not two
+	// (044-architecture-code-context-rules contracts §6).
+	codeContext := make([]map[string]any, 0, len(p.CodeContext))
+	for _, item := range p.CodeContext {
+		codeContext = append(codeContext, renderPackageItemJSON(item, false, false))
+	}
+	codeScopeNotFound := p.CodeScopeNotFound
+	if codeScopeNotFound == nil {
+		codeScopeNotFound = []string{}
+	}
+
 	return map[string]any{
-		"task":          fmt.Sprintf("%s:%s", spec, p.Task),
-		"heading":       p.Heading,
-		"ready":         p.Readiness.Ready,
-		"blockers":      blockers,
-		"requirements":  requirements,
-		"scope":         p.Scope,
-		"verify":        p.Verify,
-		"plan_sections": planSections,
+		"task":                 fmt.Sprintf("%s:%s", spec, p.Task),
+		"heading":              p.Heading,
+		"ready":                p.Readiness.Ready,
+		"blockers":             blockers,
+		"requirements":         requirements,
+		"scope":                p.Scope,
+		"verify":               p.Verify,
+		"plan_sections":        planSections,
+		"code_context":         codeContext,
+		"code_scope_not_found": codeScopeNotFound,
 	}
 }

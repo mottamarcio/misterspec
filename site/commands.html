@@ -155,7 +155,26 @@
 "ready":true,"blockers":[],
 "requirements":[{"ref":"SPEC-014:R1","content":"### R1 — ...","fingerprint":"sha256:..."}],
 "scope":"internal/auth/refresh.go","verify":"go test ./internal/auth/... -run TestRefreshRotation",
-"plan_sections":[{"heading":"Implementation Sequence","content":"...","fingerprint":"sha256:...","matched_requirements":["SPEC-014:R1"]}]}}</code></pre>
+"plan_sections":[{"heading":"Implementation Sequence","content":"...","fingerprint":"sha256:...","matched_requirements":["SPEC-014:R1"]}],
+"code_context":[{"path":"internal/auth/refresh.go","heading":"RotateRefreshToken",
+"content":"func RotateRefreshToken() error { ... }","location":{"path":"internal/auth/refresh.go","start_line":40,"end_line":40},
+"fingerprint":"sha256:9c1a..."}],
+"code_scope_not_found":[]}}</code></pre>
+      <p>
+        <code>code_context</code>/<code>code_scope_not_found</code>
+        (044-architecture-code-context-rules) resolve <code>scope</code>
+        against a disposable, fingerprinted index of the project's own
+        <code>.go</code> declarations — one entry per declaration named
+        by <code>Scope:</code>, plus any test already associated with
+        it, rendered in the same shape <a href="#internal-context"><code>internal
+        context --mode package</code></a> already uses for content.
+        Each item's own <code>content</code> is the declaration's full
+        body when the owning file's total estimated size is small
+        enough, its signature alone otherwise — never the full body of
+        every file unconditionally. A <code>Scope:</code> path that no
+        longer resolves to an indexed file is named explicitly in
+        <code>code_scope_not_found</code>, never silently dropped.
+      </p>
       <p>
         A blocked Task keeps <code>ok:true</code> but sets <code>ready:false</code>
         with named <code>blockers</code>, and exits <code>10</code> — distinct from
@@ -174,6 +193,30 @@
         cycle or a reference to a nonexistent/cross-Spec Task is also caught by
         <code>internal validate</code> as <code>task_dependency_cycle</code> /
         <code>invalid_task_dependency</code>.
+      </p>
+
+      <h2 id="internal-check-architecture">internal check-architecture</h2>
+      <p><strong>Purpose:</strong> Evaluate the project's own declared architecture rules (forbidden dependency, layer boundary, required contract — <code>architecture_rules</code> in <code>.misterspec/config.yaml</code>) against the current Go source tree. Every rule always reports exactly one of three statuses: <code>pass</code>, <code>fail</code>, or <code>not_evaluated</code> — never a silent <code>pass</code> for a rule or a project the one shipped adapter (Go) can't actually check.</p>
+      <p><strong>Flags:</strong> none beyond the universal <code>--dir</code>; rules and <code>code_exclusions</code> come entirely from the project's own config.</p>
+      <pre><code>misterspec internal check-architecture
+{"ok":true,"architecture":{"adapter":"go",
+"results":[{"rule_index":0,"status":"fail","path":"internal/artifacts/parser.go","line":12,
+"message":"internal/artifacts imports internal/cli/internalcmd, which this rule forbids","reason":""},
+{"rule_index":1,"status":"not_evaluated","path":"","line":0,
+"message":"rule kind \"required_contract\" is not supported by the go adapter","reason":"rule_kind_unsupported"}]}}</code></pre>
+      <p>
+        A project with no <code>go.mod</code> at its root returns
+        <code>"adapter":""</code> with every declared rule reported
+        <code>not_evaluated</code>/<code>"reason":"no_adapter_for_project"</code>
+        — never approved by default just because nothing could check
+        it. Zero declared rules still returns <code>ok:true</code> with
+        an empty <code>results</code> array, not an error. A rule's own
+        <code>to</code> pattern names an import path relative to the
+        project's own module (e.g. <code>internal/cli/internalcmd</code>),
+        not the full <code>github.com/...</code> import string — the
+        module prefix is stripped automatically for an internal import;
+        an external dependency's own full import path is matched
+        as-is.
       </p>
 
       <h2 id="internal-capture-evidence">internal capture-evidence SPEC-### --task TASK-###</h2>

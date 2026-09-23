@@ -58,15 +58,24 @@ type prepareRequirementJSON struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
+type prepareCodeItemJSON struct {
+	Path        string `json:"path"`
+	Heading     string `json:"heading"`
+	Content     string `json:"content"`
+	Fingerprint string `json:"fingerprint"`
+}
+
 type preparationJSON struct {
-	Task         string                   `json:"task"`
-	Heading      string                   `json:"heading"`
-	Ready        bool                     `json:"ready"`
-	Blockers     []string                 `json:"blockers"`
-	Requirements []prepareRequirementJSON `json:"requirements"`
-	Scope        string                   `json:"scope"`
-	Verify       string                   `json:"verify"`
-	PlanSections []preparePlanSectionJSON `json:"plan_sections"`
+	Task              string                   `json:"task"`
+	Heading           string                   `json:"heading"`
+	Ready             bool                     `json:"ready"`
+	Blockers          []string                 `json:"blockers"`
+	Requirements      []prepareRequirementJSON `json:"requirements"`
+	Scope             string                   `json:"scope"`
+	Verify            string                   `json:"verify"`
+	PlanSections      []preparePlanSectionJSON `json:"plan_sections"`
+	CodeContext       []prepareCodeItemJSON    `json:"code_context"`
+	CodeScopeNotFound []string                 `json:"code_scope_not_found"`
 }
 
 type prepareEnvelopeJSON struct {
@@ -423,5 +432,80 @@ func markTaskComplete(t *testing.T, root, relPath, taskHeading string) {
 	final = append(final, lines[sectionEnd:]...)
 	if err := os.WriteFile(path, []byte(strings.Join(final, "\n")), 0o644); err != nil {
 		t.Fatalf("markTaskComplete: writing %s: %v", path, err)
+	}
+}
+
+// --- User Story 3 (044-architecture-code-context-rules): code context ---
+
+// TestPrepareCmd_CodeContextResolvedFromScope is
+// 044-architecture-code-context-rules T025 (US3): TASK-001's own
+// Scope: internal/auth/refresh.go resolves to that file's own
+// declaration(s) in code_context, without a separate call.
+func TestPrepareCmd_CodeContextResolvedFromScope(t *testing.T) {
+	root := testutil.Project(t)
+	writePrepareFixture(t, root)
+	testutil.WriteFile(t, root, "go.mod", "module fixture.example\n\ngo 1.23\n")
+	testutil.WriteFile(t, root, "internal/auth/refresh.go",
+		"package auth\n\n// RotateRefreshToken rotates the token.\nfunc RotateRefreshToken() error {\n\treturn nil\n}\n")
+
+	cmd := internalcmd.NewPrepareCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--task", "TASK-001", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	decoded := decodePrepareOutput(t, output)
+	if decoded.Preparation == nil {
+		t.Fatalf("preparation is nil (output: %s)", output)
+	}
+	p := decoded.Preparation
+	if len(p.CodeContext) == 0 {
+		t.Fatalf("code_context is empty, want at least one declaration from internal/auth/refresh.go")
+	}
+	found := false
+	for _, item := range p.CodeContext {
+		if item.Path == "internal/auth/refresh.go" && item.Heading == "RotateRefreshToken" {
+			found = true
+			if item.Content == "" || item.Fingerprint == "" {
+				t.Errorf("item %+v missing content/fingerprint", item)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("code_context = %+v, want an item for RotateRefreshToken", p.CodeContext)
+	}
+	if p.CodeScopeNotFound == nil {
+		t.Error("code_scope_not_found is null, want a (possibly empty) array")
+	}
+}
+
+// TestPrepareCmd_CodeScopeNotFoundReportedExplicitly is
+// 044-architecture-code-context-rules T025 (US3, spec Edge Case): a
+// Scope path with no indexed .go file is named in code_scope_not_found.
+func TestPrepareCmd_CodeScopeNotFoundReportedExplicitly(t *testing.T) {
+	root := testutil.Project(t)
+	writePrepareFixture(t, root)
+	testutil.WriteFile(t, root, "go.mod", "module fixture.example\n\ngo 1.23\n")
+	// internal/auth/refresh.go deliberately not written — TASK-001's
+	// own Scope names a file that doesn't exist in this fixture.
+
+	cmd := internalcmd.NewPrepareCmd()
+	cmd.SetArgs([]string{"SPEC-014", "--task", "TASK-001", "--dir", root})
+	output, exitCode := runCmd(cmd)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (output: %s)", exitCode, output)
+	}
+
+	decoded := decodePrepareOutput(t, output)
+	if decoded.Preparation == nil {
+		t.Fatalf("preparation is nil (output: %s)", output)
+	}
+	p := decoded.Preparation
+	if len(p.CodeScopeNotFound) != 1 || p.CodeScopeNotFound[0] != "internal/auth/refresh.go" {
+		t.Errorf("code_scope_not_found = %+v, want [\"internal/auth/refresh.go\"]", p.CodeScopeNotFound)
+	}
+	if len(p.CodeContext) != 0 {
+		t.Errorf("code_context = %+v, want none", p.CodeContext)
 	}
 }

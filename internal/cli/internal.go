@@ -38,6 +38,7 @@ func newInternalCmd() *cobra.Command {
 		internalcmd.NewEvalRetrievalCmd(),
 		internalcmd.NewEvalCompareCmd(),
 		internalcmd.NewAnalyzeImpactCmd(),
+		internalcmd.NewCheckArchitectureCmd(),
 	)
 	return cmd
 }
