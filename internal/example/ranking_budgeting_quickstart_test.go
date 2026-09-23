@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/mottamarcio/misterspec/internal/artifacts"
 	contextengine "github.com/mottamarcio/misterspec/internal/context"
 	"github.com/mottamarcio/misterspec/internal/context/index"
 	"github.com/mottamarcio/misterspec/internal/project"
@@ -81,7 +82,7 @@ func TestRankingBudgetingQuickstart_EndToEnd(t *testing.T) {
 
 	// 2. Fit the ranked set into an explicit budget (quickstart.md §2).
 	budget := 500
-	result := contextengine.ApplyBudget(ranked, contextengine.Request{Target: "SPEC-014", Budget: &budget})
+	result := contextengine.ApplyBudget(ranked, contextengine.Request{Target: "SPEC-014", Budget: &budget}, artifacts.DefaultEstimator{})
 	if result.Diagnostics.TokensSelected > budget && !result.BudgetExceeded {
 		t.Errorf("ApplyBudget() selected %d tokens over budget %d without flagging BudgetExceeded", result.Diagnostics.TokensSelected, budget)
 	}
@@ -93,7 +94,7 @@ func TestRankingBudgetingQuickstart_EndToEnd(t *testing.T) {
 	}
 
 	// 3. No budget specified uses the fixed default (quickstart.md §3).
-	defaultResult := contextengine.ApplyBudget(ranked, contextengine.Request{Target: "SPEC-014"})
+	defaultResult := contextengine.ApplyBudget(ranked, contextengine.Request{Target: "SPEC-014"}, artifacts.DefaultEstimator{})
 	if defaultResult.Diagnostics.TokensAvailable != result.Diagnostics.TokensAvailable {
 		t.Errorf("default-budget TokensAvailable = %d, want %d (same candidate set)", defaultResult.Diagnostics.TokensAvailable, result.Diagnostics.TokensAvailable)
 	}
@@ -102,7 +103,7 @@ func TestRankingBudgetingQuickstart_EndToEnd(t *testing.T) {
 	// (quickstart.md §4): still returned in full, flagged, with the
 	// overage reported.
 	tiny := 1
-	tinyResult := contextengine.ApplyBudget(ranked, contextengine.Request{Target: "SPEC-014", Budget: &tiny})
+	tinyResult := contextengine.ApplyBudget(ranked, contextengine.Request{Target: "SPEC-014", Budget: &tiny, HardLimit: &tiny}, artifacts.DefaultEstimator{})
 	if !tinyResult.BudgetExceeded {
 		t.Fatal("ApplyBudget() with budget 1: BudgetExceeded = false, want true")
 	}
@@ -117,8 +118,8 @@ func TestRankingBudgetingQuickstart_EndToEnd(t *testing.T) {
 
 	// 5. Repeating the same call is byte-for-byte identical
 	// (quickstart.md §5, FR-011, SC-005).
-	repeat := contextengine.ApplyBudget(contextengine.Rank(set, req), req)
-	if !reflect.DeepEqual(repeat, contextengine.ApplyBudget(contextengine.Rank(set, req), req)) {
+	repeat := contextengine.ApplyBudget(contextengine.Rank(set, req), req, artifacts.DefaultEstimator{})
+	if !reflect.DeepEqual(repeat, contextengine.ApplyBudget(contextengine.Rank(set, req), req, artifacts.DefaultEstimator{})) {
 		t.Error("ApplyBudget(Rank(...), ...) is not deterministic across repeated calls")
 	}
 }

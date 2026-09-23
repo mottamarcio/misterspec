@@ -1,0 +1,23 @@
+# A small, self-contained agent task-execution scenario: the fixture
+# retrieval case set (../cases/) already covers free-text, task/intent,
+# forbidden-content, tight-budget, and large-spec cases — this task
+# asks an agent to add one more forbidden-content case for a *new*
+# fixture Spec, without being told the exact required/forbidden IDs in
+# advance, so its own correctness is judged solely by the acceptance
+# test below (never by the agent's own narrative).
+id: add-forbidden-case-01
+description: >-
+  In the fixture project under dir (../project), add a new Spec
+  SPEC-104 under ai/programs/PRG-001/features/FEAT-001/specs/SPEC-104/
+  with no depends_on and no wikilinks to any existing fixture entity.
+  Then add a new retrieval evaluation case YAML file under this
+  tasks.yaml's own sibling ../cases/ directory whose target is
+  SPEC-101, whose required list contains SPEC-100, and whose forbidden
+  list contains SPEC-104 (confirming SPEC-104's own isolation the same
+  way 03-forbidden-unrelated-spec.yaml already confirms SPEC-103's).
+dir: ../project
+acceptance_test: >-
+  go run ./cmd/misterspec internal eval-retrieval --cases
+  specs/037-eval-quality-efficiency/fixture/cases | grep -q
+  '"passed":true' && test -f
+  specs/037-eval-quality-efficiency/fixture/project/ai/programs/PRG-001/features/FEAT-001/specs/SPEC-104/spec.md

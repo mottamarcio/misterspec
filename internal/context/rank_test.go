@@ -88,6 +88,165 @@ func TestRank_IdenticalRelevanceIsStillDeterministicByPathThenLine(t *testing.T)
 	}
 }
 
+// TestRank_TextMatchOrderingFollowsBM25NotTermCount covers
+// 036-text-search-ranking spec FR-005: among same-tier text_match
+// candidates, the one with the more relevant (more negative) bm25()
+// TextRank must rank first — regardless of how many literal term
+// occurrences its own Content happens to contain.
+func TestRank_TextMatchOrderingFollowsBM25NotTermCount(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/knowledge/KNOW-001.md", StartLine: 1, EndLine: 3,
+			Content:  "rotation rotation rotation rotation rotation", // many raw term hits
+			TextRank: -1.0,                                           // but a weak bm25 match
+			Reasons:  []Reason{{Tier: TierText, Relation: "text_match"}},
+		},
+		{
+			Path: "ai/knowledge/KNOW-002.md", StartLine: 1, EndLine: 3,
+			Content:  "rotation", // only one raw term hit
+			TextRank: -20.0,      // yet a strong bm25 match
+			Reasons:  []Reason{{Tier: TierText, Relation: "text_match"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{Query: "rotation"})
+
+	if len(ranked) != 2 {
+		t.Fatalf("Rank returned %d candidates, want 2", len(ranked))
+	}
+	if ranked[0].Path != "ai/knowledge/KNOW-002.md" {
+		t.Errorf("ranked[0].Path = %q, want KNOW-002 (stronger bm25 TextRank must win over raw term-occurrence count — spec FR-005)", ranked[0].Path)
+	}
+}
+
+// TestRank_StrongTextMatchNeverOutranksHigherTier covers spec FR-006,
+// FR-012: an extremely strong bm25 TextRank on a TierText candidate
+// must never let it sort ahead of a TierStructural candidate.
+func TestRank_StrongTextMatchNeverOutranksHigherTier(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/knowledge/KNOW-999.md", StartLine: 1, EndLine: 3,
+			Content: "extremely relevant text match", TextRank: -1000000.0,
+			Reasons: []Reason{{Tier: TierText, Relation: "text_match"}},
+		},
+		{
+			Path: "ai/specs/SPEC-011.md", StartLine: 1, EndLine: 3,
+			Content: "irrelevant structural text",
+			Reasons: []Reason{{Tier: TierStructural, Relation: "depends_on"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{Query: "extremely relevant text match"})
+
+	if len(ranked) != 2 {
+		t.Fatalf("Rank returned %d candidates, want 2", len(ranked))
+	}
+	if minTier(ranked[0].Reasons) != TierStructural {
+		t.Errorf("ranked[0] tier = %v, want TierStructural — an extreme TextRank must never cross the tier boundary", minTier(ranked[0].Reasons))
+	}
+}
+
+// TestRank_EqualBM25ScoresStillDeterministicByPathThenLine covers spec
+// FR-007/SC-003: when two same-tier text_match candidates carry the
+// exact same TextRank, the existing Path-then-StartLine tie-break still
+// applies.
+func TestRank_EqualBM25ScoresStillDeterministicByPathThenLine(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{Path: "ai/knowledge/KNOW-002.md", StartLine: 1, EndLine: 3, Content: "match", TextRank: -5.0, Reasons: []Reason{{Tier: TierText, Relation: "text_match"}}},
+		{Path: "ai/knowledge/KNOW-001.md", StartLine: 1, EndLine: 3, Content: "match", TextRank: -5.0, Reasons: []Reason{{Tier: TierText, Relation: "text_match"}}},
+	}}
+
+	for i := 0; i < 5; i++ {
+		ranked := Rank(cs, Request{Query: "match"})
+		if len(ranked) != 2 {
+			t.Fatalf("Rank returned %d candidates, want 2", len(ranked))
+		}
+		if ranked[0].Path != "ai/knowledge/KNOW-001.md" {
+			t.Errorf("run %d: ranked[0].Path = %q, want KNOW-001 (equal TextRank must still sort deterministically by Path)", i, ranked[0].Path)
+		}
+	}
+}
+
+func TestRank_PreferSectionFalseIsByteIdenticalToDefault(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Requirements"}},
+		},
+		{
+			Path: "ai/specs/SPEC-002.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Notes"}},
+		},
+	}}
+
+	withoutFlag := Rank(cs, Request{})
+	explicitFalse := Rank(cs, Request{PreferSection: false})
+
+	if withoutFlag[0].Score != explicitFalse[0].Score || withoutFlag[1].Score != explicitFalse[1].Score {
+		t.Fatalf("PreferSection's zero value must be byte-identical to omitting it: %+v vs %+v", withoutFlag, explicitFalse)
+	}
+	for _, sc := range withoutFlag {
+		if sc.Components.SectionPreference != 0 {
+			t.Errorf("SectionPreference = %d, want 0 when PreferSection is false (spec FR-006)", sc.Components.SectionPreference)
+		}
+	}
+}
+
+func TestRank_PreferSectionTrueRanksRequirementsSectionHigher(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-002.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Notes"}},
+		},
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Requirements"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{PreferSection: true})
+
+	if ranked[0].Path != "ai/specs/SPEC-001.md" {
+		t.Fatalf("ranked[0] = %q, want the Requirements-sourced candidate to rank first with PreferSection true: %+v", ranked[0].Path, ranked)
+	}
+	if ranked[0].Components.SectionPreference != sectionPreferenceBonus {
+		t.Errorf("ranked[0].Components.SectionPreference = %d, want %d", ranked[0].Components.SectionPreference, sectionPreferenceBonus)
+	}
+	if ranked[1].Components.SectionPreference != 0 {
+		t.Errorf("ranked[1].Components.SectionPreference = %d, want 0 (unrelated section)", ranked[1].Components.SectionPreference)
+	}
+}
+
+func TestRank_PreferSectionMatchIsCaseInsensitive(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "requirements"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{PreferSection: true})
+
+	if ranked[0].Components.SectionPreference != sectionPreferenceBonus {
+		t.Errorf("SectionPreference = %d, want %d (case-insensitive match)", ranked[0].Components.SectionPreference, sectionPreferenceBonus)
+	}
+}
+
+func TestRank_PreferSectionMatchesFunctionalRequirementsHeading(t *testing.T) {
+	cs := CandidateSet{Candidates: []Candidate{
+		{
+			Path: "ai/specs/SPEC-001.md", StartLine: 1, EndLine: 3,
+			Reasons: []Reason{{Tier: TierSemantic, Relation: "wikilink", SourceSection: "Functional Requirements"}},
+		},
+	}}
+
+	ranked := Rank(cs, Request{PreferSection: true})
+
+	if ranked[0].Components.SectionPreference != sectionPreferenceBonus {
+		t.Errorf("SectionPreference = %d, want %d", ranked[0].Components.SectionPreference, sectionPreferenceBonus)
+	}
+}
+
 func TestRank_IntentOnlyReordersWithinATier(t *testing.T) {
 	// IntentImplementation prefers "wikilink"/"backlink"/"text_match"
 	// (research.md #4) — a TierSecondHop candidate carrying "wikilink"

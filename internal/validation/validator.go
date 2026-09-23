@@ -32,21 +32,54 @@ func ValidateProject(root string, cfg project.Configuration) ([]Finding, error) 
 			return nil, err
 		}
 		for _, number := range sortedNumbers(result.Paths) {
-			findings = append(findings, validateFoundEntity(root, cfg, t, number, result.Paths[number])...)
+			paths := result.Paths[number]
+			findings = append(findings, validateFoundEntity(root, cfg, t, number, paths)...)
+
+			if t == ids.Spec && len(paths) > 0 {
+				specID := ids.EntityID{Type: ids.Spec, Prefix: ids.Spec.Prefix(), Number: number, Width: cfg.IDWidth}
+				covFindings, report, err := specCoverageFindings(root, cfg, specID, paths[0])
+				if err != nil {
+					return nil, err
+				}
+				findings = append(findings, covFindings...)
+
+				specPath := paths[0] + "/spec.md"
+				if meta, err := artifacts.ParseMetadata(filepath.Join(root, specPath)); err == nil {
+					gate := computeSpecPhaseGate(specID, meta.Status, report)
+					if gate.Blocked {
+						findings = append(findings, phaseGateFinding(gate, specPath))
+					}
+				}
+
+				depFindings, err := taskDependencyFindings(root, cfg, specID, paths[0])
+				if err != nil {
+					return nil, err
+				}
+				findings = append(findings, depFindings...)
+
+				evFindings, err := taskEvidenceFindings(root, cfg, specID, paths[0])
+				if err != nil {
+					return nil, err
+				}
+				findings = append(findings, evFindings...)
+			}
 		}
 	}
 
-	taskResult, err := ids.Scan(root, cfg, ids.Task)
+	taskScan, err := ids.ScanTasks(root, cfg)
 	if err != nil {
 		return nil, err
 	}
-	for _, dup := range taskResult.Duplicates {
-		findings = append(findings, Finding{
-			Code:     CodeDuplicateID,
-			Severity: SeverityError,
-			Path:     dup.Paths[0],
-			Message:  fmt.Sprintf("%d Task headings claim the same number %d: %v", len(dup.Paths), dup.ID.Number, dup.Paths),
-		})
+	for _, dup := range taskScan.Duplicates {
+		findings = append(findings, taskDuplicateFinding(dup, cfg))
+	}
+
+	graph, specPath, err := projectDependencyGraph(root, cfg)
+	if err != nil {
+		return nil, err
+	}
+	for _, cycle := range detectCycles(graph) {
+		findings = append(findings, dependencyCycleFinding(cycle, cfg, specPath))
 	}
 
 	findings = append(findings, checkConstitution(root, cfg)...)
@@ -87,6 +120,23 @@ func checkConstitution(root string, cfg project.Configuration) []Finding {
 	}
 
 	return nil
+}
+
+// taskDuplicateFinding renders one ids.TaskDuplicate (already scoped to
+// a single Spec by ids.ScanTasks) as a Finding naming that Spec
+// explicitly, so the scope is legible without cross-referencing the path
+// (031-canonical-task-identity spec.md FR-004,
+// contracts/task-identity-resolution.md §3). Shared by ValidateProject
+// and ValidateEntity so a duplicate's wording never drifts between the
+// two call sites.
+func taskDuplicateFinding(dup ids.TaskDuplicate, cfg project.Configuration) Finding {
+	spec := ids.EntityID{Type: ids.Spec, Prefix: ids.Spec.Prefix(), Number: dup.Spec, Width: cfg.IDWidth}
+	return Finding{
+		Code:     CodeDuplicateID,
+		Severity: SeverityError,
+		Path:     dup.Paths[0],
+		Message:  fmt.Sprintf("%s: %d Task headings claim the same number %d: %v", spec, len(dup.Paths), dup.Task, dup.Paths),
+	}
 }
 
 func sortedNumbers(paths map[int][]string) []int {
@@ -156,7 +206,67 @@ func ValidateEntity(root string, cfg project.Configuration, rawID string) ([]Fin
 		return nil, err
 	}
 
-	return validateFoundEntity(root, cfg, id.Type, id.Number, scanResult.Paths[id.Number]), nil
+	findings := validateFoundEntity(root, cfg, id.Type, id.Number, scanResult.Paths[id.Number])
+
+	if id.Type == ids.Spec {
+		// A single-Spec validation MUST surface that Spec's own Task
+		// duplicates the same way ValidateProject would (spec FR-011) —
+		// scoped to id.Number only, never another Spec's duplicates.
+		taskScan, err := ids.ScanTasks(root, cfg)
+		if err != nil {
+			return nil, err
+		}
+		for _, dup := range taskScan.Duplicates {
+			if dup.Spec != id.Number {
+				continue
+			}
+			findings = append(findings, taskDuplicateFinding(dup, cfg))
+		}
+
+		if paths := scanResult.Paths[id.Number]; len(paths) > 0 {
+			covFindings, report, err := specCoverageFindings(root, cfg, id, paths[0])
+			if err != nil {
+				return nil, err
+			}
+			findings = append(findings, covFindings...)
+
+			specPath := paths[0] + "/spec.md"
+			if meta, err := artifacts.ParseMetadata(filepath.Join(root, specPath)); err == nil {
+				gate := computeSpecPhaseGate(id, meta.Status, report)
+				if gate.Blocked {
+					findings = append(findings, phaseGateFinding(gate, specPath))
+				}
+			}
+
+			depFindings, err := taskDependencyFindings(root, cfg, id, paths[0])
+			if err != nil {
+				return nil, err
+			}
+			findings = append(findings, depFindings...)
+
+			evFindings, err := taskEvidenceFindings(root, cfg, id, paths[0])
+			if err != nil {
+				return nil, err
+			}
+			findings = append(findings, evFindings...)
+		}
+
+		// A cycle is a fact about the project-wide graph, not just this
+		// Spec's own file — check the same full graph checkDependencyList
+		// already resolves against, and report only cycles this Spec
+		// actually participates in (contracts §3).
+		graph, specPath, err := projectDependencyGraph(root, cfg)
+		if err != nil {
+			return nil, err
+		}
+		for _, cycle := range detectCycles(graph) {
+			if intSliceContains(cycle.Path, id.Number) {
+				findings = append(findings, dependencyCycleFinding(cycle, cfg, specPath))
+			}
+		}
+	}
+
+	return findings, nil
 }
 
 // validateFoundEntity runs checks against whatever ids.Scan found for
@@ -233,6 +343,7 @@ func checkEntity(root string, cfg project.Configuration, t ids.EntityType, numbe
 	}
 
 	findings = append(findings, checkWikilinks(root, cfg, filePath)...)
+	findings = append(findings, checkAnchors(root, filePath)...)
 
 	return findings
 }

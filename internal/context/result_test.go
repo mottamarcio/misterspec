@@ -110,3 +110,25 @@ func TestMergeAndSort_EmptyInputProducesEmptySet(t *testing.T) {
 		t.Errorf("Candidates = %+v, want none", set.Candidates)
 	}
 }
+
+// TestMergeAndSort_PropagatesTextRankFromLaterTextMatchDuplicate covers
+// 036-text-search-ranking data-model.md's Candidate validation rule: a
+// duplicate discovered later, not first, still contributes its own
+// TextRank to the merged Candidate whenever it carries a text_match
+// Reason — the merge must not silently drop the real BM25 value just
+// because a non-text-match occurrence of the same chunk was seen first.
+func TestMergeAndSort_PropagatesTextRankFromLaterTextMatchDuplicate(t *testing.T) {
+	candidates := []Candidate{
+		{Path: "a.md", StartLine: 1, EndLine: 2, Reasons: []Reason{{Tier: TierStructural, Relation: "depends_on"}}},
+		{Path: "a.md", StartLine: 1, EndLine: 2, TextRank: -7.5, Reasons: []Reason{{Tier: TierText, Relation: "text_match"}}},
+	}
+
+	set := mergeAndSort(candidates)
+
+	if len(set.Candidates) != 1 {
+		t.Fatalf("len(Candidates) = %d, want 1: %+v", len(set.Candidates), set.Candidates)
+	}
+	if set.Candidates[0].TextRank != -7.5 {
+		t.Errorf("TextRank = %v, want -7.5 propagated from the later text_match duplicate", set.Candidates[0].TextRank)
+	}
+}

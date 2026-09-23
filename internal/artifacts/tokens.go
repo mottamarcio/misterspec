@@ -6,6 +6,11 @@ package artifacts
 // (docs/context-engine-implementation.md §9).
 type Estimator interface {
 	Estimate(text string) int
+	// Name identifies which estimator produced a set of estimates —
+	// always non-empty (035-context-budget-accuracy FR-001), so a
+	// response can say which method computed its own numbers instead
+	// of presenting an approximation as an unattributed exact count.
+	Name() string
 }
 
 // DefaultEstimator is this project's own deterministic approximation —
@@ -15,6 +20,13 @@ type DefaultEstimator struct{}
 // Estimate implements Estimator by calling EstimateTokens.
 func (DefaultEstimator) Estimate(text string) int {
 	return EstimateTokens(text)
+}
+
+// Name implements Estimator, identifying this as the built-in
+// approximation — never presented as a real tokenizer's exact count
+// (035-context-budget-accuracy FR-003).
+func (DefaultEstimator) Name() string {
+	return "default"
 }
 
 // EstimateTokens returns a deterministic, approximate token count for

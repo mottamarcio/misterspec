@@ -204,6 +204,57 @@ func TestExtractWikiLinks_EveryEntityPrefixRoundTrips(t *testing.T) {
 	}
 }
 
+// TestExtractWikiLinks_AnchorQualifiedLink proves spec 040 research.md
+// #2: "[[ID#anchor]]" splits into Target/Anchor, with Alias empty.
+func TestExtractWikiLinks_AnchorQualifiedLink(t *testing.T) {
+	links, err := artifacts.ExtractWikiLinks([]byte("See [[KNOW-003#retry-policy]] for details.\n"))
+	if err != nil {
+		t.Fatalf("ExtractWikiLinks() unexpected error: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("len(links) = %d, want 1: %+v", len(links), links)
+	}
+	if links[0].Target != "KNOW-003" || links[0].Anchor != "retry-policy" || links[0].Alias != "" {
+		t.Errorf("links[0] = %+v, want Target=KNOW-003 Anchor=retry-policy Alias=\"\"", links[0])
+	}
+}
+
+// TestExtractWikiLinks_AnchorAndAliasCombined proves the alias split
+// happens first, then the anchor split, per research.md #2 — both
+// fields resolve correctly when combined.
+func TestExtractWikiLinks_AnchorAndAliasCombined(t *testing.T) {
+	links, err := artifacts.ExtractWikiLinks([]byte("[[KNOW-003#retry-policy|Política de retries]]\n"))
+	if err != nil {
+		t.Fatalf("ExtractWikiLinks() unexpected error: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("len(links) = %d, want 1: %+v", len(links), links)
+	}
+	want := artifacts.WikiLink{Target: "KNOW-003", Anchor: "retry-policy", Alias: "Política de retries", Line: 1}
+	if links[0].Target != want.Target || links[0].Anchor != want.Anchor || links[0].Alias != want.Alias {
+		t.Errorf("links[0] = %+v, want %+v", links[0], want)
+	}
+}
+
+// TestExtractWikiLinks_NonAnchorLinksAreUnaffected proves spec 040
+// FR-008: both existing wikilink forms are completely unaffected —
+// Anchor stays empty for each.
+func TestExtractWikiLinks_NonAnchorLinksAreUnaffected(t *testing.T) {
+	links, err := artifacts.ExtractWikiLinks([]byte("[[KNOW-003]] and [[KNOW-003|Alias Text]]\n"))
+	if err != nil {
+		t.Fatalf("ExtractWikiLinks() unexpected error: %v", err)
+	}
+	if len(links) != 2 {
+		t.Fatalf("len(links) = %d, want 2: %+v", len(links), links)
+	}
+	if links[0].Target != "KNOW-003" || links[0].Anchor != "" || links[0].Alias != "" {
+		t.Errorf("links[0] = %+v, want Target=KNOW-003 Anchor=\"\" Alias=\"\"", links[0])
+	}
+	if links[1].Target != "KNOW-003" || links[1].Anchor != "" || links[1].Alias != "Alias Text" {
+		t.Errorf("links[1] = %+v, want Target=KNOW-003 Anchor=\"\" Alias=\"Alias Text\"", links[1])
+	}
+}
+
 func TestExtractWikiLinks_EmptyBody(t *testing.T) {
 	links, err := artifacts.ExtractWikiLinks([]byte(""))
 	if err != nil {

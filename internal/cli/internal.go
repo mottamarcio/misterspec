@@ -32,6 +32,13 @@ func newInternalCmd() *cobra.Command {
 		internalcmd.NewBacklinksCmd(),
 		internalcmd.NewContextCmd(),
 		internalcmd.NewCommitsSinceFileCmd(),
+		internalcmd.NewMigrationCheckTasksCmd(),
+		internalcmd.NewPrepareCmd(),
+		internalcmd.NewCaptureEvidenceCmd(),
+		internalcmd.NewEvalRetrievalCmd(),
+		internalcmd.NewEvalCompareCmd(),
+		internalcmd.NewAnalyzeImpactCmd(),
+		internalcmd.NewCheckArchitectureCmd(),
 	)
 	return cmd
 }

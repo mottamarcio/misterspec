@@ -45,6 +45,19 @@ misterspec internal context SPEC-0## --intent planning --dir specs/019-dogfoodin
 3. Record the Tuning Decision (data-model.md) — a change only if at
    least one Finding is genuinely ranking-attributable (FR-008).
 
+## Ranking-version baseline (036-text-search-ranking)
+
+036-text-search-ranking's `ranking_version = 1` (the BM25-driven
+same-tier scoring formula shipped by that feature — see its own
+`research.md` #6, `contracts/search-and-ranking-contract.md` §3.1) is
+the reference "before" any future ranking-weight change compares
+against under this protocol's User Story 4 step 3. A later proposal to
+change `relationWeight`/`intentWeight`/the BM25-to-score conversion in
+`internal/context/rank.go` MUST run this protocol (or an equivalent
+comparative pass) against `ranking_version = 1`'s own behavior before
+bumping `ranking_version` and shipping the change as default — never
+silently, under the same version number (036 spec FR-010, SC-005).
+
 ## Non-goals of this protocol
 
 - Does not modify 011-018's own shipped code as part of running the

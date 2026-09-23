@@ -95,7 +95,7 @@
           <div>
             <p class="font-semibold text-slate-900">7. Implementation</p>
             <code class="text-sm">/mister-implement SPEC-###</code>
-            <p class="text-sm text-slate-600 mt-1">Selects the next executable Task, implements it against the real codebase, verifies it by its own stated method, and marks it complete only once that evidence exists.</p>
+            <p class="text-sm text-slate-600 mt-1">Selects the next executable Task, implements it against the real codebase, verifies it by its own stated method, and marks it complete only once that evidence exists. Since 034, selection and readiness (blocked Tasks are never picked up) come from one <code>internal prepare</code> call instead of several separate ones.</p>
           </div>
         </div>
 

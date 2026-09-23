@@ -12,7 +12,9 @@ package vcs
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -192,6 +194,130 @@ func hasParent(root, commit string) bool {
 	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", commit+"^")
 	cmd.Dir = root
 	return cmd.Run() == nil
+}
+
+// HeadCommit returns the current commit's short SHA. available is
+// false, with no error, when root is not a Git repository or has no
+// commits yet — mirrors CommitsSinceFileAdded's own "bool separate from
+// error" convention (041-task-evidence-fingerprint research.md #7).
+func HeadCommit(root string) (sha string, available bool, err error) {
+	if !IsRepo(root) {
+		return "", false, nil
+	}
+
+	// "No commits yet" (a brand-new, empty repository) is checked first,
+	// by exit code alone — the same --verify --quiet technique
+	// EnsureBranch already uses below — rather than by matching the
+	// short-SHA command's own stderr text, which varies across Git
+	// versions. Code review finding (041-task-evidence-fingerprint): the
+	// original implementation treated *any* failure of the short-SHA
+	// command as "not available, no error," silently masking a genuine
+	// Git failure (corrupted repo, permission error, git binary issue)
+	// as a normal, empty-repo absence.
+	verify := exec.Command("git", "rev-parse", "--verify", "--quiet", "HEAD")
+	verify.Dir = root
+	if verify.Run() != nil {
+		return "", false, nil
+	}
+
+	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false, err
+	}
+	return strings.TrimSpace(string(out)), true, nil
+}
+
+// IsWorkingTreeDirty reports whether `git status --porcelain` returns
+// any output at all — repository-wide, not scoped to specific paths, a
+// deliberate simplification (041-task-evidence-fingerprint research.md
+// #7): a false "dirty" costs nothing, while a missed "actually dirty"
+// would misrepresent what evidence was captured against.
+func IsWorkingTreeDirty(root string) (bool, error) {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("vcs: git status --porcelain: %w", err)
+	}
+	return strings.TrimSpace(string(out)) != "", nil
+}
+
+// DiffEntry is one changed path between two revisions (042-impact-
+// analysis-review contracts §1).
+type DiffEntry struct {
+	Path string
+	// Status is git's own --name-status letter: "A" (added), "M"
+	// (modified), or "D" (deleted) — the letters this feature's callers
+	// consume are exactly these three; a rename/copy letter (R/C) is not
+	// expected here since this package never passes -M/-C to git diff.
+	Status string
+}
+
+// DiffNameStatus reports every path that differs between from and to,
+// via `git diff --name-status <from> [<to>]`. to == "" diffs against
+// the working tree (plain `git diff <from>`), matching
+// IsWorkingTreeDirty's own working-tree scope (042-impact-analysis-
+// review research.md #2).
+func DiffNameStatus(root, from, to string) ([]DiffEntry, error) {
+	args := []string{"diff", "--name-status", from}
+	if to != "" {
+		args = append(args, to)
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("vcs: git %v: %w", args, err)
+	}
+
+	var entries []DiffEntry
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 2)
+		if len(fields) != 2 {
+			continue
+		}
+		entries = append(entries, DiffEntry{Path: fields[1], Status: fields[0]})
+	}
+	return entries, nil
+}
+
+// FileAtRevision returns path's content at rev via `git show
+// <rev>:<path>`. found is false, with no error, when path did not
+// exist at rev (an added file — mirrors CommitsSinceFileAdded's own
+// "bool separate from error" convention). rev == "" reads the
+// working-tree file directly (os.ReadFile), not through git show
+// (042-impact-analysis-review contracts §1).
+func FileAtRevision(root, path, rev string) (content []byte, found bool, err error) {
+	if rev == "" {
+		data, readErr := os.ReadFile(filepath.Join(root, path))
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				return nil, false, nil
+			}
+			return nil, false, readErr
+		}
+		return data, true, nil
+	}
+
+	cmd := exec.Command("git", "show", rev+":"+path)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		// git show exits non-zero both for "path does not exist at rev"
+		// and for a genuine error (bad rev, not a repo); the former is
+		// the overwhelmingly common case for this feature's own caller
+		// (a path added later than `from`), so it is treated as "not
+		// found" rather than surfaced as an error, matching
+		// CommitsSinceFileAdded's existing convention for a comparable
+		// absence.
+		return nil, false, nil
+	}
+	return out, true, nil
 }
 
 // EnsureFeatureBranch creates-and-checks-out featureID's own branch —

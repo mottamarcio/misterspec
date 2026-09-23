@@ -115,6 +115,69 @@ func TestParseDocument_FencedHeadingLikeTextIsNotABoundaryButStaysInBody(t *test
 	}
 }
 
+// TestParseDocument_HeadingAnchorSuffixIsStrippedIntoAnchorField directly
+// proves spec 040's User Story 1: an explicit "{#slug}" suffix on a
+// heading line is captured into Section.Anchor and removed from
+// Section.Heading itself (data-model.md "Section (extended)").
+func TestParseDocument_HeadingAnchorSuffixIsStrippedIntoAnchorField(t *testing.T) {
+	body := "## Retry Policy {#retry-policy}\nBackoff details.\n"
+
+	doc := artifacts.ParseDocument([]byte(body))
+
+	if len(doc.Sections) != 1 {
+		t.Fatalf("len(Sections) = %d, want 1: %+v", len(doc.Sections), doc.Sections)
+	}
+	s := doc.Sections[0]
+	if s.Heading != "Retry Policy" {
+		t.Errorf("Heading = %q, want %q (anchor suffix stripped)", s.Heading, "Retry Policy")
+	}
+	if s.Anchor != "retry-policy" {
+		t.Errorf("Anchor = %q, want %q", s.Anchor, "retry-policy")
+	}
+}
+
+// TestParseDocument_HeadingWithNoAnchorSuffixIsUnaffected proves spec
+// 040 FR-008: a heading without "{#...}" is completely unaffected —
+// Anchor is empty, Heading unchanged from before this feature.
+func TestParseDocument_HeadingWithNoAnchorSuffixIsUnaffected(t *testing.T) {
+	body := "## Retry Policy\nBackoff details.\n"
+
+	doc := artifacts.ParseDocument([]byte(body))
+
+	if len(doc.Sections) != 1 {
+		t.Fatalf("len(Sections) = %d, want 1: %+v", len(doc.Sections), doc.Sections)
+	}
+	s := doc.Sections[0]
+	if s.Heading != "Retry Policy" {
+		t.Errorf("Heading = %q, want %q", s.Heading, "Retry Policy")
+	}
+	if s.Anchor != "" {
+		t.Errorf("Anchor = %q, want \"\" for a heading with no anchor suffix", s.Anchor)
+	}
+}
+
+// TestParseDocument_MalformedAnchorSuffixStaysLiteralHeadingText proves
+// spec 040's data-model.md "Section" validation rule: an unterminated
+// "{#" (no closing "}") is never an error — ParseDocument stays a pure,
+// always-succeeding function — and is left as literal heading text with
+// Anchor empty.
+func TestParseDocument_MalformedAnchorSuffixStaysLiteralHeadingText(t *testing.T) {
+	body := "## Retry Policy {#\nBackoff details.\n"
+
+	doc := artifacts.ParseDocument([]byte(body))
+
+	if len(doc.Sections) != 1 {
+		t.Fatalf("len(Sections) = %d, want 1: %+v", len(doc.Sections), doc.Sections)
+	}
+	s := doc.Sections[0]
+	if s.Anchor != "" {
+		t.Errorf("Anchor = %q, want \"\" for a malformed/unterminated anchor suffix", s.Anchor)
+	}
+	if s.Heading != "Retry Policy {#" {
+		t.Errorf("Heading = %q, want the literal unterminated text preserved: %q", s.Heading, "Retry Policy {#")
+	}
+}
+
 func TestParseDocument_Deterministic(t *testing.T) {
 	body := "# T\n\n## A\ntext a\n## B\ntext b\n"
 

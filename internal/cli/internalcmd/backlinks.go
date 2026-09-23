@@ -49,13 +49,22 @@ func NewBacklinksCmd() *cobra.Command {
 
 // renderBacklinkEntries renders a []operations.BacklinkEntry as JSON-
 // ready maps, always a non-nil slice (empty, never null, when entries is
-// empty) — matching renderReferenceEntries' own convention.
+// empty) — matching renderReferenceEntries' own convention. Each entry
+// additionally carries its own source_path/source_section/source_line
+// (038-wikilink-chunk-provenance contracts §3) — always present,
+// empty/zero for a formal relation. target_anchor (040-stable-section-
+// anchors contracts §4) — always present, empty for a formal or
+// non-anchor semantic entry.
 func renderBacklinkEntries(entries []operations.BacklinkEntry) []map[string]any {
 	out := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, map[string]any{
-			"relation": e.Relation,
-			"source":   e.Source.String(),
+			"relation":       e.Relation,
+			"source":         e.Source.String(),
+			"source_path":    e.SourcePath,
+			"source_section": e.SourceSection,
+			"source_line":    e.SourceLine,
+			"target_anchor":  e.TargetAnchor,
 		})
 	}
 	return out

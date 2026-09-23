@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/mottamarcio/misterspec/internal/project"
 )
 
 // ErrInvalidIDSyntax is returned by Parse when raw does not match the
@@ -69,6 +71,44 @@ func ParseAny(raw string) (EntityID, error) {
 	}
 
 	return Parse(t, raw, len(suffix))
+}
+
+// ParseTaskRef parses a Task reference in either its composite form
+// ("SPEC-014:TASK-003") or its bare local form ("TASK-003") against
+// cfg's configured ID width (031-canonical-task-identity spec.md FR-002,
+// contracts/task-identity-resolution.md §1). The bare form returns a
+// TaskID with a zero-value Spec — the caller (operations.ResolveTask)
+// supplies Spec context separately when the bare number is ambiguous
+// project-wide. Every syntax problem — a malformed composite, a missing
+// half, a wrong ID width on either half, or the wrong entity type in
+// either slot (e.g. "TASK-003:TASK-004") — is reported as
+// ErrInvalidIDSyntax, reusing Parse's own width/type enforcement rather
+// than duplicating it.
+func ParseTaskRef(raw string, cfg project.Configuration) (TaskID, error) {
+	idx := strings.Index(raw, ":")
+	if idx < 0 {
+		local, err := Parse(Task, raw, cfg.IDWidth)
+		if err != nil {
+			return TaskID{}, err
+		}
+		return TaskID{Local: local}, nil
+	}
+
+	specPart, localPart := raw[:idx], raw[idx+1:]
+	if specPart == "" || localPart == "" {
+		return TaskID{}, fmt.Errorf("%w: %q is not a well-formed composite task reference", ErrInvalidIDSyntax, raw)
+	}
+
+	spec, err := Parse(Spec, specPart, cfg.IDWidth)
+	if err != nil {
+		return TaskID{}, fmt.Errorf("%w: composite task reference %q's Spec half %q: %v", ErrInvalidIDSyntax, raw, specPart, err)
+	}
+	local, err := Parse(Task, localPart, cfg.IDWidth)
+	if err != nil {
+		return TaskID{}, fmt.Errorf("%w: composite task reference %q's Task half %q: %v", ErrInvalidIDSyntax, raw, localPart, err)
+	}
+
+	return TaskID{Spec: spec, Local: local}, nil
 }
 
 // NextID computes the next available ID for entity type t as a pure

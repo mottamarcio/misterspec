@@ -104,7 +104,10 @@ Required operations:
 - `internal context SPEC-### --intent tasks` — request a budgeted
   Context Pack before broader exploration. If this fails, proceed
   using this Skill's own Optional Context above instead — it is never
-  a Failure Condition.
+  a Failure Condition. Record the occurrence as
+  `context_fallbacks` in this task's own RunRecord once one exists,
+  rather than silently absorbing the extra read
+  (037-eval-quality-efficiency).
 - `internal create-artifact tasks --for SPEC-###` — scaffold the Tasks
   artifact at its fixed canonical location.
 - `internal validate SPEC-###` — confirm the Spec (now with Tasks) is
@@ -127,13 +130,20 @@ duplicate number, not a pre-check this Skill performs itself.
 4. Run `internal create-artifact tasks --for SPEC-###` if the Tasks
    artifact does not exist yet.
 5. Decompose the Plan into Tasks, each with: a title; an unchecked
-   completion checkbox; the requirement(s) it serves (`SPEC-###:R#`);
-   what it depends on (another Task, or "none"); its file/component
-   scope; and how it will be verified (e.g. a specific `go test`
-   invocation). Number each `## TASK-NNN` sequentially, checking
-   existing Tasks first so numbers are never reused.
-6. Run `internal validate SPEC-###` to confirm no duplicate Task numbers
-   and no Task referencing a nonexistent requirement.
+   completion checkbox; a `Serves: SPEC-###:R#` line naming the
+   requirement(s) it serves; a `Depends on: TASK-NNN` line naming
+   another Task in this same Spec (or `Depends on: none` — or omit the
+   line entirely, which means the same thing); a `Scope:` line naming
+   its file/component scope; and a `Verify:` line naming how it will be
+   verified (e.g. a specific `go test` invocation) — these four labels
+   are what `internal prepare` and `internal validate` both parse
+   mechanically (034-task-oriented-context-preparation), so use them
+   verbatim rather than free prose. Number each `## TASK-NNN`
+   sequentially, checking existing Tasks first so numbers are never
+   reused.
+6. Run `internal validate SPEC-###` to confirm no duplicate Task
+   numbers, no Task referencing a nonexistent requirement, and no
+   invalid or cyclic `Depends on:` declaration.
 7. Report completion per the Completion Contract below.
 
 ## Decision Rules

@@ -13,6 +13,11 @@ import (
 type ScoredCandidate struct {
 	Candidate
 	Score int
+	// Components breaks Score into its individual contributors,
+	// computed alongside Score (036-text-search-ranking spec FR-008) —
+	// meaningful for diagnostic display only; ordering always uses
+	// Score, never Components directly.
+	Components ScoreComponents
 }
 
 // Rank assigns every Candidate in cs a Score and returns them ordered
@@ -26,7 +31,8 @@ func Rank(cs CandidateSet, req Request) []ScoredCandidate {
 
 	scored := make([]ScoredCandidate, len(cs.Candidates))
 	for i, c := range cs.Candidates {
-		scored[i] = ScoredCandidate{Candidate: c, Score: scoreCandidate(c, req.Intent, terms)}
+		comp := computeScoreComponents(c, req.Intent, terms, req.PreferSection)
+		scored[i] = ScoredCandidate{Candidate: c, Score: comp.Total, Components: comp}
 	}
 
 	sort.SliceStable(scored, func(i, j int) bool {
@@ -46,12 +52,47 @@ func Rank(cs CandidateSet, req Request) []ScoredCandidate {
 	return scored
 }
 
-// scoreCandidate computes c's own Score: the strongest relationWeight
-// among its own Reasons, plus an intentWeight bonus, plus a
-// textRelevance bonus — all three are simple, additive, deterministic
-// signals meaningful only for ordering candidates that already share
-// one Tier (research.md #3).
-func scoreCandidate(c Candidate, intent Intent, terms []string) int {
+// ScoreComponents breaks one candidate's Score down into its individual
+// contributors (036-text-search-ranking data-model.md ScoreComponents)
+// — computed alongside Score but surfaced only when a caller explicitly
+// requests diagnostic detail (spec FR-008). Total always equals the
+// corresponding ScoredCandidate.Score.
+type ScoreComponents struct {
+	Tier           int
+	RelationWeight int
+	IntentBonus    int
+	TextRelevance  int
+	// SectionPreference is the 038-wikilink-chunk-provenance
+	// Requirements/active-task-section bonus (spec User Story 2,
+	// data-model.md "Preference Score") — always 0 unless
+	// Request.PreferSection is true (research.md #5: never applied by
+	// default).
+	SectionPreference int
+	Total             int
+}
+
+// sectionPreferenceBonus is the fixed, additive score contribution a
+// wikilink-derived occurrence in a recognized requirements-bearing
+// section earns when Request.PreferSection is true (contracts §5) —
+// an experimental, evidence-gated value (038-wikilink-chunk-provenance
+// research.md #5), not tuned from observed evaluation results yet.
+const sectionPreferenceBonus = 15
+
+// preferredSections is the fixed, case-insensitive vocabulary
+// sectionPreferenceContribution matches against (contracts §5).
+var preferredSections = map[string]bool{
+	"requirements":            true,
+	"functional requirements": true,
+}
+
+// computeScoreComponents computes c's own Score, broken into its
+// additive contributors: the strongest relationWeight among its own
+// Reasons, an intentWeight bonus, a text-relevance bonus, and — only
+// when preferSection is true — a sectionPreferenceBonus for a
+// wikilink-derived occurrence in a recognized requirements section —
+// all deterministic signals meaningful only for ordering candidates
+// that already share one Tier (research.md #3).
+func computeScoreComponents(c Candidate, intent Intent, terms []string, preferSection bool) ScoreComponents {
 	best := 0
 	relations := make([]string, 0, len(c.Reasons))
 	for _, r := range c.Reasons {
@@ -60,7 +101,37 @@ func scoreCandidate(c Candidate, intent Intent, terms []string) int {
 			best = w
 		}
 	}
-	return best + intentWeight(intent, relations) + textRelevance(c.Heading, c.Content, terms)
+	intentBonus := intentWeight(intent, relations)
+	textBonus := textRelevanceContribution(c, relations, terms)
+	sectionBonus := 0
+	if preferSection {
+		sectionBonus = sectionPreferenceContribution(c.Reasons)
+	}
+	return ScoreComponents{
+		Tier:              int(minTier(c.Reasons)),
+		RelationWeight:    best,
+		IntentBonus:       intentBonus,
+		TextRelevance:     textBonus,
+		SectionPreference: sectionBonus,
+		Total:             best + intentBonus + textBonus + sectionBonus,
+	}
+}
+
+// sectionPreferenceContribution reports sectionPreferenceBonus if any
+// of reasons carries occurrence data (SourceSection populated — see
+// internal/cli/internalcmd's own renderProvenance for why this checks
+// occurrence data rather than the relation string) whose SourceSection
+// case-insensitively matches preferredSections; 0 otherwise.
+func sectionPreferenceContribution(reasons []Reason) int {
+	for _, r := range reasons {
+		if r.SourceSection == "" {
+			continue
+		}
+		if preferredSections[strings.ToLower(r.SourceSection)] {
+			return sectionPreferenceBonus
+		}
+	}
+	return 0
 }
 
 // relationWeight approximates docs/context-engine-implementation.md
@@ -112,11 +183,58 @@ func intentWeight(intent Intent, relations []string) int {
 	return 0
 }
 
+// textRelevanceContribution returns c's own text-relevance score
+// contribution: for a candidate carrying a text_match Reason (Tier 4),
+// the real bm25() signal already computed by index.Search and carried
+// on c.TextRank (036-text-search-ranking spec FR-005) — replacing the
+// term-occurrence heuristic this package used before; for every other
+// candidate, the unchanged term-overlap heuristic below (data-model.md
+// Candidate validation rule: TextRank is only ever read here when
+// text_match is present).
+func textRelevanceContribution(c Candidate, relations []string, terms []string) int {
+	if hasTextMatch(relations) {
+		return bm25TextRelevance(c.TextRank)
+	}
+	return textRelevance(c.Heading, c.Content, terms)
+}
+
+// hasTextMatch reports whether relations includes "text_match".
+func hasTextMatch(relations []string) bool {
+	for _, r := range relations {
+		if r == "text_match" {
+			return true
+		}
+	}
+	return false
+}
+
+// bm25TextRelevance converts FTS5's own bm25() value (rank; lower, more
+// negative, is more relevant — index.Search's own convention) into this
+// package's higher-is-better additive scoring space (036-text-search-
+// ranking research.md #4), replacing the previous term-occurrence
+// heuristic for text_match candidates. rank >= 0 — including the zero
+// value, meaning "no real bm25 signal was ever recorded" (e.g. a
+// Candidate built directly, not through Tier 4 collection) — always
+// contributes 0. Otherwise scaled and clamped to [0,40], mirroring the
+// previous heuristic's own 0..40 range.
+func bm25TextRelevance(rank float64) int {
+	if rank >= 0 {
+		return 0
+	}
+	v := int(-rank * 10)
+	if v > 40 {
+		v = 40
+	}
+	return v
+}
+
 // textRelevance is a simple, deterministic term-overlap heuristic —
 // not a real BM25 value (research.md #5) — counting how many of terms
 // occur in heading+content, capped at 4 occurrences and scaled to
 // mirror docs/context-engine-implementation.md §17's own "BM25
-// contribution 0..40" range.
+// contribution 0..40" range. Applied to every candidate that does not
+// carry a text_match Reason (036-text-search-ranking research.md #4);
+// text_match candidates use bm25TextRelevance instead.
 func textRelevance(heading, content string, terms []string) int {
 	if len(terms) == 0 {
 		return 0
