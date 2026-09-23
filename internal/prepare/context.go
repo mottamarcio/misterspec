@@ -124,21 +124,37 @@ type TaskPreparation struct {
 	Scope        string
 	Verify       string
 	PlanSections []PlanSectionAssociation
+	// CodeContext/CodeScopeNotFound are additive
+	// (044-architecture-code-context-rules data-model.md
+	// "TaskPreparation (extended)"): every declaration resolved from
+	// Scope, and every Scope path that resolved to no indexed
+	// declaration, respectively. Both are always non-nil (possibly
+	// empty), never omitted.
+	CodeContext       []contextengine.PackageItem
+	CodeScopeNotFound []string
 }
 
 // BuildTaskPreparation assembles the full TaskPreparation bundle from
 // its already-computed parts (034/data-model.md "TaskPreparation").
 // Called once every other piece (readiness, requirement text, fields,
-// Plan sections) is available — it performs no I/O and no lookup of
-// its own.
-func BuildTaskPreparation(task ids.EntityID, heading string, readiness TaskReadiness, requirements []RequirementText, fields TaskFields, planSections []PlanSectionAssociation) TaskPreparation {
+// Plan sections, code context) is available — it performs no I/O and
+// no lookup of its own.
+func BuildTaskPreparation(task ids.EntityID, heading string, readiness TaskReadiness, requirements []RequirementText, fields TaskFields, planSections []PlanSectionAssociation, codeContext []contextengine.PackageItem, codeScopeNotFound []string) TaskPreparation {
+	if codeContext == nil {
+		codeContext = []contextengine.PackageItem{}
+	}
+	if codeScopeNotFound == nil {
+		codeScopeNotFound = []string{}
+	}
 	return TaskPreparation{
-		Task:         task,
-		Heading:      heading,
-		Readiness:    readiness,
-		Requirements: requirements,
-		Scope:        fields.Scope,
-		Verify:       fields.Verify,
-		PlanSections: planSections,
+		Task:              task,
+		Heading:           heading,
+		Readiness:         readiness,
+		Requirements:      requirements,
+		Scope:             fields.Scope,
+		Verify:            fields.Verify,
+		PlanSections:      planSections,
+		CodeContext:       codeContext,
+		CodeScopeNotFound: codeScopeNotFound,
 	}
 }

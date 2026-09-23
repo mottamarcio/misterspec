@@ -61,6 +61,28 @@ type StoredPack struct {
 	Items      []StoredPackItem
 }
 
+// CodeFile / CodeDeclaration mirror the code_files/code_declarations
+// tables (044-architecture-code-context-rules data-model.md
+// "CodeFile"/"CodeDeclaration").
+type CodeFile struct {
+	Path        string
+	Fingerprint string
+}
+
+// CodeDeclaration is one top-level declaration inside an indexed
+// CodeFile (data-model.md "CodeDeclaration"). Body is "" when not
+// indexed at full-body tier.
+type CodeDeclaration struct {
+	Path      string // owning CodeFile's own Path
+	Name      string
+	Kind      string
+	Signature string
+	Body      string
+	StartLine int
+	EndLine   int
+	IsTest    bool
+}
+
 // Store is this package's own abstraction over its storage — no SQL
 // type crosses this interface (docs/context-engine-implementation.md
 // §10.4).
@@ -110,6 +132,19 @@ type Store interface {
 	// computed ConfigHash before treating it as diffable — LookupPack
 	// itself does no validation, only retrieval.
 	LookupPack(packID string) (pack StoredPack, found bool, err error)
+
+	// SyncCode incrementally reconciles code_files/code_declarations
+	// with root's current *.go files, excluding any path matching one
+	// of exclusions' own glob patterns — the same new/changed/deleted
+	// reconciliation shape Sync already applies to Markdown
+	// (044-architecture-code-context-rules research.md #6).
+	SyncCode(root string, exclusions []string) (SyncReport, error)
+
+	// DeclarationsForFiles returns every CodeDeclaration whose own
+	// Path is in paths, plus every declaration from that path's own
+	// associated _test.go file(s) in the same directory (spec FR-007).
+	// A path with no indexed match contributes no rows, not an error.
+	DeclarationsForFiles(paths []string) ([]CodeDeclaration, error)
 
 	// Close releases the underlying database handle.
 	Close() error

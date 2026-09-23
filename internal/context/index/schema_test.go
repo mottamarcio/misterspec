@@ -24,7 +24,7 @@ func TestEnsureSchema_CreatesAllTables(t *testing.T) {
 		t.Fatalf("ensureSchema() unexpected error: %v", err)
 	}
 
-	for _, table := range []string{"documents", "chunks", "chunks_fts", "links", "packs"} {
+	for _, table := range []string{"documents", "chunks", "chunks_fts", "links", "packs", "code_files", "code_declarations"} {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type IN ('table') AND name = ?", table).Scan(&name)
 		if err != nil {
@@ -248,6 +248,66 @@ func TestEnsureSchema_RecreatesFromPreV4SchemaVersion3(t *testing.T) {
 		`INSERT INTO packs (pack_id, config_hash, target, created_at, items_json) VALUES ('sha256:aaa', 'sha256:bbb', 'SPEC-014', 100, '[]')`,
 	); err != nil {
 		t.Errorf("schema was not rebuilt with a packs table from version 3: %v", err)
+	}
+	var version int
+	db.QueryRow("PRAGMA user_version").Scan(&version)
+	if version != schemaVersion {
+		t.Errorf("user_version after rebuild = %d, want %d", version, schemaVersion)
+	}
+}
+
+// TestEnsureSchema_CodeTablesHaveExpectedColumns is
+// 044-architecture-code-context-rules T006 (Foundational): code_files
+// and code_declarations accept the columns data-model.md documents.
+func TestEnsureSchema_CodeTablesHaveExpectedColumns(t *testing.T) {
+	db := openRawDB(t)
+
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("ensureSchema() unexpected error: %v", err)
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO code_files (path, fingerprint, indexed_at) VALUES ('internal/foo/foo.go', 'sha256:aaa', 100)`,
+	); err != nil {
+		t.Fatalf("code_files table does not accept the expected columns: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO code_files (path, fingerprint, indexed_at) VALUES ('internal/foo/foo.go', 'sha256:bbb', 200)`,
+	); err == nil {
+		t.Error("inserting a duplicate code_files.path succeeded, want a uniqueness violation")
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO code_declarations (code_file_id, name, kind, signature, body, start_line, end_line, is_test) VALUES (1, 'Foo', 'func', 'func Foo()', 'func Foo() {}', 1, 3, 0)`,
+	); err != nil {
+		t.Fatalf("code_declarations table does not accept the expected columns: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO code_declarations (code_file_id, name, kind, signature, body, start_line, end_line, is_test) VALUES (1, 'Bar', 'func', 'func Bar()', NULL, 5, 5, 1)`,
+	); err != nil {
+		t.Errorf("code_declarations table does not accept a NULL body: %v", err)
+	}
+}
+
+// TestEnsureSchema_RecreatesFromPreV5SchemaVersion4 is
+// 044-architecture-code-context-rules T006: a database built under
+// schemaVersion 4 (043's own shape, no code tables) is detected as
+// stale and transparently rebuilt — no manual migration.
+func TestEnsureSchema_RecreatesFromPreV5SchemaVersion4(t *testing.T) {
+	db := openRawDB(t)
+
+	if _, err := db.Exec("PRAGMA user_version = 4"); err != nil {
+		t.Fatalf("seeding stale user_version: %v", err)
+	}
+
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("ensureSchema() unexpected error: %v", err)
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO code_files (path, fingerprint, indexed_at) VALUES ('internal/foo/foo.go', 'sha256:aaa', 100)`,
+	); err != nil {
+		t.Errorf("schema was not rebuilt with code_files from version 4: %v", err)
 	}
 	var version int
 	db.QueryRow("PRAGMA user_version").Scan(&version)

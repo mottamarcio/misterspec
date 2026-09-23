@@ -245,3 +245,210 @@ func TestSavePack_LostSafelyOnUnrelatedSchemaBump(t *testing.T) {
 		t.Error("LookupPack() found the pack after an unrelated schema bump, want it lost (found == false)")
 	}
 }
+
+func writeGoFixture(t *testing.T, dir, relPath, content string) {
+	t.Helper()
+	full := filepath.Join(dir, relPath)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatalf("mkdir for %s: %v", relPath, err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", relPath, err)
+	}
+}
+
+// TestSyncCode_IndexesGoFiles is 044-architecture-code-context-rules
+// T007 (Foundational): SyncCode indexes every .go file under root
+// except excluded paths, one code_files row plus one code_declarations
+// row per top-level declaration.
+func TestSyncCode_IndexesGoFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFixture(t, dir, "internal/foo/foo.go", "package foo\n\nfunc Bar() {}\n")
+	writeGoFixture(t, dir, "vendor/other/other.go", "package other\n\nfunc Baz() {}\n")
+
+	store, err := Open(filepath.Join(dir, ".cache", "context.db"))
+	if err != nil {
+		t.Fatalf("Open() unexpected error: %v", err)
+	}
+	defer store.Close()
+
+	report, err := store.SyncCode(dir, []string{"vendor/**"})
+	if err != nil {
+		t.Fatalf("SyncCode() unexpected error: %v", err)
+	}
+	if report.Indexed != 1 {
+		t.Errorf("Indexed = %d, want 1 (vendor/** excluded)", report.Indexed)
+	}
+
+	decls, err := store.DeclarationsForFiles([]string{"internal/foo/foo.go"})
+	if err != nil {
+		t.Fatalf("DeclarationsForFiles() unexpected error: %v", err)
+	}
+	if len(decls) != 1 || decls[0].Name != "Bar" {
+		t.Errorf("DeclarationsForFiles() = %+v, want one declaration named Bar", decls)
+	}
+
+	excluded, err := store.DeclarationsForFiles([]string{"vendor/other/other.go"})
+	if err != nil {
+		t.Fatalf("DeclarationsForFiles() unexpected error: %v", err)
+	}
+	if len(excluded) != 0 {
+		t.Errorf("DeclarationsForFiles(vendor path) = %+v, want none (excluded)", excluded)
+	}
+}
+
+// TestSyncCode_UnchangedFileSkipped is 044-architecture-code-context-
+// rules T007: a second SyncCode call with no filesystem change leaves
+// the file's own fingerprint unchanged (reported as Skipped, not
+// re-Indexed).
+func TestSyncCode_UnchangedFileSkipped(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFixture(t, dir, "internal/foo/foo.go", "package foo\n\nfunc Bar() {}\n")
+
+	store, err := Open(filepath.Join(dir, ".cache", "context.db"))
+	if err != nil {
+		t.Fatalf("Open() unexpected error: %v", err)
+	}
+	defer store.Close()
+
+	if _, err := store.SyncCode(dir, nil); err != nil {
+		t.Fatalf("SyncCode() (first) unexpected error: %v", err)
+	}
+	report, err := store.SyncCode(dir, nil)
+	if err != nil {
+		t.Fatalf("SyncCode() (second) unexpected error: %v", err)
+	}
+	if report.Skipped != 1 || report.Indexed != 0 {
+		t.Errorf("second SyncCode() report = %+v, want Skipped=1, Indexed=0", report)
+	}
+}
+
+// TestSyncCode_ChangedFileReplacesDeclarations is
+// 044-architecture-code-context-rules T007: a changed file's own
+// declarations are replaced, not duplicated.
+func TestSyncCode_ChangedFileReplacesDeclarations(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFixture(t, dir, "internal/foo/foo.go", "package foo\n\nfunc Bar() {}\n")
+
+	store, err := Open(filepath.Join(dir, ".cache", "context.db"))
+	if err != nil {
+		t.Fatalf("Open() unexpected error: %v", err)
+	}
+	defer store.Close()
+
+	if _, err := store.SyncCode(dir, nil); err != nil {
+		t.Fatalf("SyncCode() (first) unexpected error: %v", err)
+	}
+
+	writeGoFixture(t, dir, "internal/foo/foo.go", "package foo\n\nfunc Bar() {}\n\nfunc Qux() {}\n")
+	if _, err := store.SyncCode(dir, nil); err != nil {
+		t.Fatalf("SyncCode() (second) unexpected error: %v", err)
+	}
+
+	decls, err := store.DeclarationsForFiles([]string{"internal/foo/foo.go"})
+	if err != nil {
+		t.Fatalf("DeclarationsForFiles() unexpected error: %v", err)
+	}
+	if len(decls) != 2 {
+		t.Errorf("DeclarationsForFiles() = %+v, want exactly 2 (no duplicates from the first sync)", decls)
+	}
+}
+
+// TestSyncCode_DeletedFileRemoved is 044-architecture-code-context-
+// rules T007: a deleted file's own rows are removed.
+func TestSyncCode_DeletedFileRemoved(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFixture(t, dir, "internal/foo/foo.go", "package foo\n\nfunc Bar() {}\n")
+
+	store, err := Open(filepath.Join(dir, ".cache", "context.db"))
+	if err != nil {
+		t.Fatalf("Open() unexpected error: %v", err)
+	}
+	defer store.Close()
+
+	if _, err := store.SyncCode(dir, nil); err != nil {
+		t.Fatalf("SyncCode() (first) unexpected error: %v", err)
+	}
+	if err := os.Remove(filepath.Join(dir, "internal/foo/foo.go")); err != nil {
+		t.Fatalf("removing fixture: %v", err)
+	}
+	report, err := store.SyncCode(dir, nil)
+	if err != nil {
+		t.Fatalf("SyncCode() (second) unexpected error: %v", err)
+	}
+	if report.Removed != 1 {
+		t.Errorf("Removed = %d, want 1", report.Removed)
+	}
+
+	decls, err := store.DeclarationsForFiles([]string{"internal/foo/foo.go"})
+	if err != nil {
+		t.Fatalf("DeclarationsForFiles() unexpected error: %v", err)
+	}
+	if len(decls) != 0 {
+		t.Errorf("DeclarationsForFiles() after deletion = %+v, want none", decls)
+	}
+}
+
+// TestDeclarationsForFiles_IncludesAssociatedTests is
+// 044-architecture-code-context-rules T008 (Foundational):
+// DeclarationsForFiles includes declarations from a file's own
+// associated _test.go file in the same directory (spec FR-007).
+func TestDeclarationsForFiles_IncludesAssociatedTests(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFixture(t, dir, "internal/foo/foo.go", "package foo\n\nfunc Bar() {}\n")
+	writeGoFixture(t, dir, "internal/foo/foo_test.go", "package foo\n\nimport \"testing\"\n\nfunc TestBar(t *testing.T) {}\n")
+
+	store, err := Open(filepath.Join(dir, ".cache", "context.db"))
+	if err != nil {
+		t.Fatalf("Open() unexpected error: %v", err)
+	}
+	defer store.Close()
+
+	if _, err := store.SyncCode(dir, nil); err != nil {
+		t.Fatalf("SyncCode() unexpected error: %v", err)
+	}
+
+	decls, err := store.DeclarationsForFiles([]string{"internal/foo/foo.go"})
+	if err != nil {
+		t.Fatalf("DeclarationsForFiles() unexpected error: %v", err)
+	}
+
+	var sawBar, sawTestBar bool
+	for _, d := range decls {
+		switch d.Name {
+		case "Bar":
+			sawBar = true
+			if d.IsTest {
+				t.Errorf("Bar.IsTest = true, want false")
+			}
+		case "TestBar":
+			sawTestBar = true
+			if !d.IsTest {
+				t.Errorf("TestBar.IsTest = false, want true")
+			}
+		}
+	}
+	if !sawBar || !sawTestBar {
+		t.Errorf("decls = %+v, want both Bar and its associated TestBar", decls)
+	}
+}
+
+// TestDeclarationsForFiles_UnknownPathReturnsNoRows is
+// 044-architecture-code-context-rules T008: a path with no indexed
+// file returns no rows for it, no error.
+func TestDeclarationsForFiles_UnknownPathReturnsNoRows(t *testing.T) {
+	dir := t.TempDir()
+	store, err := Open(filepath.Join(dir, ".cache", "context.db"))
+	if err != nil {
+		t.Fatalf("Open() unexpected error: %v", err)
+	}
+	defer store.Close()
+
+	decls, err := store.DeclarationsForFiles([]string{"internal/never/indexed.go"})
+	if err != nil {
+		t.Fatalf("DeclarationsForFiles() unexpected error: %v", err)
+	}
+	if len(decls) != 0 {
+		t.Errorf("DeclarationsForFiles() = %+v, want none", decls)
+	}
+}
