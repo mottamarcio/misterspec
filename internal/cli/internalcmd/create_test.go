@@ -134,6 +134,7 @@ func TestCreateCmd_Program_NoGitKey(t *testing.T) {
 
 func TestCreateCmd_Feature_GitBranchCreated(t *testing.T) {
 	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, testutil.DefaultConfigYAML+"git_branch_automation: true\n")
 	testutil.InitGitRepo(t, root)
 	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md",
 		"---\nid: PRG-001\ntype: program\nstatus: draft\n---\n")
@@ -164,6 +165,7 @@ func TestCreateCmd_Feature_GitBranchCreated(t *testing.T) {
 
 func TestCreateCmd_Spec_GitWarningOnMismatch(t *testing.T) {
 	root := testutil.Project(t)
+	testutil.WriteConfig(t, root, testutil.DefaultConfigYAML+"git_branch_automation: true\n")
 	testutil.InitGitRepo(t, root)
 	testutil.WriteFile(t, root, "ai/programs/PRG-001/program.md",
 		"---\nid: PRG-001\ntype: program\nstatus: draft\n---\n")
