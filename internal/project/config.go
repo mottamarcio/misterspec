@@ -59,7 +59,7 @@ type Configuration struct {
 
 	// GitBranchAutomation controls whether creating a Feature/Spec
 	// automatically manages a dedicated Git branch for that Feature
-	// (022-feature-branch-automation). Defaults to true.
+	// (022-feature-branch-automation). Defaults to false.
 	GitBranchAutomation bool `yaml:"git_branch_automation"`
 
 	// ArchitectureRules declares configurable architecture constraints
@@ -116,7 +116,7 @@ const (
 	DefaultLearningsDir        = "ai/memory/learnings"
 	DefaultProgramsRoot        = "ai/programs"
 	DefaultIDWidth             = 3
-	DefaultGitBranchAutomation = true
+	DefaultGitBranchAutomation = false
 )
 
 // configFilePath is the fixed location of a project's configuration file,

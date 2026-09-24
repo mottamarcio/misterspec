@@ -27,7 +27,7 @@ func TestLoad_Valid(t *testing.T) {
 		LearningsDir:        "ai/memory/learnings",
 		ProgramsRoot:        "ai/programs",
 		IDWidth:             3,
-		GitBranchAutomation: true,
+		GitBranchAutomation: false,
 	}
 	// reflect.DeepEqual, not !=: Configuration is no longer comparable
 	// once ArchitectureRules/CodeExclusions (both slices) were added
