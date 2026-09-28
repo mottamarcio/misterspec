@@ -210,6 +210,31 @@ func TestResolveTask_BareUniqueAcrossProjectStillResolves(t *testing.T) {
 	}
 }
 
+// TestResolveTask_CompositeAndBareStillBothWork is 045-global-task-
+// numbering T007: a regression guard confirming both the bare
+// "TASK-NNN" form and the composite "SPEC-###:TASK-NNN" form still
+// resolve exactly as before this feature's changes (spec FR-006, US2
+// Acceptance Scenario 2) — this feature does not touch ParseTaskRef or
+// ResolveTask at all.
+func TestResolveTask_CompositeAndBareStillBothWork(t *testing.T) {
+	root := testutil.Project(t)
+	cfg := testConfig()
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-048 — Composed after next-task-id\n\n- [ ] Complete\n")
+
+	bare, err := operations.ResolveTask(root, cfg, "TASK-048", nil)
+	if err != nil {
+		t.Fatalf("ResolveTask(bare) unexpected error: %v", err)
+	}
+	composite, err := operations.ResolveTask(root, cfg, "SPEC-001:TASK-048", nil)
+	if err != nil {
+		t.Fatalf("ResolveTask(composite) unexpected error: %v", err)
+	}
+	if bare.Path != composite.Path {
+		t.Errorf("bare.Path = %q, composite.Path = %q, want identical", bare.Path, composite.Path)
+	}
+}
+
 func TestResolve_KnowledgeFlatFile(t *testing.T) {
 	root := testutil.Project(t)
 	cfg := testConfig()
