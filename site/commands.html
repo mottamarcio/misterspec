@@ -147,6 +147,24 @@
 {"ok":true,"collisions":[{"task_number":1,"specs":["SPEC-001","SPEC-002"],"paths":["ai/.../SPEC-001/tasks.md#TASK-001","ai/.../SPEC-002/tasks.md#TASK-001"]}]}</code></pre>
       <p>An empty <code>collisions</code> array is the common, healthy outcome — it is not an error.</p>
 
+      <h2 id="internal-next-task-id">internal next-task-id</h2>
+      <p><strong>Purpose:</strong> Read-only operation reporting the next available Task number, project-wide — never scoped to a single Spec (045-global-task-numbering). Never writes to the filesystem or reserves the returned number.</p>
+      <pre><code>misterspec internal next-task-id
+{"ok":true,"next_task_id":"TASK-048"}</code></pre>
+      <p>
+        The number returned is always the project's own highest existing
+        <code>TASK-NNN</code> (across every Spec's <code>tasks.md</code>) plus
+        one — or <code>TASK-001</code> when no Task exists anywhere yet. This
+        is what lets the Task-decomposition Skill number a brand-new Spec's
+        first Task correctly, without ever restarting at
+        <code>TASK-001</code> just because that Spec has no Tasks of its
+        own yet. A pre-existing cross-Spec collision (see
+        <a href="#internal-migration-check-tasks"><code>internal
+        migration-check-tasks</code></a> above) is unaffected — this
+        command only changes how a <em>new</em> number is chosen, never how
+        an existing one is judged.
+      </p>
+
       <h2 id="internal-prepare">internal prepare SPEC-### [--task TASK-###]</h2>
       <p><strong>Purpose:</strong> Assemble everything needed to start one Task — identity, readiness, served requirements' own text, declared scope, verification method, and associated Plan sections — in a single, read-only response. No command is ever executed.</p>
       <p><strong>Flags:</strong> <code>--task &lt;id&gt;</code> (optional — bare <code>TASK-###</code> or composite <code>SPEC-###:TASK-###</code>; omit to auto-select the lowest-numbered Ready Task in the Spec).</p>

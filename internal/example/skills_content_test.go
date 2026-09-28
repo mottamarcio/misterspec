@@ -37,13 +37,17 @@ var requiredSkillHeadings = []string{
 // knownInternalCommands is every command 008-cli-cobra actually
 // registered under "misterspec internal" — the allowlist FR-003/SC-004
 // check every Skill's Deterministic Operations section against. No
-// "project", no "references", no Task-ID allocator (research.md).
+// "project", no "references" (research.md). "next-task-id"
+// (045-global-task-numbering) is read-only/advisory, not a Program/
+// Feature/Spec-style allocator — it never creates or reserves
+// anything, so Task authorship remains direct hand/agent editing of
+// tasks.md exactly as before.
 var knownInternalCommands = map[string]bool{
 	"resolve": true, "inspect": true, "parent": true, "children": true,
 	"create": true, "create-artifact": true, "fingerprint": true,
 	"inventory": true, "validate": true, "status": true, "context": true,
 	"commits-since-file": true, "migration-check-tasks": true, "prepare": true,
-	"capture-evidence": true,
+	"capture-evidence": true, "next-task-id": true,
 }
 
 // skillOperationsAllowlist is data-model.md's per-Skill operations
@@ -56,7 +60,7 @@ var skillOperationsAllowlist = map[string][]string{
 	"mister-features":       {"resolve", "children", "create", "validate"},
 	"mister-specify":        {"resolve", "children", "create", "validate"},
 	"mister-plan":           {"resolve", "inspect", "context", "create-artifact", "validate"},
-	"mister-tasks":          {"resolve", "inspect", "context", "create-artifact", "validate"},
+	"mister-tasks":          {"resolve", "inspect", "context", "create-artifact", "next-task-id", "validate"},
 	"mister-implement":      {"resolve", "inspect", "context", "validate", "prepare", "capture-evidence"},
 	"mister-analyze":        {"resolve", "inspect", "context", "create-artifact", "validate"},
 	"mister-wrap-up":        {"resolve", "inspect", "inventory", "context", "commits-since-file"},

@@ -53,6 +53,49 @@ func TestMigrationCheckTasksCmd_ReportsCollision(t *testing.T) {
 	}
 }
 
+// TestMigrationCheckTasksCmd_CollisionUnaffectedByNextTaskID is
+// 045-global-task-numbering T009 (spec FR-004/FR-005, US3 Acceptance
+// Scenario 1): a pre-existing cross-Spec Task-number collision keeps
+// being reported unchanged by migration-check-tasks, and next-task-id
+// on that same project correctly returns the colliding number's own
+// value + 1 — neither confused nor blocked by the collision.
+func TestMigrationCheckTasksCmd_CollisionUnaffectedByNextTaskID(t *testing.T) {
+	root := testutil.Project(t)
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-001/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 1\n\n- [ ] Complete\n")
+	testutil.WriteFile(t, root, "ai/programs/PRG-001/features/FEAT-001/specs/SPEC-002/tasks.md",
+		"# Tasks\n\n## TASK-001 — First in Spec 2\n\n- [ ] Complete\n")
+
+	migCmd := internalcmd.NewMigrationCheckTasksCmd()
+	migCmd.SetArgs([]string{"--dir", root})
+	migOutput, migExit := runCmd(migCmd)
+	if migExit != 0 {
+		t.Fatalf("migration-check-tasks exitCode = %d, want 0 (output: %s)", migExit, migOutput)
+	}
+	var migDecoded struct {
+		Collisions []struct {
+			TaskNumber int `json:"task_number"`
+		} `json:"collisions"`
+	}
+	if err := json.Unmarshal([]byte(migOutput), &migDecoded); err != nil {
+		t.Fatalf("migration-check-tasks output is not valid JSON: %v (%s)", err, migOutput)
+	}
+	if len(migDecoded.Collisions) != 1 || migDecoded.Collisions[0].TaskNumber != 1 {
+		t.Fatalf("migration-check-tasks collisions = %+v, want exactly 1 for TASK-001 (unchanged by this feature)", migDecoded.Collisions)
+	}
+
+	nextCmd := internalcmd.NewNextTaskIDCmd()
+	nextCmd.SetArgs([]string{"--dir", root})
+	nextOutput, nextExit := runCmd(nextCmd)
+	if nextExit != 0 {
+		t.Fatalf("next-task-id exitCode = %d, want 0 (output: %s)", nextExit, nextOutput)
+	}
+	_, next := decodeNextTaskID(t, nextOutput)
+	if next != "TASK-002" {
+		t.Errorf("next_task_id = %q, want %q (highest colliding number + 1)", next, "TASK-002")
+	}
+}
+
 // TestMigrationCheckTasksCmd_NoCollisionsIsEmptyArray covers spec.md
 // User Story 3: an unaffected project returns an empty (not null)
 // collisions array, still ok:true.
