@@ -81,9 +81,10 @@ SPEC-###`.
 ## Allowed Modifications
 
 The Tasks artifact's own body directly (to add `## TASK-NNN` entries —
-no independent Task-ID allocator exists; Tasks are authored directly
-into this one file, the same human/agent-authored boundary this
-project's own entity-creation capability already draws for Task).
+`internal next-task-id` only reports the number to use next; it never
+creates or scaffolds anything itself, so Tasks are still authored
+directly into this one file, the same human/agent-authored boundary
+this project's own entity-creation capability already draws for Task).
 
 ## Forbidden Mutations
 
@@ -110,13 +111,20 @@ Required operations:
   (037-eval-quality-efficiency).
 - `internal create-artifact tasks --for SPEC-###` — scaffold the Tasks
   artifact at its fixed canonical location.
+- `internal next-task-id` — report the next Task number that is not yet
+  used by *any* Spec in the project (read-only; never scoped to the
+  Spec being decomposed). Call it once before writing the first new
+  `## TASK-NNN` heading of this run, then increment locally from that
+  value for any further Tasks authored within the same run — no need
+  to call it again per Task (045-global-task-numbering).
 - `internal validate SPEC-###` — confirm the Spec (now with Tasks) is
   still structurally valid, including catching duplicate Task numbers.
 
-No allocator operation exists for Task IDs — `## TASK-NNN` headings are
-authored directly into `tasks.md`, sequentially numbered by hand within
-this one file; `internal validate` is the safety net that catches a
-duplicate number, not a pre-check this Skill performs itself.
+`internal next-task-id` is read-only and advisory, not an allocator in
+the Program/Feature/Spec sense: it never creates or reserves anything.
+`## TASK-NNN` headings are still authored directly into `tasks.md` by
+this Skill; `internal validate` remains the safety net that catches a
+genuine duplicate number, not a pre-check this Skill performs itself.
 
 ## Procedure
 
@@ -138,9 +146,12 @@ duplicate number, not a pre-check this Skill performs itself.
    verified (e.g. a specific `go test` invocation) — these four labels
    are what `internal prepare` and `internal validate` both parse
    mechanically (034-task-oriented-context-preparation), so use them
-   verbatim rather than free prose. Number each `## TASK-NNN`
-   sequentially, checking existing Tasks first so numbers are never
-   reused.
+   verbatim rather than free prose. Run `internal next-task-id` once
+   before writing the first new `## TASK-NNN` heading of this run, and
+   number every additional Task in this same run sequentially from that
+   value — never restart at `TASK-001` just because this Spec has no
+   Tasks of its own yet; the next number is always project-wide, not
+   scoped to this Spec (045-global-task-numbering).
 6. Run `internal validate SPEC-###` to confirm no duplicate Task
    numbers, no Task referencing a nonexistent requirement, and no
    invalid or cyclic `Depends on:` declaration.
@@ -205,8 +216,10 @@ Tasks.
 ## Resume Behavior
 
 If interrupted partway through decomposition, re-running the Skill
-reads the Tasks artifact's current content first, continuing numbering
-from the highest existing `TASK-NNN` rather than restarting.
+reads the Tasks artifact's current content first and re-runs
+`internal next-task-id` rather than assuming the value it obtained
+before the interruption is still correct — another Spec may have
+claimed a higher number in the meantime.
 
 ## Completion Contract
 
