@@ -573,7 +573,7 @@ var Manifests = []SkillManifest{
 			{
 				Heading: "Invocation",
 				Parts: []Part{
-					{Bespoke: "\n`/mister-implement SPEC-###` or `/mister-implement SPEC-### TASK-NNN`\n\nBoth forms require the Spec ID whose Tasks are being implemented. Given\nonly the Spec ID, this Skill implements every currently executable Task\nin that Spec, sequentially, within this one invocation. Given a Task ID\nas well, it implements only that one named Task and stops — every other\nTask in the Spec is left untouched. `TASK-NNN` is numbered per-Spec (no\nglobal allocator, per `/mister-tasks`), so a Task ID is only ever\nresolved within the Spec ID given alongside it.\n"},
+					{Bespoke: "\n`/mister-implement SPEC-###` or `/mister-implement SPEC-### TASK-NNN`\n\nBoth forms require the Spec ID whose Tasks are being implemented. Given\nonly the Spec ID, this Skill implements every currently executable Task\nin that Spec, sequentially, within this one invocation. Given a Task ID\nas well, it implements only that one named Task and stops — every other\nTask in the Spec is left untouched. `TASK-NNN` is only required to be\nunique within its owning Spec (`/mister-tasks`), so a Task ID is only\never resolved within the Spec ID given alongside it.\n"},
 				},
 			},
 			{
@@ -1555,7 +1555,7 @@ var Manifests = []SkillManifest{
 			{
 				Heading: "Allowed Modifications",
 				Parts: []Part{
-					{Bespoke: "\nThe Tasks artifact's own body directly (to add `## TASK-NNN` entries —\nno independent Task-ID allocator exists; Tasks are authored directly\ninto this one file, the same human/agent-authored boundary this\nproject's own entity-creation capability already draws for Task).\n"},
+					{Bespoke: "\nThe Tasks artifact's own body directly (to add `## TASK-NNN` entries —\n`internal next-task-id` only reports the number to use next; it never\ncreates or scaffolds anything itself, so Tasks are still authored\ndirectly into this one file, the same human/agent-authored boundary\nthis project's own entity-creation capability already draws for Task).\n"},
 				},
 			},
 			{
@@ -1571,13 +1571,13 @@ var Manifests = []SkillManifest{
 					{FragmentRef: "resolve-preamble"},
 					{Bespoke: "\n- `internal inspect SPEC-###` — read the Spec's requirements, to\n  reference precisely in each Task.\n- `internal context SPEC-### --intent tasks` — request a budgeted\n"},
 					{FragmentRef: "fallback-tolerance-note"},
-					{Bespoke: "\n- `internal create-artifact tasks --for SPEC-###` — scaffold the Tasks\n  artifact at its fixed canonical location.\n- `internal validate SPEC-###` — confirm the Spec (now with Tasks) is\n  still structurally valid, including catching duplicate Task numbers.\n\nNo allocator operation exists for Task IDs — `## TASK-NNN` headings are\nauthored directly into `tasks.md`, sequentially numbered by hand within\nthis one file; `internal validate` is the safety net that catches a\nduplicate number, not a pre-check this Skill performs itself.\n"},
+					{Bespoke: "\n- `internal create-artifact tasks --for SPEC-###` — scaffold the Tasks\n  artifact at its fixed canonical location.\n- `internal next-task-id` — report the next Task number that is not yet\n  used by *any* Spec in the project (read-only; never scoped to the\n  Spec being decomposed). Call it once before writing the first new\n  `## TASK-NNN` heading of this run, then increment locally from that\n  value for any further Tasks authored within the same run — no need\n  to call it again per Task (045-global-task-numbering).\n- `internal validate SPEC-###` — confirm the Spec (now with Tasks) is\n  still structurally valid, including catching duplicate Task numbers.\n\n`internal next-task-id` is read-only and advisory, not an allocator in\nthe Program/Feature/Spec sense: it never creates or reserves anything.\n`## TASK-NNN` headings are still authored directly into `tasks.md` by\nthis Skill; `internal validate` remains the safety net that catches a\ngenuine duplicate number, not a pre-check this Skill performs itself.\n"},
 				},
 			},
 			{
 				Heading: "Procedure",
 				Parts: []Part{
-					{Bespoke: "\n1. Run `internal resolve SPEC-###` and `internal inspect SPEC-###` to\n   read the Spec's requirements.\n2. Run `internal context SPEC-### --intent tasks` and begin from its\n   returned items. If the request fails, proceed using this Skill's\n   own Optional Context above instead.\n3. Read the Spec's own Plan for its `Implementation Sequence` and\n   `Requirement Coverage`.\n4. Run `internal create-artifact tasks --for SPEC-###` if the Tasks\n   artifact does not exist yet.\n5. Decompose the Plan into Tasks, each with: a title; an unchecked\n   completion checkbox; a `Serves: SPEC-###:R#` line naming the\n   requirement(s) it serves; a `Depends on: TASK-NNN` line naming\n   another Task in this same Spec (or `Depends on: none` — or omit the\n   line entirely, which means the same thing); a `Scope:` line naming\n   its file/component scope; and a `Verify:` line naming how it will be\n   verified (e.g. a specific `go test` invocation) — these four labels\n   are what `internal prepare` and `internal validate` both parse\n   mechanically (034-task-oriented-context-preparation), so use them\n   verbatim rather than free prose. Number each `## TASK-NNN`\n   sequentially, checking existing Tasks first so numbers are never\n   reused.\n6. Run `internal validate SPEC-###` to confirm no duplicate Task\n   numbers, no Task referencing a nonexistent requirement, and no\n   invalid or cyclic `Depends on:` declaration.\n7. Report completion per the Completion Contract below.\n"},
+					{Bespoke: "\n1. Run `internal resolve SPEC-###` and `internal inspect SPEC-###` to\n   read the Spec's requirements.\n2. Run `internal context SPEC-### --intent tasks` and begin from its\n   returned items. If the request fails, proceed using this Skill's\n   own Optional Context above instead.\n3. Read the Spec's own Plan for its `Implementation Sequence` and\n   `Requirement Coverage`.\n4. Run `internal create-artifact tasks --for SPEC-###` if the Tasks\n   artifact does not exist yet.\n5. Decompose the Plan into Tasks, each with: a title; an unchecked\n   completion checkbox; a `Serves: SPEC-###:R#` line naming the\n   requirement(s) it serves; a `Depends on: TASK-NNN` line naming\n   another Task in this same Spec (or `Depends on: none` — or omit the\n   line entirely, which means the same thing); a `Scope:` line naming\n   its file/component scope; and a `Verify:` line naming how it will be\n   verified (e.g. a specific `go test` invocation) — these four labels\n   are what `internal prepare` and `internal validate` both parse\n   mechanically (034-task-oriented-context-preparation), so use them\n   verbatim rather than free prose. Run `internal next-task-id` once\n   before writing the first new `## TASK-NNN` heading of this run, and\n   number every additional Task in this same run sequentially from that\n   value — never restart at `TASK-001` just because this Spec has no\n   Tasks of its own yet; the next number is always project-wide, not\n   scoped to this Spec (045-global-task-numbering).\n6. Run `internal validate SPEC-###` to confirm no duplicate Task\n   numbers, no Task referencing a nonexistent requirement, and no\n   invalid or cyclic `Depends on:` declaration.\n7. Report completion per the Completion Contract below.\n"},
 				},
 			},
 			{
@@ -1631,7 +1631,7 @@ var Manifests = []SkillManifest{
 			{
 				Heading: "Resume Behavior",
 				Parts: []Part{
-					{Bespoke: "\nIf interrupted partway through decomposition, re-running the Skill\nreads the Tasks artifact's current content first, continuing numbering\nfrom the highest existing `TASK-NNN` rather than restarting.\n"},
+					{Bespoke: "\nIf interrupted partway through decomposition, re-running the Skill\nreads the Tasks artifact's current content first and re-runs\n`internal next-task-id` rather than assuming the value it obtained\nbefore the interruption is still correct — another Spec may have\nclaimed a higher number in the meantime.\n"},
 				},
 			},
 			{

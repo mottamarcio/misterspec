@@ -20,9 +20,9 @@ Both forms require the Spec ID whose Tasks are being implemented. Given
 only the Spec ID, this Skill implements every currently executable Task
 in that Spec, sequentially, within this one invocation. Given a Task ID
 as well, it implements only that one named Task and stops — every other
-Task in the Spec is left untouched. `TASK-NNN` is numbered per-Spec (no
-global allocator, per `/mister-tasks`), so a Task ID is only ever
-resolved within the Spec ID given alongside it.
+Task in the Spec is left untouched. `TASK-NNN` is only required to be
+unique within its owning Spec (`/mister-tasks`), so a Task ID is only
+ever resolved within the Spec ID given alongside it.
 
 ## Responsibility
 
